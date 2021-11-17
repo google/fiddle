@@ -44,7 +44,9 @@ _BUILDABLE_INSTANCE_COLORS = [
 class _GraphvizRenderer:
   """Encapsulates state maintained while rendering a `Config` to Graphviz."""
 
-  def __init__(self, instance_colors: Optional[List[str]] = None):
+  def __init__(self,
+               instance_colors: Optional[List[str]] = None,
+               max_sequence_elements_per_row: int = 10):
     """Initializes the render.
 
     Args:
@@ -53,8 +55,12 @@ class _GraphvizRenderer:
         `fdl.Buildable` instances encountered during rendering. Colors are
         assigned in order (and repeated if there are more instances than
         provided colors).
+      max_sequence_elements_per_row: When rendering sequences, up to this many
+        elements will be included in a single row of the output table, with
+        additional rows added to render remaining elements.
     """
     self._instance_colors = instance_colors or _BUILDABLE_INSTANCE_COLORS
+    self._max_sequence_elements_per_row = max_sequence_elements_per_row
     self._attr_defaults = {
         # Should contain a mapping of tag names to dicts of attribute defaults.
         'table': {
@@ -126,6 +132,12 @@ class _GraphvizRenderer:
 
     return tag_fn
 
+  def _header_row(self, header, colspan=2, bgcolor='#eeeeee', style='solid'):
+    """Constructs a header table row."""
+    tr = self._tag('tr')
+    header_td = self._tag('td', colspan=colspan, bgcolor=bgcolor, style=style)
+    return tr(header_td(header))
+
   def render(self, config: fdl.Buildable) -> graphviz.Graph:
     """Renders the given `config`, recursively rendering any nested configs."""
     self._render_config(config)
@@ -144,12 +156,18 @@ class _GraphvizRenderer:
 
     bgcolor = self._color(self._current_id)
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
-    header_td = self._tag('td', colspan=2, bgcolor=bgcolor, style=style)
     type_font = self._tag('font', point_size=8)
     type_name = config.__class__.__name__
     fn_or_cls_name = config.__fn_or_cls__.__name__
-    header = header_td(type_font(f'{type_name}:') + '&nbsp;' + fn_or_cls_name)
-    label = self._render_dict(config.__arguments__, header=header)
+    title = type_font(f'{type_name}:') + '&nbsp;' + fn_or_cls_name
+    header = self._header_row(title, bgcolor=bgcolor, style=style)
+    if config.__arguments__:
+      label = self._render_dict(
+          config.__arguments__, header=header, key_format_fn=str)
+    else:
+      table = self._tag('table')
+      italics = self._tag('i')
+      label = table([header, self._header_row(italics('no arguments'))])
     self._dot.node(str(self._current_id), f'<{label}>')
 
     self._current_id = last_id
@@ -159,7 +177,16 @@ class _GraphvizRenderer:
     if isinstance(value, fdl.Buildable):
       return self._render_nested_config(value)
     elif isinstance(value, dict):
-      return self._render_dict(value)
+      return self._render_dict(
+          value, header=self._header_row(type(value).__name__))
+    elif isinstance(value, tuple) and hasattr(value, '_asdict'):
+      # If it has an "_asdict" attribute it's almost certainly a `NamedTuple`.
+      # Unfortunately there is no direct way of testing whether an object is a
+      # `NamedTuple`, since all `NamedTuple`s are direct subclasses of `tuple`.
+      return self._render_dict(
+          value._asdict(),
+          header=self._header_row(type(value).__name__),
+          key_format_fn=str)
     elif isinstance(value, (list, tuple)):
       return self._render_sequence(value)
     else:
@@ -210,21 +237,32 @@ class _GraphvizRenderer:
     index_td = self._tag('td', cellpadding=0, bgcolor='#eeeeee')
     index_font = self._tag('font', point_size=6)
 
+    if not sequence:
+      return '[]' if isinstance(sequence, list) else '()'
+
     cells, indices = [], []
     for i, value in enumerate(sequence):
       cells.append(td(self._render_value(value)))
       indices.append(index_td(index_font(i)))
-    return table([tr(cells), tr(indices)])
+    row_stride = self._max_sequence_elements_per_row
+    colspan = min(len(sequence), row_stride)
+    rows = [self._header_row(type(sequence).__name__, colspan=colspan)]
+    for i in range(0, len(sequence), row_stride):
+      rows.extend([tr(cells[i:i + row_stride]), tr(indices[i:i + row_stride])])
+    return table(rows)
 
   def _render_dict(self,
                    dict_: Dict[str, Any],
-                   header: Optional[str] = None) -> str:
+                   header: Optional[str] = None,
+                   key_format_fn: Callable[[Any], str] = repr) -> str:
     """Renders the given `dict_` as an HTML table.
 
     Args:
       dict_: The `dict` to render.
-      header: A table cell containing a header row to include. The table cell
-        should have colspan="2" to render properly in the table.
+      header: A table row containing a header row to include. The table row's
+        table cell should have colspan="2" to render properly in the table.
+      key_format_fn: A function to apply to dictionary keys to conver them into
+        a string representation. Defaults to `repr`.
 
     Returns:
       The HTML markup for the resulting table representing `dict_`.
@@ -234,10 +272,9 @@ class _GraphvizRenderer:
     key_td = self._tag('td', align='right', bgcolor='#eeeeee')
     value_td = self._tag('td', align='left')
 
-    rows = []
-    if header is not None:
-      rows.append(tr(header))
+    rows = [header] if header is not None else []
     for key, value in dict_.items():
+      key = key_format_fn(key)
       rows.append(tr([key_td(key), value_td(self._render_value(value))]))
     return table(rows)
 
