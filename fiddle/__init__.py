@@ -19,3 +19,6 @@ from fiddle.config import build
 from fiddle.config import Buildable
 from fiddle.config import Config
 from fiddle.config import Partial
+from fiddle.placeholders import Placeholder
+from fiddle.placeholders import PlaceholderKey
+from fiddle.placeholders import set_placeholder
