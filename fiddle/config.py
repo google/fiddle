@@ -207,6 +207,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     return self.__arguments__ == other.__arguments__
 
+  def __setstate__(self, state):
+    self.__dict__.update(state)  # Support unpickle.
+
 
 class Config(Generic[T], Buildable[T]):
   """A mutable representation of a function or class's parameters.

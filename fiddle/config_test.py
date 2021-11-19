@@ -16,6 +16,7 @@
 """Tests for the `fiddle.config` module."""
 
 import copy
+import pickle
 from typing import Any
 
 from absl.testing import absltest
@@ -496,6 +497,25 @@ class ConfigTest(absltest.TestCase):
       _ = config.Config(TestClass) in {}
     with self.assertRaisesRegex(TypeError, 'unhashable'):
       _ = config.Partial(TestClass) in {}
+
+  def test_pickling_config(self):
+    """Bulidable types should be pickle-able."""
+    cfg = config.Config(TestClass, 1, 'abc')
+    self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
+    reloaded = pickle.loads(pickle.dumps(cfg))
+    reloaded.kwarg1 = 3  # mutate after unpickling.
+    self.assertNotEqual(cfg, reloaded)
+
+  def test_pickling_partial(self):
+    cfg = config.Partial(TestClass)
+    cfg.arg1 = 'something'
+    self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
+
+  def test_pickling_composition(self):
+    cfg = config.Config(TestClass, 1, 'abc')
+    cfg.kwarg2 = config.Partial(TestClass)
+    cfg.kwarg2.arg1 = 'something'
+    self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
 
 
 if __name__ == '__main__':
