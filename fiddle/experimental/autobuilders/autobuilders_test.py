@@ -21,12 +21,18 @@ from absl.testing import absltest
 import fiddle as fdl
 
 from fiddle.experimental.autobuilders import autobuilders as ab
+from fiddle.experimental.autobuilders import autobuilders_test_util
 
 
 @dataclasses.dataclass(frozen=True)
 class FakeDense:
   in_dim: int
   out_dim: int
+
+
+@dataclasses.dataclass(frozen=True)
+class FakeDenseSubclass(FakeDense):
+  pass
 
 
 @dataclasses.dataclass(frozen=True)
@@ -38,8 +44,7 @@ class FakeMlp:
 class RegistryTest(absltest.TestCase):
 
   def setUp(self):
-    # Clear the current registry.
-    ab._default_registry = ab.Registry()
+    autobuilders_test_util.clear_registry()
     super().setUp()
 
   def test_skeleton_and_get_config(self):
@@ -122,6 +127,85 @@ class RegistryTest(absltest.TestCase):
             first_dense=FakeDense(in_dim=5, out_dim=4),
             second_dense=FakeDense(in_dim=4, out_dim=4),
         ))
+
+  def test_auto_skeleton_basic(self):
+    ab.auto_skeleton(FakeMlp)
+    self.assertEqual(
+        ab.config(FakeMlp),
+        fdl.Config(FakeMlp, fdl.Config(FakeDense), fdl.Config(FakeDense)))
+
+  def test_auto_skeleton_subclasses_and_existing_skeletons(self):
+
+    @ab.skeleton(FakeDense)
+    def dense_skeleton(config: fdl.Config) -> None:  # pylint: disable=unused-variable
+      config.in_dim = 4
+      config.out_dim = 4
+
+    @ab.skeleton(FakeDenseSubclass)
+    def dense_subclass_skeleton(config: fdl.Config) -> None:  # pylint: disable=unused-variable
+      config.in_dim = 7
+      config.out_dim = 9
+
+    ab.auto_skeleton(FakeMlp, second_dense=FakeDenseSubclass)
+    fake_mlp = fdl.build(ab.config(FakeMlp))
+    self.assertEqual(
+        fake_mlp,
+        FakeMlp(
+            first_dense=FakeDense(in_dim=4, out_dim=4),
+            second_dense=FakeDenseSubclass(in_dim=7, out_dim=9),
+        ))
+
+  def test_auto_skeleton_allows_none_as_unconfigured_sentinel(self):
+    ab.auto_skeleton(FakeMlp, second_dense=None)
+    self.assertEqual(
+        ab.config(FakeMlp),
+        fdl.Config(
+            FakeMlp,
+            first_dense=fdl.Config(FakeDense),
+        ))
+
+  def test_auto_skeleton_unannotated_raises(self):
+
+    def unannotated(x, y):
+      return x + y
+
+    with self.assertRaises(ValueError):
+      ab.auto_skeleton(unannotated)
+
+    # But it's fine if we specify defaults, or None
+    ab.auto_skeleton(unannotated, x=FakeDense, y=None)
+
+  def test_auto_skeleton_doesnt_configure_primitives(self):
+
+    @dataclasses.dataclass
+    class Foo:
+      x: int = 4
+
+    with self.assertRaisesRegex(TypeError,
+                                r"Parameter 'x'.*cannot be configured"):
+      ab.auto_skeleton(Foo)
+
+    # Fine to do by explicitly not configuring the parameter.
+    ab.auto_skeleton(Foo, x=None)
+    foo = fdl.build(ab.config(Foo))
+    self.assertEqual(foo.x, 4)
+
+  def test_auto_skeleton_attribute_skeletons_required(self):
+    ab.auto_skeleton(FakeMlp, attributes_require_skeletons=True)
+
+    with self.assertRaisesRegex(KeyError, "No skeleton.*FakeDense"):
+      ab.config(FakeMlp)
+
+    def bar(z):
+      return z + 1
+
+    def foo(x):
+      return x
+
+    ab.auto_skeleton(foo, x=bar, attributes_require_skeletons=True)
+
+    with self.assertRaisesRegex(KeyError, "No skeleton.*bar"):
+      ab.config(foo)
 
   def test_validator_registers(self):
     registry = ab.Registry()
