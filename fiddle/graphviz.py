@@ -21,6 +21,7 @@ import itertools
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from fiddle import config as fdl
+from fiddle import placeholders
 import graphviz
 
 _BUILDABLE_INSTANCE_COLORS = [
@@ -154,14 +155,26 @@ class _GraphvizRenderer:
     self._current_id = next(self._config_counter)
     self._configs[id(config)] = self._current_id
 
+    # Generate the header row.
     bgcolor = self._color(self._current_id)
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
     type_font = self._tag('font', point_size=8)
     type_name = config.__class__.__name__
-    fn_or_cls_name = config.__fn_or_cls__.__name__
-    title = type_font(f'{type_name}:') + '&nbsp;' + fn_or_cls_name
-    header = self._header_row(title, bgcolor=bgcolor, style=style)
-    if config.__arguments__:
+    if isinstance(config, placeholders.Placeholder):
+      title = type_font(f'{type_name}: {config.key.name!r}') + '&nbsp;'
+      header = self._header_row(title, colspan=1, bgcolor=bgcolor, style=style)
+    else:
+      fn_or_cls_name = config.__fn_or_cls__.__name__
+      title = type_font(f'{type_name}:') + '&nbsp;' + fn_or_cls_name
+      header = self._header_row(title, bgcolor=bgcolor, style=style)
+
+    # Generate the arguments table.
+    if isinstance(config, placeholders.Placeholder):
+      table = self._tag('table')
+      tr = self._tag('tr')
+      value_td = self._tag('td', align='left')
+      label = table([header, tr([value_td(self._render_value(config.value))])])
+    elif config.__arguments__:
       label = self._render_dict(
           config.__arguments__, header=header, key_format_fn=str)
     else:
@@ -174,7 +187,9 @@ class _GraphvizRenderer:
 
   def _render_value(self, value: Any):
     """Renders an arbitrary value inside a `Config` rendering."""
-    if isinstance(value, fdl.Buildable):
+    if value is placeholders.NO_VALUE:
+      return self._tag('i')('placeholders.NO_VALUE')
+    elif isinstance(value, fdl.Buildable):
       return self._render_nested_config(value)
     elif isinstance(value, dict):
       return self._render_dict(
