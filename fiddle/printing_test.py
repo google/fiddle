@@ -15,6 +15,8 @@
 
 """Tests for print."""
 
+import dataclasses
+
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import placeholders
@@ -35,6 +37,24 @@ class TestHelper:
 
   def __init__(self, a, b):  # pylint: disable=unused-argument
     pass
+
+
+def test_annotated_helper(x: int, y: str, z: float):  # pylint: disable=unused-argument
+  pass
+
+
+@dataclasses.dataclass
+class DataclassHelper:
+  x: int
+  y: str
+
+
+def advanced_annotations_helper(x: TestHelper, **kwargs: DataclassHelper):  # pylint: disable=unused-argument
+  pass
+
+
+def annotated_kwargs_helper(**kwargs: int):  # pylint: disable=unused-argument
+  pass
 
 
 class PrintTest(absltest.TestCase):
@@ -182,6 +202,48 @@ y = fdl.Placeholder('test_key', value='cba')
     expected = """
 x = 'abc'
 y = <[unset]>
+""".strip()
+    self.assertEqual(output, expected)
+
+  def test_builtin_types_annotations(self):
+    cfg = fdl.Config(test_annotated_helper, 1)
+    cfg.y = 'abc'
+    output = printing.as_str_flattened(cfg)
+    expected = """
+x: int = 1
+y: str = 'abc'
+z: float = <[unset]>
+""".strip()
+    self.assertEqual(output, expected)
+
+  def test_advanced_type_annotations(self):
+    cfg = fdl.Config(advanced_annotations_helper)
+    cfg.abc = fdl.Config(DataclassHelper)
+    output = printing.as_str_flattened(cfg)
+    expected = """
+x: TestHelper = <[unset]>
+abc.x: int = <[unset]>
+abc.y: str = <[unset]>
+""".strip()
+    self.assertEqual(output, expected)
+
+  def test_annotated_kwargs(self):
+    cfg = fdl.Config(annotated_kwargs_helper, x=1, y='oops')
+    output = printing.as_str_flattened(cfg)
+    expected = """
+x: int = 1
+y: int = 'oops'
+""".strip()
+    self.assertEqual(output, expected)
+
+  def test_disabling_type_annotations(self):
+    cfg = fdl.Config(test_annotated_helper, 1)
+    cfg.y = 'abc'
+    output = printing.as_str_flattened(cfg, include_types=False)
+    expected = """
+x = 1
+y = 'abc'
+z = <[unset]>
 """.strip()
     self.assertEqual(output, expected)
 

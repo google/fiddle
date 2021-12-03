@@ -17,7 +17,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Iterator, Sequence, Tuple, Union
+from typing import Any, Iterator, Optional, Sequence, Tuple, Type, Union
 
 from fiddle import config
 from fiddle import placeholders
@@ -77,7 +77,9 @@ class _PlaceholderWrapper:
             f'value={value_repr})')
 
 
-def as_str_flattened(cfg: config.Buildable) -> str:
+def as_str_flattened(cfg: config.Buildable,
+                     *,
+                     include_types: bool = True) -> str:
   """Returns a string of cfg's paths and values, one pair per line.
 
   Some automated tools (e.g. grep, sort, diff, ...) handle data line-by-line.
@@ -86,9 +88,9 @@ def as_str_flattened(cfg: config.Buildable) -> str:
 
   Args:
     cfg: A buildable to generate a string representation for.
-
-  Returns:
-    A string representation of `cfg`.
+    include_types: If true, include type annotations (where available) in the
+      string representation of each leaf value.
+  Returns: a string representation of `cfg`.
   """
 
   def has_nested_builder(flat_children: Sequence[Tuple[_Path, _Leaf]]) -> bool:
@@ -98,40 +100,52 @@ def as_str_flattened(cfg: config.Buildable) -> str:
 
     return any(map(is_path_and_leaf_a_buildable, flat_children))
 
-  def flatten_children(value: Any,
-                       path: _Path) -> Iterator[Tuple[_Path, _Leaf]]:
+  def flatten_children(
+      value: Any, annotation: Optional[Type[Any]],
+      path: _Path) -> Iterator[Tuple[_Path, Optional[Type[Any]], _Leaf]]:
     flattened_children = tree.flatten_with_path(value)
     if has_nested_builder(flattened_children):
       for child_path, leaf in flattened_children:
         if isinstance(leaf, placeholders.Placeholder):
-          yield path + child_path, _PlaceholderWrapper(leaf)
+          yield path + child_path, None, _PlaceholderWrapper(leaf)
         elif isinstance(leaf, config.Buildable):
-          for subpath, actual_leaf in recursive_flatten(leaf):
-            yield path + child_path + subpath, actual_leaf
+          for subpath, subannotation, actual_leaf in recursive_flatten(leaf):
+            yield path + child_path + subpath, subannotation, actual_leaf
         else:
-          yield path + child_path, leaf
+          yield path + child_path, None, leaf
     else:
-      yield path, value
+      yield path, annotation, value
 
   def recursive_flatten(
-      buildable: config.Buildable) -> Iterator[Tuple[_Path, _Leaf]]:
-    # TODO: Include type annotations!
+      buildable: config.Buildable
+  ) -> Iterator[Tuple[_Path, Optional[Type[Any]], _Leaf]]:
     signature = buildable.__signature__
+    kwarg_param = None
     for param_name, param in signature.parameters.items():
       if param.kind == param.VAR_KEYWORD:
+        kwarg_param = param
         continue
+      annotation = None if param.annotation is param.empty else param.annotation
       path = (_ParamName(param_name),)
       if param_name not in buildable.__arguments__:
-        yield path, _UnsetValue(param)
+        yield path, annotation, _UnsetValue(param)
       else:
-        yield from flatten_children(buildable.__arguments__[param_name], path)
+        yield from flatten_children(buildable.__arguments__[param_name],
+                                    annotation, path)
+    kwarg_annotation = None
+    if kwarg_param and kwarg_param.annotation is not kwarg_param.empty:
+      kwarg_annotation = kwarg_param.annotation
     not_yielded_argument_names = (
         buildable.__arguments__.keys() - signature.parameters.keys())
     for name in sorted(not_yielded_argument_names):
       path = (_ParamName(name),)
-      yield from flatten_children(buildable.__arguments__[name], path)
+      yield from flatten_children(buildable.__arguments__[name],
+                                  kwarg_annotation, path)
 
   def format_line(line: Tuple[_Path, _Leaf]):
-    return f'{_path_to_str(line[0])} = {line[1]!r}'
+    type_annotation = ''
+    if include_types and line[1] is not None:
+      type_annotation = f': {line[1].__qualname__}'
+    return f'{_path_to_str(line[0])}{type_annotation} = {line[2]!r}'
 
   return '\n'.join(map(format_line, recursive_flatten(cfg)))
