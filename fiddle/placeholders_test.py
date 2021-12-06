@@ -19,6 +19,7 @@ import copy
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import config
 from fiddle import placeholders
 
 
@@ -34,7 +35,7 @@ class PlaceholdersTest(absltest.TestCase):
 
   def test_placeholder_fn_exception(self):
     with self.assertRaisesRegex(
-        placeholders.PlaceholderNotFilledError,
+        config.PlaceholderNotFilledError,
         "Expected.*placeholders.*replaced.*one "
         "with name 'my_test_key' was not set"):
       placeholders.placeholder_fn(key=test_key)
@@ -53,7 +54,7 @@ class PlaceholdersTest(absltest.TestCase):
         foo=placeholders.Placeholder(key=fine_key, default=None),
         bar=placeholders.Placeholder(key=test_key))
     with self.assertRaisesRegex(
-        placeholders.PlaceholderNotFilledError,
+        config.PlaceholderNotFilledError,
         "Expected.*placeholders.*replaced.*one "
         "with name 'my_test_key' was not set"):
       fdl.build(cfg)
@@ -152,7 +153,7 @@ class PlaceholdersTest(absltest.TestCase):
 
     self.assertEqual(fdl.build(cfg), (1, 2, 1, 4))
 
-    with self.assertRaises(placeholders.PlaceholderNotFilledError):
+    with self.assertRaises(config.PlaceholderNotFilledError):
       fdl.build(copied)
 
     placeholders.set_placeholder(copied, fine_key1, 10)
@@ -185,12 +186,12 @@ class PlaceholdersTest(absltest.TestCase):
     self.assertIs(copied.key, fine_key)
     self.assertIs(copied.value, placeholders.NO_VALUE)
 
-    with self.assertRaises(placeholders.PlaceholderNotFilledError):
+    with self.assertRaises(config.PlaceholderNotFilledError):
       fdl.build(copied)
     placeholders.set_placeholder(cfg, fine_key, 1)
     self.assertEqual(fdl.build(cfg), 1)
 
-    with self.assertRaises(placeholders.PlaceholderNotFilledError):
+    with self.assertRaises(config.PlaceholderNotFilledError):
       fdl.build(copied)
     placeholders.set_placeholder(copied, fine_key, 2)
     self.assertEqual(fdl.build(cfg), 1)

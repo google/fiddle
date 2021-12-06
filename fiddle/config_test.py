@@ -160,8 +160,10 @@ class ConfigTest(absltest.TestCase):
     })
 
   def test_config_with_default_args(self):
+
     def my_func(x: int = 2, y: str = 'abc'):  # pylint: disable=unused-argument
       return locals()
+
     cfg = config.Config(my_func)
     self.assertEqual(2, cfg.x)
     self.assertEqual('abc', cfg.y)
@@ -416,7 +418,7 @@ class ConfigTest(absltest.TestCase):
     class_config = config.Config(TestClass)
     expected_msg = (r"No parameter named 'nonexistent_arg' exists for "
                     r"<class '__main__.TestClass'>; valid parameter names: "
-                    r"arg1, arg2, kwarg1, kwarg2\.")
+                    r'arg1, arg2, kwarg1, kwarg2\.')
     with self.assertRaisesRegex(TypeError, expected_msg):
       class_config.nonexistent_arg = 'error!'
 
@@ -437,22 +439,25 @@ class ConfigTest(absltest.TestCase):
     cfg.arg2 = 'arg2_value'
     del cfg.arg1
 
-    self.assertEqual(set(['arg1', 'arg2']),
-                     set(cfg.__argument_history__.keys()))
+    self.assertEqual(
+        set(['arg1', 'arg2']), set(cfg.__argument_history__.keys()))
     self.assertLen(cfg.__argument_history__['arg1'], 2)
     self.assertLen(cfg.__argument_history__['arg2'], 1)
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][0].param_name)
     self.assertEqual('arg1_value', cfg.__argument_history__['arg1'][0].value)
-    self.assertRegex(str(cfg.__argument_history__['arg1'][0].location),
-                     r'config_test.py:\d+:test_history_tracking')
+    self.assertRegex(
+        str(cfg.__argument_history__['arg1'][0].location),
+        r'config_test.py:\d+:test_history_tracking')
     self.assertEqual('arg2', cfg.__argument_history__['arg2'][0].param_name)
     self.assertEqual('arg2_value', cfg.__argument_history__['arg2'][0].value)
-    self.assertRegex(str(cfg.__argument_history__['arg2'][0].location),
-                     r'config_test.py:\d+:test_history_tracking')
+    self.assertRegex(
+        str(cfg.__argument_history__['arg2'][0].location),
+        r'config_test.py:\d+:test_history_tracking')
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][1].param_name)
     self.assertEqual(history.DELETED, cfg.__argument_history__['arg1'][1].value)
-    self.assertRegex(str(cfg.__argument_history__['arg1'][1].location),
-                     r'config_test.py:\d+:test_history_tracking')
+    self.assertRegex(
+        str(cfg.__argument_history__['arg1'][1].location),
+        r'config_test.py:\d+:test_history_tracking')
 
     self.assertEqual(cfg.__argument_history__['arg1'][0].sequence_id + 1,
                      cfg.__argument_history__['arg2'][0].sequence_id)
@@ -463,13 +468,13 @@ class ConfigTest(absltest.TestCase):
     with history.custom_location(lambda: 'abc:123'):
       cfg = config.Config(TestClass, 'arg1')
     cfg.arg2 = 'arg2'
-    self.assertEqual(set(['arg1', 'arg2']),
-                     set(cfg.__argument_history__.keys()))
+    self.assertEqual(
+        set(['arg1', 'arg2']), set(cfg.__argument_history__.keys()))
     self.assertLen(cfg.__argument_history__['arg1'], 1)
     self.assertLen(cfg.__argument_history__['arg2'], 1)
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][0].param_name)
-    self.assertRegex(str(cfg.__argument_history__['arg1'][0].location),
-                     'abc:123')
+    self.assertRegex(
+        str(cfg.__argument_history__['arg1'][0].location), 'abc:123')
     self.assertEqual('arg2', cfg.__argument_history__['arg2'][0].param_name)
     self.assertRegex(
         str(cfg.__argument_history__['arg2'][0].location),
@@ -516,6 +521,39 @@ class ConfigTest(absltest.TestCase):
     cfg.kwarg2 = config.Partial(TestClass)
     cfg.kwarg2.arg1 = 'something'
     self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
+
+  def test_build_raises_nice_error_too_few_args(self):
+    cfg = config.Config(test_fn, config.Config(TestClass, 1), 2)
+    with self.assertRaisesRegex(config.BuildError, '.*TestClass.*') as e:
+      config.build(cfg)
+    self.assertIs(e.exception.buildable, cfg.arg1)
+    self.assertEqual(e.exception.path_from_config_root, '<root>.arg1')
+    self.assertIsInstance(e.exception.original_error, TypeError)
+    self.assertEqual(e.exception.args, ())
+    self.assertEqual(e.exception.kwargs, {'arg1': 1})
+
+  def test_build_raises_exception_on_call(self):
+
+    def raise_error():
+      raise ValueError('My fancy exception')
+
+    cfg = config.Config(raise_error)
+    with self.assertRaisesWithLiteralMatch(
+        config.BuildError, 'Failed to construct or call ConfigTest.'
+        'test_build_raises_exception_on_call.<locals>.raise_error '
+        '(at <root>) with arguments\n    args: ()\n    kwargs: {}'):
+      config.build(cfg)
+
+  def test_build_error_path(self):
+    # This will raise an error, because it doesn't have one arg populated.
+    sub_cfg = config.Config(test_fn, 1)
+    sub_dict = {'a': 0, 'b': 2, 'c': sub_cfg, 'd': 10}
+    cfg = config.Config(test_fn_with_var_kwargs, [1, sub_dict])
+
+    with self.assertRaises(config.BuildError) as e:
+      config.build(cfg)
+
+    self.assertEqual(e.exception.path_from_config_root, "<root>.arg1[1]['c']")
 
 
 if __name__ == '__main__':

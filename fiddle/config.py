@@ -14,13 +14,14 @@
 # limitations under the License.
 
 """Defines the `Config` class and associated subclasses and functions."""
+from __future__ import annotations
 
 import abc
 import collections
 import copy
 import functools
 import inspect
-from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union, overload
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, overload
 
 from fiddle import history
 from fiddle import partialclass
@@ -36,6 +37,38 @@ SubtypeOrCallableProducingT = Union[Callable[..., T], Type[SubclassOfT]]
 # be used to differentiate between unset values and user-set values that are
 # None or other commonly-used sentinel.
 _UNSET_SENTINEL = object()
+
+
+class BuildError(ValueError):
+  """Error raised when building a Config fails."""
+
+  def __init__(
+      self,
+      buildable: Buildable,
+      path_from_config_root: str,
+      original_error: Exception,
+      args: Tuple[Any, ...],
+      kwargs: Dict[str, Any],
+  ) -> None:
+    super().__init__(str(original_error))
+    self.buildable = buildable
+    self.path_from_config_root = path_from_config_root
+    self.original_error = original_error
+    self.args = args
+    self.kwargs = kwargs
+
+  def __str__(self):
+    fn_or_cls_name = self.buildable.__fn_or_cls__.__qualname__
+    return (f'Failed to construct or call {fn_or_cls_name} '
+            f'(at {self.path_from_config_root}) with arguments\n'
+            f'    args: {self.args}\n'
+            f'    kwargs: {self.kwargs}')
+
+
+# This error lives here to avoid a circular dependency. Please see
+# placeholders.py.
+class PlaceholderNotFilledError(ValueError):
+  """A placeholder was not filled when build() was called."""
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
@@ -138,7 +171,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
             name for name, param in self.__signature__.parameters.items()
             if param.kind not in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL))
         err_msg = (f"No parameter named '{name}' exists for "
-                   f"{self.__fn_or_cls__}; valid parameter names: "
+                   f'{self.__fn_or_cls__}; valid parameter names: '
                    f"{', '.join(valid_parameter_names)}.")
       raise TypeError(err_msg)
 
@@ -202,7 +235,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if self.__fn_or_cls__ is not other.__fn_or_cls__:
       return False
     assert self._has_var_keyword == other._has_var_keyword, (
-        "Internal invariant violated: has_var_keyword should be the same if "
+        'Internal invariant violated: has_var_keyword should be the same if '
         "__fn_or_cls__'s are the same.")
 
     return self.__arguments__ == other.__arguments__
@@ -261,8 +294,9 @@ class Config(Generic[T], Buildable[T]):
   during `build`, `copy.copy()` or `copy.deepcopy()` may be used.
   """
 
-  # NOTE: We currently need to repeat this annotation for pytype.
+  # NOTE: We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
+  __signature__: inspect.Signature
 
   def __build__(self, *args, **kwargs):
     """Builds this `Config` for the given `args` and `kwargs`.
@@ -397,14 +431,22 @@ def build(config, memo=None):
   """
   memo = {} if memo is None else memo
 
-  def map_fn(leaf):
-    return build(leaf, memo) if isinstance(leaf, Buildable) else leaf
+  def _build(config, path_str: str):
 
-  if id(config) not in memo:
-    kwargs = {}
-    for name, value in config.__arguments__.items():
-      value = tree.map_structure(map_fn, value)
-      kwargs[name] = value
-    memo[id(config)] = config.__build__(**kwargs)
+    def map_fn(map_path: List[Any], leaf):
+      attr, *rest = map_path
+      leaf_path = f'{path_str}.{attr}' + ''.join(f'[{x!r}]' for x in rest)
+      return _build(leaf, leaf_path) if isinstance(leaf, Buildable) else leaf
 
-  return memo[id(config)]
+    if id(config) not in memo:
+      kwargs = tree.map_structure_with_path(map_fn, config.__arguments__)
+      try:
+        memo[id(config)] = config.__build__(**kwargs)
+      except PlaceholderNotFilledError:
+        raise
+      except Exception as e:
+        raise BuildError(config, path_str, e, (), kwargs) from e
+
+    return memo[id(config)]
+
+  return _build(config, '<root>')

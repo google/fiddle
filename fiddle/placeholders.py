@@ -67,10 +67,6 @@ class _NoValue:
 NO_VALUE = _NoValue()
 
 
-class PlaceholderNotFilledError(ValueError):
-  """A placeholder was not filled when build() was called."""
-
-
 @dataclasses.dataclass(frozen=True)
 class PlaceholderKey:
   """Represents a key identifying a type of placeholder.
@@ -98,7 +94,7 @@ class PlaceholderKey:
 
 def placeholder_fn(key: PlaceholderKey, value: Any = NO_VALUE) -> Any:
   if value is NO_VALUE:
-    raise PlaceholderNotFilledError(
+    raise config.PlaceholderNotFilledError(
         "Expected all placeholders to be replaced via fdl.set_placeholder() "
         f"calls, but one with name {key.name!r} was not set.")
   else:
