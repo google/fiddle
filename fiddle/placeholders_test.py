@@ -15,6 +15,8 @@
 
 """Tests for placeholders."""
 
+import copy
+
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import placeholders
@@ -128,6 +130,71 @@ class PlaceholdersTest(absltest.TestCase):
                 "dtype": "float64"
             },
         })
+
+  def test_deepcopy_and_object_id(self):
+    """Tests that deepcopy() is fine, and key IDs are used, not names."""
+    fine_key1 = placeholders.PlaceholderKey("fine_key")
+    fine_key2 = placeholders.PlaceholderKey("fine_key")
+
+    def foo(a, b, c, d):
+      return a, b, c, d
+
+    cfg = fdl.Config(foo)
+    cfg.a = placeholders.Placeholder(fine_key1)
+    cfg.b = placeholders.Placeholder(fine_key2)
+    cfg.c = placeholders.Placeholder(fine_key1)
+    cfg.d = 4
+    copied = copy.deepcopy(cfg)
+    copied.d = 40
+
+    placeholders.set_placeholder(cfg, fine_key1, 1)
+    placeholders.set_placeholder(cfg, fine_key2, 2)
+
+    self.assertEqual(fdl.build(cfg), (1, 2, 1, 4))
+
+    with self.assertRaises(placeholders.PlaceholderNotFilledError):
+      fdl.build(copied)
+
+    placeholders.set_placeholder(copied, fine_key1, 10)
+    placeholders.set_placeholder(copied, fine_key2, 20)
+    self.assertEqual(fdl.build(copied), (10, 20, 10, 40))
+
+  def test_deepcopy_linked_value_object(self):
+
+    def foo(a, b):
+      return a, b
+
+    shared_value = fdl.Config(foo, 1, 2)
+    cfg = fdl.Config(
+        foo,
+        a=fdl.Placeholder(fine_key, shared_value),
+        b=fdl.Placeholder(fine_key, shared_value),
+    )
+    copied = copy.deepcopy(cfg)
+    self.assertIsNot(copied.a, cfg.a)
+    self.assertIsNot(copied.a.value, cfg.a.value)
+    self.assertIs(copied.a.key, cfg.a.key)
+    self.assertIs(copied.b.key, cfg.b.key)
+    self.assertIs(cfg.a.value, cfg.b.value)
+    self.assertIs(copied.a.value, copied.b.value)
+
+  def test_shallow_copy_placeholders(self):
+    cfg = placeholders.Placeholder(fine_key)
+    copied = copy.copy(cfg)
+
+    self.assertIs(copied.key, fine_key)
+    self.assertIs(copied.value, placeholders.NO_VALUE)
+
+    with self.assertRaises(placeholders.PlaceholderNotFilledError):
+      fdl.build(copied)
+    placeholders.set_placeholder(cfg, fine_key, 1)
+    self.assertEqual(fdl.build(cfg), 1)
+
+    with self.assertRaises(placeholders.PlaceholderNotFilledError):
+      fdl.build(copied)
+    placeholders.set_placeholder(copied, fine_key, 2)
+    self.assertEqual(fdl.build(cfg), 1)
+    self.assertEqual(fdl.build(copied), 2)
 
 
 if __name__ == "__main__":

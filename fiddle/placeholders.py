@@ -44,6 +44,10 @@ can be set at once,
 
   model = fdl.build(encoder_decoder_fixture())
 """
+
+from __future__ import annotations
+
+import copy
 import dataclasses
 from typing import Any, Generic, TypeVar, Union
 
@@ -53,7 +57,11 @@ import tree
 
 class _NoValue:
   """Sentinel class (used in place of object for more precise errors)."""
-  pass
+
+  def __deepcopy__(self, memo):
+    """Override for deepcopy that does not copy this sentinel object."""
+    del memo
+    return self
 
 
 NO_VALUE = _NoValue()
@@ -72,6 +80,21 @@ class PlaceholderKey:
   """
   name: str
 
+  def __deepcopy__(self, memo):
+    """Override for deepcopy that does not copy this immutable object.
+
+    This is important because in `set_placeholder` we use object identity on
+    keys, so we should not unnecessarily copy them.
+
+    Args:
+      memo: Unused memoization object from deepcopy API.
+
+    Returns:
+      `self`.
+    """
+    del memo
+    return self
+
 
 def placeholder_fn(key: PlaceholderKey, value: Any = NO_VALUE) -> Any:
   if value is NO_VALUE:
@@ -89,18 +112,29 @@ class Placeholder(Generic[T], config.Config[T]):
   """Declares a placeholder in a configuration."""
 
   def __init__(self,
-               key: PlaceholderKey,
+               key: Union[PlaceholderKey, Placeholder[T]],
                default: Union[_NoValue, T] = NO_VALUE):
     """Initializes the placeholder.
 
     Args:
-      key: Key identifying the type of placeholder, so that all placeholders of
-        a given type can be set at once.
+      key: Normally a key identifying the type of placeholder, so that all
+        placeholders of a given type can be set at once. Alternately an existing
+        Placeholder can be specified, and it will be copied.
       default: Default value of the placeholder. This is normally a sentinel
         which will cause the configuration to fail to build when the
         placeholders are not set.
     """
-    super().__init__(placeholder_fn, key=key, value=default)
+    if isinstance(key, Placeholder):
+      assert default is NO_VALUE
+      super().__init__(key)
+    else:
+      if not isinstance(key, PlaceholderKey):
+        raise TypeError(f"Expected key to be a PlaceholderKey, got {key}")
+      super().__init__(placeholder_fn, key=key, value=default)
+
+  def __deepcopy__(self, memo) -> config.Buildable[T]:
+    """Implements the deepcopy API."""
+    return Placeholder(self.key, copy.deepcopy(self.value, memo))
 
 
 def set_placeholder(cfg: config.Buildable, key: PlaceholderKey,
