@@ -22,7 +22,7 @@ python3 -m fiddle.absl_flags.example.example \
   --fdl_config=simple \
   --fiddler=swap_weight_and_bias \
   --fdl.model.b=0.73
-  --fdl.data.filename=\"other.txt\"
+  --fdl.data.filename='"other.txt"'  # Alt syntax: --fdl.data.filename=\"b.txt\"
 ```
 """
 
