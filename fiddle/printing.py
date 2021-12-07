@@ -142,7 +142,7 @@ def as_str_flattened(cfg: config.Buildable,
       yield from flatten_children(buildable.__arguments__[name],
                                   kwarg_annotation, path)
 
-  def format_line(line: Tuple[_Path, _Leaf]):
+  def format_line(line: Tuple[_Path, Optional[Type[Any]], _Leaf]):
     type_annotation = ''
     if include_types and line[1] is not None:
       type_annotation = f': {line[1].__qualname__}'
