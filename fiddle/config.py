@@ -23,6 +23,7 @@ import functools
 import inspect
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, overload
 
+from fiddle import build_guard
 from fiddle import history
 from fiddle import partialclass
 
@@ -449,4 +450,5 @@ def build(config, memo=None):
 
     return memo[id(config)]
 
-  return _build(config, '<root>')
+  with build_guard.in_build():
+    return _build(config, '<root>')

@@ -17,6 +17,7 @@
 
 import copy
 import pickle
+import threading
 from typing import Any
 
 from absl.testing import absltest
@@ -434,6 +435,22 @@ class ConfigTest(absltest.TestCase):
     with self.assertRaisesRegex(NotImplementedError, expected_msg):
       config.Config(test_fn_with_var_args, 1, 2, 3)
 
+  def test_build_inside_build(self):
+
+    def inner_build(x: int) -> str:
+      return str(x)
+
+    def nest_call(x: int) -> str:
+      cfg = config.Config(inner_build, x)
+      return config.build(cfg)
+
+    outer = config.Config(nest_call, 3)
+    expected_msg = r'test_build_inside_build.<locals>.nest_call \(at <root>\)'
+    with self.assertRaisesRegex(config.BuildError, expected_msg) as e:
+      config.build(outer)
+    expected_msg = r'forbidden to call `fdl.build` inside another `fdl.build`'
+    self.assertRegex(str(e.exception.__cause__), expected_msg)
+
   def test_history_tracking(self):
     cfg = config.Config(TestClass, 'arg1_value')
     cfg.arg2 = 'arg2_value'
@@ -554,6 +571,36 @@ class ConfigTest(absltest.TestCase):
       config.build(cfg)
 
     self.assertEqual(e.exception.path_from_config_root, "<root>.arg1[1]['c']")
+
+  def test_multithreaded_build(self):
+    """Two threads can each invoke config.build without interfering."""
+    output = None
+    background_entered_build = threading.Event()
+    foreground_entered_build = threading.Event()
+
+    def other_thread():
+      nonlocal output
+
+      def blocking_function(x):
+        background_entered_build.set()
+        foreground_entered_build.wait()
+        return x
+
+      cfg = config.Config(blocking_function, 3)
+      output = config.build(cfg)
+
+    def blocking_function(x):
+      foreground_entered_build.set()
+      background_entered_build.wait()
+      return x
+
+    cfg = config.Config(blocking_function, 1)
+    thread = threading.Thread(target=other_thread)
+    thread.start()
+    obj = config.build(cfg)
+    thread.join()
+    self.assertEqual(1, obj)
+    self.assertEqual(3, output)
 
 
 if __name__ == '__main__':
