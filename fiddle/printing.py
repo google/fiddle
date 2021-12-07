@@ -144,7 +144,11 @@ def as_str_flattened(cfg: config.Buildable,
   def format_line(line: Tuple[_Path, Optional[Type[Any]], _Leaf]):
     type_annotation = ''
     if include_types and line[1] is not None:
-      type_annotation = f': {line[1].__qualname__}'
+      try:
+        type_annotation = f': {line[1].__qualname__}'
+      except AttributeError:
+        # Certain types, such as Union, do not have a __qualname__ attribute.
+        type_annotation = f': {line[1]}'
     return f'{_path_to_str(line[0])}{type_annotation} = {line[2]!r}'
 
   return '\n'.join(map(format_line, recursive_flatten(cfg)))

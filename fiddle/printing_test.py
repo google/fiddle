@@ -16,6 +16,7 @@
 """Tests for print."""
 
 import dataclasses
+from typing import Union
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -244,6 +245,18 @@ y: int = 'oops'
 x = 1
 y = 'abc'
 z = <[unset]>
+""".strip()
+    self.assertEqual(output, expected)
+
+  def test_can_print_union_type(self):
+
+    def to_integer(x: Union[int, str]):
+      return int(x)
+
+    cfg = fdl.Config(to_integer, 1)
+    output = printing.as_str_flattened(cfg, include_types=True)
+    expected = """
+x: typing.Union[int, str] = 1
 """.strip()
     self.assertEqual(output, expected)
 
