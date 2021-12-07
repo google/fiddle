@@ -57,7 +57,7 @@ def annotated_kwargs_helper(**kwargs: int):  # pylint: disable=unused-argument
   pass
 
 
-class PrintTest(absltest.TestCase):
+class AsStrFlattenedTests(absltest.TestCase):
 
   def test_path_to_str(self):
     self.assertEqual(printing._path_to_str(()), '')
@@ -247,6 +247,42 @@ z = <[unset]>
 """.strip()
     self.assertEqual(output, expected)
 
+
+class HistoryPerLeafParamTests(absltest.TestCase):
+
+  def test_simple_history(self):
+    cfg = fdl.Config(test_helper, 1, 'abc')
+    cfg.x = 2
+    output = printing.history_per_leaf_parameter(cfg)
+    expected = r"""
+x = 2 @ .*/printing_test.py:\d+:test_simple_history
+  - previously: 1 @ .*/printing_test.py:\d+:test_simple_history
+y = 'abc' @ .*/printing_test.py:\d+:test_simple_history
+""".strip()
+    self.assertRegex(output, expected)
+
+  def test_nested_in_collections(self):
+    cfg = fdl.Config(
+        test_helper,
+        [fdl.Config(test_helper, 1, '1'),
+         fdl.Config(TestHelper, 2)])
+    cfg.x[0].x = 3
+    cfg.x[1].a = 2  # Reset to same value.
+    cfg.x[0].y = 'abc'
+    cfg.x[0].x = 4
+    output = printing.history_per_leaf_parameter(cfg)
+    expected = r"""
+x\[0\].x = 4 @ .*/printing_test.py:\d+:test_nested_in_collections
+  - previously: 3 @ .*/printing_test.py:\d+:test_nested_in_collections
+  - previously: 1 @ .*/printing_test.py:\d+:test_nested_in_collections
+x\[0\].y = 'abc' @ .*/printing_test.py:\d+:test_nested_in_collections
+  - previously: '1' @ .*/printing_test.py:\d+:test_nested_in_collections
+x\[1\].a = 2 @ .*/printing_test.py:\d+:test_nested_in_collections
+  - previously: 2 @ .*/printing_test.py:\d+:test_nested_in_collections
+x\[1\].b = <\[unset\]>
+y = <\[unset\]>
+""".strip()
+    self.assertRegex(output, expected)
 
 if __name__ == '__main__':
   absltest.main()

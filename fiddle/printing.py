@@ -17,9 +17,10 @@
 
 import dataclasses
 import inspect
-from typing import Any, Iterator, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Iterator, List, Optional, Sequence, Tuple, Type, Union
 
 from fiddle import config
+from fiddle import history
 from fiddle import placeholders
 import tree
 
@@ -62,6 +63,11 @@ def _path_to_str(path: _Path) -> str:
   return output
 
 
+def _has_nested_builder(children: Sequence[Tuple[_Path, _Leaf]]) -> bool:
+  return any(
+      isinstance(child, config.Buildable) for unused_path, child in children)
+
+
 @dataclasses.dataclass(frozen=True)
 class _PlaceholderWrapper:
   """Customizes representation for placeholders in flattened output."""
@@ -93,18 +99,11 @@ def as_str_flattened(cfg: config.Buildable,
   Returns: a string representation of `cfg`.
   """
 
-  def has_nested_builder(flat_children: Sequence[Tuple[_Path, _Leaf]]) -> bool:
-
-    def is_path_and_leaf_a_buildable(path_and_leaf) -> bool:
-      return isinstance(path_and_leaf[1], config.Buildable)
-
-    return any(map(is_path_and_leaf_a_buildable, flat_children))
-
   def flatten_children(
       value: Any, annotation: Optional[Type[Any]],
       path: _Path) -> Iterator[Tuple[_Path, Optional[Type[Any]], _Leaf]]:
     flattened_children = tree.flatten_with_path(value)
-    if has_nested_builder(flattened_children):
+    if _has_nested_builder(flattened_children):
       for child_path, leaf in flattened_children:
         if isinstance(leaf, placeholders.Placeholder):
           yield path + child_path, None, _PlaceholderWrapper(leaf)
@@ -149,3 +148,82 @@ def as_str_flattened(cfg: config.Buildable,
     return f'{_path_to_str(line[0])}{type_annotation} = {line[2]!r}'
 
   return '\n'.join(map(format_line, recursive_flatten(cfg)))
+
+
+def history_per_leaf_parameter(cfg: config.Buildable) -> str:
+  """Returns a string representing the history of cfg's leaf params.
+
+  Because Buildable's are designed to be mutated, tracking down when and where
+  a particular parameter's value is changed can be difficult. This function
+  returns a string representation of each parameter and (in
+  reverse-chronological order) its current and past values.
+
+  This representation elides the "DAG"-construction aspects of constructing the
+  `cfg`, and instead only prints the history of the "outer-most" parameters
+  (ones that don't contain a reference to another Buildable).
+
+  Args:
+    cfg: A buildable to generate a history for.
+
+  Returns:
+    A string representation of `cfg`'s history, organized by param name.
+  """
+  return '\n'.join(_make_per_leaf_histories_recursive(cfg))
+
+
+def _make_per_leaf_histories_recursive(cfg: config.Buildable,
+                                       path: Optional[_Path] = None
+                                      ) -> Iterator[str]:
+  """Recursively traverses `cfg` and generates per-param history summaries."""
+  for name, param_history in cfg.__argument_history__.items():
+    if path:
+      param_path = tuple(path) + (_ParamName(name),)
+    else:
+      param_path = (_ParamName(name),)
+    children = tree.flatten_with_path(getattr(cfg, name))
+    if _has_nested_builder(children):
+      for child_path, child_leaf in children:
+        full_child_path = param_path + child_path
+        if isinstance(child_leaf, config.Buildable):
+          yield from _make_per_leaf_histories_recursive(child_leaf,
+                                                        full_child_path)
+        else:
+          yield f'{_path_to_str(full_child_path)} = {child_leaf}'
+    else:
+      yield _make_per_leaf_history_text(param_path, param_history)
+
+  unset_fields = sorted(
+      set(cfg.__signature__.parameters.keys()) -
+      set(cfg.__argument_history__.keys()))
+  for name in unset_fields:
+    if path:
+      param_path = tuple(path) + (_ParamName(name),)
+    else:
+      param_path = (_ParamName(name),)
+    yield f'{_path_to_str(param_path)} = <[unset]>'
+
+
+def _make_per_leaf_history_text(
+    path: _Path, param_history: List[history.HistoryEntry]) -> str:
+  """Returns a string representing a parameter's history.
+
+  Args:
+    path: The path to the parameter.
+    param_history: The parameter's history.
+
+  Returns:
+    A string representation of the parameter's history that can be displayed to
+    the user.
+  """
+  assert param_history, 'param_history should never be empty.'
+
+  def make_previous_text(entry: history.HistoryEntry) -> str:
+    return f'  - previously: {entry.value!r} @ {entry.location}'
+
+  if len(param_history) > 1:
+    past = '\n'.join(map(make_previous_text, reversed(param_history[:-1])))
+    past = '\n' + past  # prefix with a newline.
+  else:
+    past = ''
+  current = f'{param_history[-1].value!r} @ {param_history[-1].location}'
+  return f'{_path_to_str(path)} = {current}{past}'
