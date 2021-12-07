@@ -71,6 +71,15 @@ class AutoConfigTest(absltest.TestCase):
 
     self.assertEqual(expected_config, test_class_config('positional'))
 
+  def test_create_config_with_kwonly_args(self):
+    expected_config = config.Config(TestClass, 'positional', arg2='default')
+
+    @auto_config.auto_config
+    def test_class_config(arg1, *, arg2='default'):
+      return TestClass(arg1, arg2)
+
+    self.assertEqual(expected_config, test_class_config('positional'))
+
   def test_calling_auto_config(self):
     expected_config = config.Config(
         test_fn, 1, kwarg=config.Config(TestClass, 1, 2))

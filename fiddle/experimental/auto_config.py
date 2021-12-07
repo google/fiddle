@@ -201,6 +201,8 @@ def auto_config(fn):
   # the scope. Mark it as an auto-config function so that calls to this function
   # from other auto-config functions aren't intercepted (this is checked in
   # `auto_config_call_handler` above.
-  auto_config_fn = types.FunctionType(code, scope, argdefs=fn.__defaults__)
+  auto_config_fn = types.FunctionType(code, scope)
+  auto_config_fn.__defaults__ = fn.__defaults__
+  auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
   auto_config_fn.auto_config = True
   return auto_config_fn
