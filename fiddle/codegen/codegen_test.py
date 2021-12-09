@@ -47,6 +47,10 @@ class Baz:
   bar: Bar
 
 
+def identity(x):
+  return x
+
+
 def simple_tree() -> fdl.Config[Foo]:
   return fdl.Config(
       Foo, a=1, leaves=[
@@ -288,11 +292,38 @@ def build_config():
     """
     self.assertSequenceEqual(tokens(code), tokens(expected), code)
 
-  def test_dict_input_unsupported(self):
-    identity = lambda x: x
+  def test_dict_value(self):
     cfg = fdl.Config(identity, x={"foo": fdl.Config(Foo, a=1)})
-    with self.assertRaisesRegex(NotImplementedError, "Dict.*aren't.*supported"):
-      codegen.codegen_dot_syntax(cfg)
+    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    expected = """
+import fiddle as fdl
+
+
+def build_config():
+  root = fdl.Config(identity)
+  root.x = {'foo': NotImplemented}  # fdl.Config sub-nodes will replace NotImplemented
+
+  root.x['foo'] = fdl.Config(Foo)
+  root.x['foo'].a = 1
+
+  return root
+    """
+    self.assertSequenceEqual(tokens(code), tokens(expected), code)
+
+  def test_deeply_nested_constant(self):
+    cfg = fdl.Config(identity, x={"foo": [1, 2], "bar": [3, 4]})
+    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    expected = """
+import fiddle as fdl
+
+
+def build_config():
+  root = fdl.Config(identity)
+  root.x = {'bar': [3, 4], 'foo': [1, 2]}
+
+  return root
+    """
+    self.assertSequenceEqual(tokens(code), tokens(expected), code)
 
   def test_codegen_submodule(self):
     cfg = fdl.Config(

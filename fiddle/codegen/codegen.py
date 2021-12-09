@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Sequence, Set
 from absl import logging
 from fiddle import config as fdl
 from fiddle.codegen import mini_ast
+from fiddle.experimental import daglish
 import tree
 
 
@@ -172,13 +173,14 @@ class ImportManager:
     return sorted(self.imports, key=lambda x: x.sortkey())
 
 
-def assignment_path(path: Sequence[Any]) -> str:
+def assignment_path(base_var: str, path: Sequence[daglish.PathElement]) -> str:
   """Generates the LHS of an assignment, given a traversal path.
 
   Example: ["foo", 3, "bar"] -> "foo[3].bar".
 
   Args:
-    path: Traversal path, compatible with the `tree` library.
+    base_var: Base variable name.
+    path: Attribute path on `base_var` to assign to.
 
   Returns:
     Python code string for the LHS of an assignment.
@@ -187,18 +189,8 @@ def assignment_path(path: Sequence[Any]) -> str:
     TypeError: If the first path element is not a string, or if any path element
       is not a string or an int.
   """
-  if not path or not isinstance(path[0], str):
-    raise TypeError(f"Path must start with a string, but got {path}")
 
-  parts = [path[0]]
-  for part in path[1:]:
-    if isinstance(part, str):
-      parts.append(f".{part}")
-    elif isinstance(part, int):
-      parts.append(f"[{part}]")
-    else:
-      raise TypeError(f"Unsupported path: {path}")
-  return "".join(parts)
+  return base_var + "".join(x.code for x in path)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -229,6 +221,17 @@ def _get_shared_buildables(buildable: fdl.Buildable) -> List[fdl.Buildable]:
   ]
 
 
+def _has_child_buildables(value: Any) -> bool:
+  result = False
+
+  def leaf_fn(leaf):
+    nonlocal result
+    result = result or isinstance(leaf, fdl.Buildable)
+
+  tree.map_structure(leaf_fn, value)
+  return result
+
+
 @dataclasses.dataclass
 class SharedBuildableManager:
   """Helper class to manage shared configuration objects."""
@@ -254,7 +257,7 @@ class SharedBuildableManager:
     self.instances.append(decl)
     self.instance_names_by_id[id(buildable)] = name
 
-  def assign(self, lhs_path: Sequence[Any],
+  def assign(self, lhs_var: str, lhs_path: Sequence[daglish.PathElement],
              attr_value: Any) -> mini_ast.CodegenNode:
     """Returns an assignment for a Python value.
 
@@ -262,7 +265,8 @@ class SharedBuildableManager:
     replaced with name references to the shared objects.
 
     Args:
-      lhs_path: Left-hand assignment path.
+      lhs_var: Variable name of the left-hand side assignment.
+      lhs_path: Attribute path on `lhs_var` to assign to.
       attr_value: Python value representing the right-hand side of the
         expression.
 
@@ -270,7 +274,7 @@ class SharedBuildableManager:
       Codegen node representing the assignment.
     """
 
-    if isinstance(lhs_path[-1], int):
+    if lhs_path and isinstance(lhs_path[-1], daglish.ListOrTupleItem):
       # Skip if we're re-assigning to a list element. The only case when we want
       # to override list elements is when we're assigning to sub-configurations,
       # which were initially assigned NotImplemented. However, these are set in
@@ -290,7 +294,7 @@ class SharedBuildableManager:
       else:
         return child
 
-    lhs = assignment_path(lhs_path)
+    lhs = assignment_path(lhs_var, lhs_path)
     assignment = mini_ast.Assignment(
         lhs, repr(tree.map_structure(_map_fn, attr_value)))
     if used_not_implemented:
@@ -333,7 +337,8 @@ def _configure_shared_object(
     buildable_subclass_str = import_manager.add(child.__class__)
     nodes = [mini_ast.Assignment(name, f"{buildable_subclass_str}({relname})")]
     for key, value in child.__arguments__.items():
-      nodes.append(shared_manager.assign([name, key], value))
+      path = [daglish.BuildableAttributeItem(child, key)]
+      nodes.append(shared_manager.assign(name, path, value))
     shared_manager.add(name, child, mini_ast.ImmediateAttrsBlock(nodes))
     return child
 
@@ -380,13 +385,14 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
   # becomes a tree.
   main_tree_blocks = []
 
-  def configure_main_tree_block(child: fdl.Buildable, path: Sequence[Any]):
+  def configure_main_tree_block(child: fdl.Buildable, path: List[Any]):
     """Configures a tree node for the main configuration block."""
     relname = import_manager.add(child.__fn_or_cls__)
     buildable_subclass_str = import_manager.add(child.__class__)
     nodes = [
         mini_ast.Assignment(
-            assignment_path(path), f"{buildable_subclass_str}({relname})")
+            assignment_path("root", path),
+            f"{buildable_subclass_str}({relname})")
     ]
     deferred = []  # Defer configuring sub-Buildable nodes.
 
@@ -397,14 +403,26 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
         # Skip top level __arguments__ dict.
         return
 
-      if isinstance(value, dict):
-        raise NotImplementedError("Dictionary args aren't supported yet.")
+      # Convert sub_path to a daglish path. In the future, this traversal will
+      # be part of daglish.
+      arg_dict_key, *rest = sub_path
+      rest_path_elts = []
+      for tree_lib_elt in rest:
+        if isinstance(tree_lib_elt, int):
+          rest_path_elts.append(daglish.ListOrTupleItem([], tree_lib_elt))
+        else:
+          rest_path_elts.append(daglish.DictItem({}, tree_lib_elt))
+      full_path = [
+          *path,
+          daglish.BuildableAttributeItem(child, arg_dict_key), *rest_path_elts
+      ]
 
-      full_path = tuple(path) + tuple(sub_path)
-      if isinstance(value, fdl.Buildable) and value not in shared_manager:
+      if rest_path_elts and not _has_child_buildables(value):
+        pass
+      elif isinstance(value, fdl.Buildable) and value not in shared_manager:
         deferred.append((value, full_path))
       else:
-        nodes.append(shared_manager.assign(full_path, value))
+        nodes.append(shared_manager.assign("root", full_path, value))
 
     tree.traverse_with_path(handle_child_attr, child.__arguments__)
     main_tree_blocks.append(mini_ast.ImmediateAttrsBlock(nodes))
@@ -413,7 +431,7 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
     for sub_child, sub_path in deferred:
       configure_main_tree_block(sub_child, sub_path)
 
-  configure_main_tree_block(buildable, ("root",))
+  configure_main_tree_block(buildable, [])
 
   # Adds the final return statement, glues together the shared instance block
   # with the main tree block, and adds imports.
