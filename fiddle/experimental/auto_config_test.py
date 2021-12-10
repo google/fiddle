@@ -102,7 +102,7 @@ class AutoConfigTest(absltest.TestCase):
     def test_class_config():
       return TestClass(1, test_fn(2, 'kwarg'))
 
-    return self.assertEqual(expected_config, test_class_config())
+    self.assertEqual(expected_config, test_class_config())
 
   def test_reference_nonlocal(self):
     nonlocal_var = 3
@@ -124,7 +124,7 @@ class AutoConfigTest(absltest.TestCase):
       mapping = {'a': 0, 'b': 1, 'c': 2}
       return [test_fn_with_kwargs(value=value) for value in mapping.values()]
 
-    return self.assertEqual(expected_config, test_config())
+    self.assertEqual(expected_config, test_config())
 
   def test_auto_config_eligibility(self):
     # Some common types that have no signature.
