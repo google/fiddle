@@ -21,7 +21,7 @@ import collections
 import copy
 import functools
 import inspect
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, overload
+from typing import Any, Callable, Collection, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, overload
 
 from fiddle import build_guard
 from fiddle import history
@@ -188,6 +188,24 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     except KeyError:
       err = AttributeError(f"No parameter '{name}' has been set on {self!r}")
       raise err from None
+
+  def __dir__(self) -> Collection[str]:
+    """Provide a useful list of attribute names, optimized for Jupyter/Colab.
+
+    `__dir__` is often implicitly called by tooling such as Jupyter/Colab to
+    provide autocomplete suggestions. This implementation of `__dir__` makes it
+    easy to see what are valid attributes to get, set, or delete.
+
+    Returns:
+      A list of useful attribute names corresponding to set or unset parameters.
+    """
+    valid_param_names = {
+        name for name, param in self.__signature__.parameters.items()
+        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+    }
+    set_argument_names = self.__arguments__.keys()
+    all_names = valid_param_names.union(set_argument_names)
+    return all_names
 
   def __repr__(self):
     if hasattr(self.__fn_or_cls__, '__qualname__'):

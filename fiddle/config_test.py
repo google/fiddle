@@ -324,6 +324,19 @@ class ConfigTest(absltest.TestCase):
 
     self.assertEqual(4, fn_config.arg2)
 
+  def test_dir_simple(self):
+    fn_config = config.Config(test_fn)
+    self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(fn_config))
+
+  def test_dir_cls(self):
+    cfg = config.Config(TestClass)
+    self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(cfg))
+
+  def test_dir_var_args_and_kwargs(self):
+    varargs_config = config.Config(test_fn_with_var_args_and_kwargs)
+    varargs_config.abc = '123'
+    self.assertEqual(['abc', 'arg1', 'kwarg1'], dir(varargs_config))
+
   def test_partial(self):
     class_partial = config.Partial(TestClass, 'arg1', 'arg2')
     partialclass = config.build(class_partial)
