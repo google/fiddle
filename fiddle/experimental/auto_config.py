@@ -38,22 +38,37 @@ _BUILTINS = frozenset([
 ])
 
 
+def _returns_buildable(signature: inspect.Signature) -> bool:
+  """Returns True iff the return annotation is a subclass of config.Buildable."""
+  return (signature.return_annotation is not signature.empty and
+          inspect.isclass(signature.return_annotation) and
+          issubclass(signature.return_annotation, config.Buildable))
+
+
 def _is_auto_config_eligible(fn_or_cls):
   """Helper to determine if `fn_or_cls` is eligible for auto-config."""
   try:
-    has_signature = inspect.signature(fn_or_cls) is not None
+    signature = inspect.signature(fn_or_cls)
   except ValueError:
-    has_signature = False
+    signature = None
+
+  try:
+    _ = hash(fn_or_cls)
+  except TypeError:
+    has_hash = False
+  else:
+    has_hash = True
 
   is_buildable = (
       inspect.isclass(fn_or_cls) and issubclass(fn_or_cls, config.Buildable))
 
   return (
-      has_signature and
-      fn_or_cls not in _BUILTINS and
+      signature is not None and
+      (has_hash and fn_or_cls not in _BUILTINS) and
       not is_buildable and
       not inspect.ismethod(fn_or_cls) and
-      not getattr(fn_or_cls, 'auto_config', False)
+      not getattr(fn_or_cls, 'auto_config', False) and
+      not _returns_buildable(signature)  # Don't auto-config buildable-functions
   )  # pyformat: disable
 
 

@@ -23,6 +23,7 @@ from absl.testing import absltest
 
 from fiddle import config
 from fiddle.experimental import auto_config
+from fiddle.experimental import autobuilders as ab
 
 
 def test_fn(arg, kwarg='test'):
@@ -40,6 +41,10 @@ class TestClass:
 
   def method(self):
     pass
+
+
+def explicit_config_building_fn(x: int) -> config.Config:
+  return config.Config(test_fn, 5, kwarg=x)
 
 
 class AutoConfigTest(absltest.TestCase):
@@ -104,6 +109,16 @@ class AutoConfigTest(absltest.TestCase):
 
     self.assertEqual(expected_config, test_class_config())
 
+  def test_calling_explicit_function(self):
+    expected_config = config.Config(
+        TestClass, 1, arg2=config.Config(test_fn, 5, 10))
+
+    @auto_config.auto_config
+    def test_nested_call():
+      return TestClass(1, explicit_config_building_fn(10))
+
+    self.assertEqual(expected_config, test_nested_call())
+
   def test_reference_nonlocal(self):
     nonlocal_var = 3
     expected_config = config.Config(test_fn, 1, kwarg=nonlocal_var)
@@ -141,6 +156,17 @@ class AutoConfigTest(absltest.TestCase):
     self.assertFalse(auto_config._is_auto_config_eligible(config.Partial))
     # Auto-config annotations are not eligible, and this case is tested in
     # `test_calling_auto_config` above.
+
+  def test_autobuilders_in_auto_config(self):
+    expected_config = config.Config(
+        test_fn, arg=ab.config(TestClass, require_skeleton=False))
+
+    @auto_config.auto_config
+    def autobuilder_using_fn():
+      x = ab.config(TestClass, require_skeleton=False)
+      return test_fn(x)
+
+    self.assertEqual(expected_config, autobuilder_using_fn())
 
 
 if __name__ == '__main__':
