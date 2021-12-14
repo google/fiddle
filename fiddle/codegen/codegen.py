@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Sequence, Set
 from absl import logging
 from fiddle import config as fdl
 from fiddle.codegen import mini_ast
+from fiddle.codegen import special_value_codegen
 from fiddle.experimental import daglish
 import tree
 
@@ -66,10 +67,29 @@ def map_buildables(
   return post_traverse_fn(buildable, new_args)
 
 
-def _get_default_import_aliases() -> Dict[str, mini_ast.ImportNode]:
-  """Dictionary of default import aliases."""
+# Project-specific import aliases.
+_SPECIAL_IMPORT_ALIASES = {}
+
+
+def register_import_alias(name: str, import_stmt: mini_ast.ImportNode) -> None:
+  """Registers an import alias.
+
+  Typically this is called by extensions in `fiddle.extensions`.
+
+  Args:
+    name: Full module name to alias. Often, this is what can be found in
+      `type(py_value).__module__.__name__`.
+    import_stmt: Import statement to emit for this module.
+  """
+  _SPECIAL_IMPORT_ALIASES[name] = import_stmt
+
+
+def _get_import_aliases() -> Dict[str, mini_ast.ImportNode]:
+  """Dictionary of import aliases."""
   return {
-      "fiddle.config": mini_ast.ImportAs(name="fdl", module="fiddle"),
+      **_SPECIAL_IMPORT_ALIASES,
+      "fiddle.config":
+          mini_ast.ImportAs(name="fdl", module="fiddle"),
   }
 
 
@@ -128,7 +148,37 @@ class ImportManager:
   namespace: Namespace
   imports: List[mini_ast.ImportNode] = dataclasses.field(default_factory=list)
   aliases: Dict[str, mini_ast.ImportNode] = dataclasses.field(
-      default_factory=_get_default_import_aliases)
+      default_factory=_get_import_aliases)
+
+  def add_by_name(self, module_name: str) -> str:
+    """Adds an import given a module name.
+
+    This is a slightly lower-level API than `add`; you should only use it if
+    you don't have access.
+
+    Args:
+      module_name: String module name to try to import.
+
+    Returns:
+      Alias for the imported module.
+    """
+    result = self.aliases.get(module_name)
+    parent, module_name = module_name.rsplit(".", 1)
+    if not result:
+      if parent:
+        result = mini_ast.FromImport(name=module_name, parent=parent)
+      else:
+        result = mini_ast.DirectImport(module_name)
+
+    if result not in self.imports:
+      if result.name in self.namespace:
+        # Create or adjust the alias for the import.
+        new_name = self.namespace.get_new_name(result.name, prefix="")
+        result = result.change_alias(new_name)
+      else:
+        self.namespace.add(result.name)
+      self.imports.append(result)
+    return result.name
 
   def add(self, fn_or_cls: Any) -> str:
     """Adds an import if it doesn't exist.
@@ -149,24 +199,8 @@ class ImportManager:
           fn_or_cls_name)
       return fn_or_cls_name
 
-    parent, module_name = module_name.rsplit(".", 1)
-    result = self.aliases.get(f"{parent}.{module_name}")
-    if not result:
-      if parent:
-        result = mini_ast.FromImport(name=module_name, parent=parent)
-      else:
-        result = mini_ast.DirectImport(module_name)
-
-    if result not in self.imports:
-      if result.name in self.namespace:
-        # Create or adjust the alias for the import.
-        new_name = self.namespace.get_new_name(result.name, prefix="")
-        result = result.change_alias(new_name)
-      else:
-        self.namespace.add(result.name)
-      self.imports.append(result)
-
-    return f"{result.name}.{fn_or_cls_name}"
+    imported_name = self.add_by_name(module_name)
+    return f"{imported_name}.{fn_or_cls_name}"
 
   def sorted_imports(self):
     """Returns imports sorted lexicographically."""
@@ -237,6 +271,7 @@ class SharedBuildableManager:
   """Helper class to manage shared configuration objects."""
 
   namespace: Namespace
+  import_manager: ImportManager
   instances: List[mini_ast.CodegenNode] = dataclasses.field(
       default_factory=list)
   instance_names_by_id: Dict[int, str] = dataclasses.field(default_factory=dict)
@@ -292,7 +327,8 @@ class SharedBuildableManager:
         used_not_implemented = True
         return _VarReference("NotImplemented")
       else:
-        return child
+        return special_value_codegen.transform_py_value(child,
+                                                        self.import_manager)
 
     lhs = assignment_path(lhs_var, lhs_path)
     assignment = mini_ast.Assignment(
@@ -369,7 +405,8 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
   """
   namespace = Namespace()
   import_manager = ImportManager(namespace)
-  shared_manager = SharedBuildableManager(namespace)
+  shared_manager = SharedBuildableManager(
+      namespace, import_manager=import_manager)
 
   # In this method, we will configure any shared objects. This method is fully
   # DAG compliant, and we'd consider using it for the whole codegen, if it were
