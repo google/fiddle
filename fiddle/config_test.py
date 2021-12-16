@@ -19,7 +19,7 @@ import copy
 import functools
 import pickle
 import threading
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 
 from absl.testing import absltest
 from fiddle import building
@@ -556,7 +556,7 @@ class ConfigTest(absltest.TestCase):
     class_partial = config.Partial(TestClass, 'arg1', 'arg2')
     pytype_extensions.assert_type(class_partial, config.Partial[TestClass])
     partial = building.build(class_partial)
-    pytype_extensions.assert_type(partial, Callable[..., TestClass])
+    pytype_extensions.assert_type(partial, functools.partial[TestClass])
     self.assertIsInstance(partial, functools.partial)
 
     instance = partial()
@@ -581,7 +581,7 @@ class ConfigTest(absltest.TestCase):
     fn_partial.kwarg1 = 'kwarg1'
 
     partial = building.build(fn_partial)
-    pytype_extensions.assert_type(partial, Callable[..., Dict[str, Any]])
+    pytype_extensions.assert_type(partial, functools.partial[Dict[str, Any]])
     self.assertEqual(partial(), {
         'arg1': 'arg1',
         'arg2': 'arg2',
@@ -609,7 +609,7 @@ class ConfigTest(absltest.TestCase):
     class_partial = make_typed_partial()
     pytype_extensions.assert_type(class_partial, config.Partial[TestClass])
     partial = building.build(class_partial)
-    pytype_extensions.assert_type(partial, Callable[..., TestClass])
+    pytype_extensions.assert_type(partial, functools.partial[TestClass])
     instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 4)
@@ -618,7 +618,7 @@ class ConfigTest(absltest.TestCase):
     class_partial = make_untyped_partial(TestClass, arg1=2)
     pytype_extensions.assert_type(class_partial, config.Partial)
     partial = building.build(class_partial)
-    pytype_extensions.assert_type(partial, Callable[..., Any])
+    pytype_extensions.assert_type(partial, functools.partial)
     instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 4)

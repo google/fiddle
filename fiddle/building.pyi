@@ -5,12 +5,12 @@ of @overload annotations in .py files (b/158386228).
 
 TODO: Remove this file once b/158386228 is resolved.
 """
+import functools
 from typing import Any, Callable, Dict, TypeVar, Tuple, Union, overload
 
 from fiddle import config
 
 T = TypeVar('T')
-CallableProducingT = Callable[..., T]
 
 
 class BuildError(ValueError):
@@ -36,13 +36,13 @@ class BuildError(ValueError):
 
 # Define typing overload for `build(Partial[T])`
 @overload
-def build(buildable: config.Partial[T]) -> CallableProducingT:
+def build(buildable: config.Partial[T]) -> functools.partial[T]:
   ...
 
 
 # Define typing overload for `build(Partial)`
 @overload
-def build(buildable: config.Partial) -> Callable[..., Any]:
+def build(buildable: config.Partial) -> functools.partial:
   ...
 
 
