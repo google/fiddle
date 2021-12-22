@@ -117,7 +117,6 @@ Thank you!
 """
 
 import ast
-import inspect
 import sys
 from typing import Any, List, Sequence
 
@@ -126,6 +125,7 @@ from absl import flags
 from absl import logging
 
 from fiddle import config
+from fiddle import module_reflection
 from fiddle import printing
 
 flags.DEFINE_string(
@@ -190,59 +190,16 @@ def flags_parser(args: Sequence[str]):
   return app.parse_flags_with_usage(_rewrite_fdl_args(args))
 
 
-def _find_fiddler_like_things(source_module: Any) -> List[str]:
-  """Returns a list of names that look like fiddlers."""
-  found_names = []
-  for name in dir(source_module):
-    if name.startswith('__'):
-      continue
-    try:
-      sig = inspect.signature(getattr(source_module, name))
-
-      def non_defaulted_positional_args(name: str) -> bool:
-        param = sig.parameters[name]  # pylint: disable=cell-var-from-loop
-        return ((param.kind == param.POSITIONAL_OR_KEYWORD or
-                 param.kind == param.POSITIONAL_ONLY) and
-                param.default is param.empty)
-
-      if len(
-          list(filter(non_defaulted_positional_args,
-                      sig.parameters.keys()))) == 1:
-        found_names.append(name)
-    except Exception:  # pylint: disable=broad-except
-      pass  # Ignore.
-  return sorted(found_names)
-
-
-def _find_base_config_like_things(source_module: Any) -> List[str]:
-  """Returns a list of names that look like base_config producing functions."""
-  available_base_names = []
-  for name in dir(source_module):
-    try:
-      sig = inspect.signature(getattr(source_module, name))
-
-      def is_required_arg(name: str) -> bool:
-        param = sig.parameters[name]  # pylint: disable=cell-var-from-loop
-        return ((param.kind == param.POSITIONAL_ONLY or
-                 param.kind == param.POSITIONAL_OR_KEYWORD) and
-                param.default is param.empty)
-
-      if not any(filter(is_required_arg, sig.parameters)):
-        available_base_names.append(name)
-    except Exception:  # pylint: disable=broad-except
-      logging.debug(
-          'Encountered exception while inspecting function called: %s', name)
-  return available_base_names
-
-
 def apply_fiddlers_to(cfg: config.Buildable, source_module: Any):
   """Applies fiddlers to `cfg`."""
   # TODO: Consider allowing arbitrary imports using importlib.
   for fiddler_name in flags.FLAGS.fiddler:
     if not hasattr(source_module, fiddler_name):
+      available_fiddlers = ', '.join(
+          module_reflection.find_fiddler_like_things(source_module))
       raise ValueError(
           f'No fiddler named {fiddler_name} found; available fiddlers: '
-          f'{", ".join(_find_fiddler_like_things(source_module))}.')
+          f'{available_fiddlers}.')
     fiddler = getattr(source_module, fiddler_name)
     fiddler(cfg)
 
@@ -257,7 +214,7 @@ def create_buildable_from_flags(module: Any) -> config.Buildable:
   # TODO: Explore allowing arbitrary imports.
   base_name = flags.FLAGS.fdl_config
   if not hasattr(module, base_name):
-    available_names = _find_base_config_like_things(module)
+    available_names = module_reflection.find_base_config_like_things(module)
     raise ValueError(f'Could not init a buildable from {base_name}; '
                      f'available names: {", ".join(available_names)}.')
   buildable = getattr(module, base_name)()
