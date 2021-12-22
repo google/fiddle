@@ -22,6 +22,7 @@ from typing import Any, Iterator, List, Optional, Sequence, Tuple, Type, Union
 from fiddle import config
 from fiddle import history
 from fiddle import placeholders
+from fiddle.codegen import formatting_utilities
 import tree
 
 
@@ -68,6 +69,16 @@ def _has_nested_builder(children: Sequence[Tuple[_Path, _Leaf]]) -> bool:
       isinstance(child, config.Buildable) for unused_path, child in children)
 
 
+def _format_value(value: Any, *, raw_value_repr: bool) -> str:
+  if raw_value_repr:
+    return repr(value)
+  else:
+    if isinstance(value, str):
+      return repr(value)
+    else:
+      return formatting_utilities.pretty_print(value)
+
+
 @dataclasses.dataclass(frozen=True)
 class _PlaceholderWrapper:
   """Customizes representation for placeholders in flattened output."""
@@ -85,7 +96,8 @@ class _PlaceholderWrapper:
 
 def as_str_flattened(cfg: config.Buildable,
                      *,
-                     include_types: bool = True) -> str:
+                     include_types: bool = True,
+                     raw_value_repr: bool = False) -> str:
   """Returns a string of cfg's paths and values, one pair per line.
 
   Some automated tools (e.g. grep, sort, diff, ...) handle data line-by-line.
@@ -96,6 +108,8 @@ def as_str_flattened(cfg: config.Buildable,
     cfg: A buildable to generate a string representation for.
     include_types: If true, include type annotations (where available) in the
       string representation of each leaf value.
+    raw_value_repr: If true, use `repr` on values, otherwise, a custom
+      pretty-printed format is used.
   Returns: a string representation of `cfg`.
   """
 
@@ -149,12 +163,15 @@ def as_str_flattened(cfg: config.Buildable,
       except AttributeError:
         # Certain types, such as Union, do not have a __qualname__ attribute.
         type_annotation = f': {line[1]}'
-    return f'{_path_to_str(line[0])}{type_annotation} = {line[2]!r}'
+    value = _format_value(line[2], raw_value_repr=raw_value_repr)
+    return f'{_path_to_str(line[0])}{type_annotation} = {value}'
 
   return '\n'.join(map(format_line, recursive_flatten(cfg)))
 
 
-def history_per_leaf_parameter(cfg: config.Buildable) -> str:
+def history_per_leaf_parameter(cfg: config.Buildable,
+                               *,
+                               raw_value_repr: bool = False) -> str:
   """Returns a string representing the history of cfg's leaf params.
 
   Because Buildable's are designed to be mutated, tracking down when and where
@@ -168,16 +185,21 @@ def history_per_leaf_parameter(cfg: config.Buildable) -> str:
 
   Args:
     cfg: A buildable to generate a history for.
+    raw_value_repr: If true, use `repr` when string-ifying values, otherwise use
+      a customized pretty-printing routine.
 
   Returns:
     A string representation of `cfg`'s history, organized by param name.
   """
-  return '\n'.join(_make_per_leaf_histories_recursive(cfg))
+  return '\n'.join(
+      _make_per_leaf_histories_recursive(cfg, raw_value_repr=raw_value_repr))
 
 
-def _make_per_leaf_histories_recursive(cfg: config.Buildable,
-                                       path: Optional[_Path] = None
-                                      ) -> Iterator[str]:
+def _make_per_leaf_histories_recursive(
+    cfg: config.Buildable,
+    raw_value_repr: bool,
+    path: Optional[_Path] = None,
+) -> Iterator[str]:
   """Recursively traverses `cfg` and generates per-param history summaries."""
   for name, param_history in cfg.__argument_history__.items():
     if path:
@@ -190,11 +212,13 @@ def _make_per_leaf_histories_recursive(cfg: config.Buildable,
         full_child_path = param_path + child_path
         if isinstance(child_leaf, config.Buildable):
           yield from _make_per_leaf_histories_recursive(child_leaf,
+                                                        raw_value_repr,
                                                         full_child_path)
         else:
           yield f'{_path_to_str(full_child_path)} = {child_leaf}'
     else:
-      yield _make_per_leaf_history_text(param_path, param_history)
+      yield _make_per_leaf_history_text(param_path, param_history,
+                                        raw_value_repr)
 
   unset_fields = sorted(
       set(cfg.__signature__.parameters.keys()) -
@@ -207,13 +231,16 @@ def _make_per_leaf_histories_recursive(cfg: config.Buildable,
     yield f'{_path_to_str(param_path)} = <[unset]>'
 
 
-def _make_per_leaf_history_text(
-    path: _Path, param_history: List[history.HistoryEntry]) -> str:
+def _make_per_leaf_history_text(path: _Path,
+                                param_history: List[history.HistoryEntry],
+                                raw_value_repr: bool) -> str:
   """Returns a string representing a parameter's history.
 
   Args:
     path: The path to the parameter.
     param_history: The parameter's history.
+    raw_value_repr: If True, use `repr` unmodified, otherwise, use a custom
+      pretty-printing routine.
 
   Returns:
     A string representation of the parameter's history that can be displayed to
@@ -222,12 +249,15 @@ def _make_per_leaf_history_text(
   assert param_history, 'param_history should never be empty.'
 
   def make_previous_text(entry: history.HistoryEntry) -> str:
-    return f'  - previously: {entry.value!r} @ {entry.location}'
+    value = _format_value(entry.value, raw_value_repr=raw_value_repr)
+    return f'  - previously: {value} @ {entry.location}'
 
   if len(param_history) > 1:
     past = '\n'.join(map(make_previous_text, reversed(param_history[:-1])))
     past = '\n' + past  # prefix with a newline.
   else:
     past = ''
-  current = f'{param_history[-1].value!r} @ {param_history[-1].location}'
+  current_value = _format_value(
+      param_history[-1].value, raw_value_repr=raw_value_repr)
+  current = f'{current_value} @ {param_history[-1].location}'
   return f'{_path_to_str(path)} = {current}{past}'

@@ -22,8 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from fiddle import config as fdl
 from fiddle import placeholders
-from fiddle.codegen import codegen
-from fiddle.codegen import special_value_codegen
+from fiddle.codegen import formatting_utilities
 import graphviz
 
 _BUILDABLE_INSTANCE_COLORS = [
@@ -42,20 +41,6 @@ _BUILDABLE_INSTANCE_COLORS = [
     '#00bfff',  # deepskyblue
     '#7b68ee',  # mediumslateblue
 ]
-
-
-class LazyImportManager(special_value_codegen.ImportManagerApi):
-  """Import manager for GraphViz.
-
-  We create an instance of the codegen's import manager on every method call,
-  which effectively will alias imports like 'jax.numpy' to 'jnp', but will not
-  create new import aliases when two modules of the same name are referenced.
-  """
-
-  def add_by_name(self, module_name: str) -> str:
-    namespace = codegen.Namespace()
-    import_manager = codegen.ImportManager(namespace)
-    return import_manager.add_by_name(module_name)
 
 
 class _GraphvizRenderer:
@@ -311,7 +296,7 @@ class _GraphvizRenderer:
 
   def _render_leaf(self, value: Any) -> str:
     """Renders `value` as its `__repr__` string."""
-    value = special_value_codegen.transform_py_value(value, LazyImportManager())
+    value = formatting_utilities.pretty_print(value)
     return html.escape(repr(value))
 
 
