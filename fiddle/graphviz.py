@@ -15,6 +15,7 @@
 
 """Provides a renderer to visualize a DAG of `fdl.Buildable`s via Graphviz."""
 
+import abc
 import html
 import itertools
 
@@ -24,6 +25,7 @@ from fiddle import config as fdl
 from fiddle import placeholders
 from fiddle.codegen import formatting_utilities
 import graphviz
+import typing_extensions
 
 _BUILDABLE_INSTANCE_COLORS = [
     '#ffc0cb',  # pink
@@ -41,6 +43,24 @@ _BUILDABLE_INSTANCE_COLORS = [
     '#00bfff',  # deepskyblue
     '#7b68ee',  # mediumslateblue
 ]
+
+
+class GraphvizRendererApi(typing_extensions.Protocol):
+  """API of _GraphvizRenderer exposed to CustomGraphvizBuildable subclasses."""
+
+  def tag(self, tag: str, **kwargs) -> Callable[[Any], str]:
+    raise NotImplementedError()
+
+
+class CustomGraphvizBuildable(metaclass=abc.ABCMeta):
+  """Mixin class that marks a Buildable has having a custom __render_value__.
+
+  This lets certain special-purpose Buildables customize how they are rendered.
+  """
+
+  @abc.abstractmethod
+  def __render_value__(self, api: GraphvizRendererApi) -> Any:
+    """Renders this Buildable as a value."""
 
 
 class _GraphvizRenderer:
@@ -101,12 +121,12 @@ class _GraphvizRenderer:
   def _color(self, index: int):
     return self._instance_colors[index % len(self._instance_colors)]
 
-  def _tag(self, tag: str, **kwargs) -> Callable[[Any], str]:
+  def tag(self, tag: str, **kwargs) -> Callable[[Any], str]:
     """Returns a function that creates HTML tags of type `tag`.
 
     Example:
 
-        td = self._tag('td', colspan=2)
+        td = self.tag('td', colspan=2)
         td('cell contents') => '<td colspan="2">cell contents</td>
 
     Args:
@@ -136,8 +156,8 @@ class _GraphvizRenderer:
 
   def _header_row(self, header, colspan=2, bgcolor='#eeeeee', style='solid'):
     """Constructs a header table row."""
-    tr = self._tag('tr')
-    header_td = self._tag('td', colspan=colspan, bgcolor=bgcolor, style=style)
+    tr = self.tag('tr')
+    header_td = self.tag('td', colspan=colspan, bgcolor=bgcolor, style=style)
     return tr(header_td(header))
 
   def render(self, config: fdl.Buildable) -> graphviz.Graph:
@@ -159,7 +179,7 @@ class _GraphvizRenderer:
     # Generate the header row.
     bgcolor = self._color(self._current_id)
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
-    type_font = self._tag('font', point_size=8)
+    type_font = self.tag('font', point_size=8)
     type_name = config.__class__.__name__
     if isinstance(config, placeholders.Placeholder):
       title = type_font(f'{type_name}: {config.key.name!r}') + '&nbsp;'
@@ -171,16 +191,16 @@ class _GraphvizRenderer:
 
     # Generate the arguments table.
     if isinstance(config, placeholders.Placeholder):
-      table = self._tag('table')
-      tr = self._tag('tr')
-      value_td = self._tag('td', align='left')
+      table = self.tag('table')
+      tr = self.tag('tr')
+      value_td = self.tag('td', align='left')
       label = table([header, tr([value_td(self._render_value(config.value))])])
     elif config.__arguments__:
       label = self._render_dict(
           config.__arguments__, header=header, key_format_fn=str)
     else:
-      table = self._tag('table')
-      italics = self._tag('i')
+      table = self.tag('table')
+      italics = self.tag('i')
       label = table([header, self._header_row(italics('no arguments'))])
     self._dot.node(str(self._current_id), f'<{label}>')
 
@@ -189,7 +209,9 @@ class _GraphvizRenderer:
   def _render_value(self, value: Any):
     """Renders an arbitrary value inside a `Config` rendering."""
     if value is placeholders.NO_VALUE:
-      return self._tag('i')('placeholders.NO_VALUE')
+      return self.tag('i')('placeholders.NO_VALUE')
+    elif isinstance(value, CustomGraphvizBuildable):
+      return value.__render_value__(self)
     elif isinstance(value, fdl.Buildable):
       return self._render_nested_config(value)
     elif isinstance(value, dict):
@@ -240,18 +262,18 @@ class _GraphvizRenderer:
 
     # Return a table with a single colored cell, using the port name from above.
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
-    table = self._tag('table', style=style)
-    tr = self._tag('tr')
-    td = self._tag('td', port=port, bgcolor=self._color(config_id), style=style)
+    table = self.tag('table', style=style)
+    tr = self.tag('tr')
+    td = self.tag('td', port=port, bgcolor=self._color(config_id), style=style)
     return table(tr(td('')))
 
   def _render_sequence(self, sequence: Union[List[Any], Tuple[Any]]) -> str:
     """Renders the given sequence (list or tuple) as an HTML table."""
-    table = self._tag('table')
-    tr = self._tag('tr')
-    td = self._tag('td')
-    index_td = self._tag('td', cellpadding=0, bgcolor='#eeeeee')
-    index_font = self._tag('font', point_size=6)
+    table = self.tag('table')
+    tr = self.tag('tr')
+    td = self.tag('td')
+    index_td = self.tag('td', cellpadding=0, bgcolor='#eeeeee')
+    index_font = self.tag('font', point_size=6)
 
     if not sequence:
       return '[]' if isinstance(sequence, list) else '()'
@@ -283,10 +305,10 @@ class _GraphvizRenderer:
     Returns:
       The HTML markup for the resulting table representing `dict_`.
     """
-    table = self._tag('table')
-    tr = self._tag('tr')
-    key_td = self._tag('td', align='right', bgcolor='#eeeeee')
-    value_td = self._tag('td', align='left')
+    table = self.tag('table')
+    tr = self.tag('tr')
+    key_td = self.tag('td', align='right', bgcolor='#eeeeee')
+    value_td = self.tag('td', align='left')
 
     rows = [header] if header is not None else []
     for key, value in dict_.items():
