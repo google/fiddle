@@ -28,6 +28,7 @@ import functools
 import inspect
 import textwrap
 import types
+from typing import Any
 
 from fiddle import config
 
@@ -67,7 +68,7 @@ def _is_auto_config_eligible(fn_or_cls):
       (has_hash and fn_or_cls not in _BUILTINS) and
       not is_buildable and
       not inspect.ismethod(fn_or_cls) and
-      not getattr(fn_or_cls, 'auto_config', False) and
+      not hasattr(fn_or_cls, 'as_buildable') and
       not _returns_buildable(signature)  # Don't auto-config buildable-functions
   )  # pyformat: disable
 
@@ -97,6 +98,9 @@ def auto_config_call_handler(fn_or_cls, *args, **kwargs):
   if _is_auto_config_eligible(fn_or_cls):
     return config.Config(fn_or_cls, *args, **kwargs)
 
+  if hasattr(fn_or_cls, 'as_buildable'):
+    return fn_or_cls.as_buildable(*args, **kwargs)
+
   return fn_or_cls(*args, **kwargs)
 
 
@@ -111,7 +115,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     )
 
 
-def auto_config(fn):
+def auto_config(fn) -> Any:  # TODO: Make a more precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
   This function creates a new function from `fn` by rewriting its AST (abstract
@@ -137,7 +141,7 @@ def auto_config(fn):
         return mlp
 
       build_model_cfg = auto_config(build_model)
-      config = build_model_cfg()
+      config = build_model_cfg.as_buildable()
 
   The resulting `config` is equivalent to the following "manually" constructed
   configuration graph:
@@ -212,12 +216,16 @@ def auto_config(fn):
       _CALL_HANDLER_ID: auto_config_call_handler,
   }
 
-  # Finally, create a function from the compiled function code object, providing
-  # the scope. Mark it as an auto-config function so that calls to this function
-  # from other auto-config functions aren't intercepted (this is checked in
-  # `auto_config_call_handler` above.
+  # Then, create a function from the compiled function code object, providing
+  # the scope.
   auto_config_fn = types.FunctionType(code, scope)
   auto_config_fn.__defaults__ = fn.__defaults__
   auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
-  auto_config_fn.auto_config = True
-  return auto_config_fn
+
+  @functools.wraps(fn)
+  def wrapper(*args, **kwargs):
+    return fn(*args, **kwargs)
+
+  wrapper.as_buildable = auto_config_fn
+
+  return wrapper

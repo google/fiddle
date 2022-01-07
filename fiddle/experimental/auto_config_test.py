@@ -56,7 +56,8 @@ class AutoConfigTest(absltest.TestCase):
     def test_class_config():
       return TestClass(1, 2)
 
-    self.assertEqual(expected_config, test_class_config())
+    self.assertEqual(expected_config, test_class_config.as_buildable())
+    self.assertEqual(TestClass(1, 2), test_class_config())
 
   def test_create_basic_partial(self):
     expected_config = config.Partial(test_fn, 1, kwarg='kwarg')
@@ -65,7 +66,7 @@ class AutoConfigTest(absltest.TestCase):
     def test_fn_config():
       return functools.partial(test_fn, 1, 'kwarg')
 
-    self.assertEqual(expected_config, test_fn_config())
+    self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_create_config_with_args(self):
     expected_config = config.Config(TestClass, 'positional', arg2='default')
@@ -74,7 +75,10 @@ class AutoConfigTest(absltest.TestCase):
     def test_class_config(arg1, arg2='default'):
       return TestClass(arg1, arg2)
 
-    self.assertEqual(expected_config, test_class_config('positional'))
+    self.assertEqual(expected_config,
+                     test_class_config.as_buildable('positional'))
+    self.assertEqual(
+        TestClass('positional', 'default'), test_class_config('positional'))
 
   def test_create_config_with_kwonly_args(self):
     expected_config = config.Config(TestClass, 'positional', arg2='default')
@@ -83,7 +87,10 @@ class AutoConfigTest(absltest.TestCase):
     def test_class_config(arg1, *, arg2='default'):
       return TestClass(arg1, arg2)
 
-    self.assertEqual(expected_config, test_class_config('positional'))
+    self.assertEqual(expected_config,
+                     test_class_config.as_buildable('positional'))
+    self.assertEqual(
+        TestClass('positional', 'default'), test_class_config('positional'))
 
   def test_calling_auto_config(self):
     expected_config = config.Config(
@@ -97,7 +104,11 @@ class AutoConfigTest(absltest.TestCase):
     def test_fn_config():
       return test_fn(1, test_class_config())
 
-    self.assertEqual(expected_config, test_fn_config())
+    self.assertEqual(expected_config, test_fn_config.as_buildable())
+    self.assertEqual({
+        'arg': 1,
+        'kwarg': TestClass(1, arg2=2)
+    }, test_fn_config())
 
   def test_nested_calls(self):
     expected_config = config.Config(
@@ -107,7 +118,12 @@ class AutoConfigTest(absltest.TestCase):
     def test_class_config():
       return TestClass(1, test_fn(2, 'kwarg'))
 
-    self.assertEqual(expected_config, test_class_config())
+    self.assertEqual(expected_config, test_class_config.as_buildable())
+    self.assertEqual(
+        TestClass(1, {
+            'arg': 2,
+            'kwarg': 'kwarg'
+        }), test_class_config())
 
   def test_calling_explicit_function(self):
     expected_config = config.Config(
@@ -117,7 +133,7 @@ class AutoConfigTest(absltest.TestCase):
     def test_nested_call():
       return TestClass(1, explicit_config_building_fn(10))
 
-    self.assertEqual(expected_config, test_nested_call())
+    self.assertEqual(expected_config, test_nested_call.as_buildable())
 
   def test_reference_nonlocal(self):
     nonlocal_var = 3
@@ -127,7 +143,7 @@ class AutoConfigTest(absltest.TestCase):
     def test_fn_config():
       return test_fn(1, nonlocal_var)
 
-    self.assertEqual(expected_config, test_fn_config())
+    self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_calling_builtins(self):
     expected_config = [
@@ -139,7 +155,20 @@ class AutoConfigTest(absltest.TestCase):
       mapping = {'a': 0, 'b': 1, 'c': 2}
       return [test_fn_with_kwargs(value=value) for value in mapping.values()]
 
-    self.assertEqual(expected_config, test_config())
+    self.assertEqual(expected_config, test_config.as_buildable())
+    self.assertEqual([{
+        'kwargs': {
+            'value': 0
+        }
+    }, {
+        'kwargs': {
+            'value': 1
+        }
+    }, {
+        'kwargs': {
+            'value': 2
+        }
+    }], test_config())
 
   def test_auto_config_eligibility(self):
     # Some common types that have no signature.
@@ -166,7 +195,7 @@ class AutoConfigTest(absltest.TestCase):
       x = ab.config(TestClass, require_skeleton=False)
       return test_fn(x)
 
-    self.assertEqual(expected_config, autobuilder_using_fn())
+    self.assertEqual(expected_config, autobuilder_using_fn.as_buildable())
 
 
 if __name__ == '__main__':
