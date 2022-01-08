@@ -21,6 +21,7 @@ from absl.testing import absltest
 import fiddle as fdl
 from fiddle import config
 from fiddle import placeholders
+import mock
 
 
 def return_kwargs(**kwargs):
@@ -28,7 +29,7 @@ def return_kwargs(**kwargs):
 
 
 fine_key = placeholders.PlaceholderKey("fine_key")
-test_key = placeholders.PlaceholderKey("my_test_key")
+test_key = placeholders.PlaceholderKey("my_test_key", "Description of Test Key")
 
 
 class PlaceholdersTest(absltest.TestCase):
@@ -84,6 +85,35 @@ class PlaceholdersTest(absltest.TestCase):
     placeholders.set_placeholder(cfg, key=test_key, value=1)
     placeholders.set_placeholder(cfg, key=test_key, value=2)
     self.assertDictEqual(fdl.build(cfg), {"foo": None, "bar": 2})
+
+  def test_list_keys(self):
+    cfg = fdl.Config(
+        return_kwargs,
+        foo=placeholders.Placeholder(key=fine_key, default=None),
+        bar=placeholders.Placeholder(key=test_key))
+    keys = placeholders.list_placeholder_keys(cfg)
+    self.assertEqual(keys, {fine_key, test_key})
+
+  def test_print_keys(self):
+    cfg = fdl.Config(
+        return_kwargs,
+        foo=placeholders.Placeholder(key=fine_key, default=None),
+        bar=placeholders.Placeholder(key=test_key))
+    keys = placeholders.list_placeholder_keys(cfg)
+    with mock.patch.object(placeholders, "print") as mock_print:
+      placeholders.print_keys(cfg)
+    ((line1,), _), ((line2,), _) = mock_print.call_args_list
+    line1, line2 = sorted([line1, line2])
+    self.assertRegex(line1, " - fine_key.*placeholders_test.py")
+    self.assertRegex(
+        line2, " - my_test_key.*Description of Test Key.*placeholders_test.py")
+
+    with mock.patch.object(placeholders, "print") as mock_print:
+      placeholders.print_keys(keys)
+    ((keys_line1,), _), ((keys_line2,), _) = mock_print.call_args_list
+    keys_line1, keys_line2 = sorted([keys_line1, keys_line2])
+    self.assertEqual(line1, keys_line1)
+    self.assertEqual(line2, keys_line2)
 
   def test_set_only_placeholders_in_subtree(self):
     activation_dtype = placeholders.PlaceholderKey("activation_dtype")

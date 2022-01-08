@@ -49,7 +49,9 @@ from __future__ import annotations
 
 import copy
 import dataclasses
-from typing import Any, Generic, TypeVar, Union
+import pathlib
+import traceback
+from typing import Any, FrozenSet, Generic, Optional, TypeVar, Union
 
 from fiddle import config
 import tree
@@ -67,6 +69,14 @@ class _NoValue:
 NO_VALUE = _NoValue()
 
 
+def _infer_module_filename():
+
+  stack = traceback.extract_stack()
+  if len(stack) < 3:
+    return None
+  return stack[-3].filename
+
+
 @dataclasses.dataclass(frozen=True)
 class PlaceholderKey:
   """Represents a key identifying a type of placeholder.
@@ -75,6 +85,12 @@ class PlaceholderKey:
   share them via a common library file (see module docstring).
   """
   name: str
+  description: Optional[str] = None
+  module_filename: Optional[str] = dataclasses.field(
+      default_factory=_infer_module_filename)
+
+  def __hash__(self):
+    return id(self)
 
   def __deepcopy__(self, memo):
     """Override for deepcopy that does not copy this immutable object.
@@ -160,3 +176,56 @@ def set_placeholder(cfg: config.Buildable, key: PlaceholderKey,
     return leaf
 
   tree.map_structure(map_fn, cfg.__arguments__)
+
+
+def list_placeholder_keys(cfg: config.Buildable) -> FrozenSet[PlaceholderKey]:
+  """Lists all placeholder keys in a buildable.
+
+  Args:
+    cfg: A tree of buildable elements.
+
+  Returns:
+    Set of placeholder keys used in this buildable.
+  """
+  keys = set()
+
+  def _inner(node: config.Buildable):
+    if isinstance(node, Placeholder):
+      keys.add(node.key)
+
+    def map_fn(leaf):
+      if isinstance(leaf, config.Buildable):
+        _inner(leaf)
+
+    tree.map_structure(map_fn, node.__arguments__)
+
+  _inner(cfg)
+  return frozenset(keys)
+
+
+def print_keys(
+    keys: Union[config.Buildable, FrozenSet[PlaceholderKey]],
+    relative_filenames=True,
+) -> None:
+  """Prints placeholder keys for a buildable or set of keys.
+
+  Args:
+    keys: Either a buildable or set of placeholder keys. If this is a buildable
+      then list_placeholder_keys() will be called on it.
+    relative_filenames: Whether to print relative filenames that keys are
+      defined in.
+  """
+
+  if isinstance(keys, config.Buildable):
+    keys = list_placeholder_keys(keys)
+
+  for key in keys:
+    desc_str = "" if not key.description else f": {key.description}"
+    if key.module_filename:
+      filename = pathlib.Path(key.module_filename)
+      if len(filename.parents) > 3 and relative_filenames:
+        filename = ".../" + str(filename.relative_to(filename.parents[3]))
+      module_str = f" (defined in {filename})"
+    else:
+      module_str = ""
+    print(f" - {key.name}{desc_str}{module_str}")
