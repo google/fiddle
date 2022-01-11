@@ -163,9 +163,9 @@ class ImportManager:
       Alias for the imported module.
     """
     result = self.aliases.get(module_name)
-    parent, module_name = module_name.rsplit(".", 1)
     if not result:
-      if parent:
+      if "." in module_name:
+        parent, module_name = module_name.rsplit(".", 1)
         result = mini_ast.FromImport(name=module_name, parent=parent)
       else:
         result = mini_ast.DirectImport(module_name)

@@ -21,6 +21,7 @@ Currently this just affects codegen, graphviz, and other debugging functions.
 from fiddle.codegen import codegen
 from fiddle.codegen import mini_ast
 from fiddle.codegen import special_value_codegen
+import jax
 from jax import numpy as jnp
 
 
@@ -58,12 +59,37 @@ _import_aliases = (
 )
 
 
+def _make_jax_nn_importable(name: str) -> special_value_codegen.Importable:
+  return special_value_codegen.SingleImportable(
+      "jax", lambda jax_mod_name: f"{jax_mod_name}.nn.{name}")
+
+
+_nn_type_importables = (
+    (jax.nn.relu, _make_jax_nn_importable("relu")),
+    (jax.nn.gelu, _make_jax_nn_importable("gelu")),
+    (jax.nn.relu6, _make_jax_nn_importable("relu6")),
+    (jax.nn.silu, _make_jax_nn_importable("silu")),
+    (jax.nn.soft_sign, _make_jax_nn_importable("soft_sign")),
+    (jax.nn.sigmoid, _make_jax_nn_importable("sigmoid")),
+    (jax.nn.selu, _make_jax_nn_importable("selu")),
+    (jax.nn.log_sigmoid, _make_jax_nn_importable("log_sigmoid")),
+    (jax.nn.hard_tanh, _make_jax_nn_importable("hard_tanh")),
+    (jax.nn.hard_swish, _make_jax_nn_importable("hard_swish")),
+    (jax.nn.hard_silu, _make_jax_nn_importable("hard_silu")),
+    (jax.nn.tanh, _make_jax_nn_importable("tanh")),
+    (jax.nn.swish, _make_jax_nn_importable("swish")),
+)
+
+
 def enable():
   """Registers JAX fiddle extensions.
 
   This allows for things like nicer handling of jax.numpy dtypes.
   """
   for value, importable in _jnp_type_importables:
+    special_value_codegen.register_exact_value(value, importable)
+
+  for value, importable in _nn_type_importables:
     special_value_codegen.register_exact_value(value, importable)
 
   for module_str, import_stmt in _import_aliases:
