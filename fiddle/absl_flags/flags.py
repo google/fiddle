@@ -217,7 +217,11 @@ def create_buildable_from_flags(module: Any) -> config.Buildable:
     available_names = module_reflection.find_base_config_like_things(module)
     raise ValueError(f'Could not init a buildable from {base_name}; '
                      f'available names: {", ".join(available_names)}.')
-  buildable = getattr(module, base_name)()
+  base_fn = getattr(module, base_name)
+  if hasattr(base_fn, 'as_buildable'):
+    buildable = base_fn.as_buildable()
+  else:
+    buildable = base_fn()
   apply_fiddlers_to(buildable, source_module=module)
   apply_overrides_to(buildable)
   if flags.FLAGS.fdl_help:

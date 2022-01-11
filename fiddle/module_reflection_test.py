@@ -20,6 +20,7 @@ import types
 from absl.testing import absltest
 from fiddle import module_reflection
 from fiddle import module_reflection_test_module as test_module
+from fiddle.experimental import auto_config
 
 
 class ModuleReflectionTest(absltest.TestCase):
@@ -64,6 +65,23 @@ class ModuleReflectionTest(absltest.TestCase):
     expected = sorted(['fiddler1', 'fiddler2', 'another_fiddler'])
     self.assertEqual(expected,
                      module_reflection.find_fiddler_like_things(test_module))
+
+  def test_auto_config_functions(self):
+
+    def my_fn(x, y=3):
+      return (x, y)
+
+    @auto_config.auto_config
+    def base_config():
+      return my_fn(1, 3)
+
+    ns = types.SimpleNamespace()
+    ns.base_config = base_config
+
+    expected = ['base_config']
+    self.assertIn('base_config', dir(ns))
+    self.assertEqual(expected,
+                     module_reflection.find_base_config_like_things(ns))
 
 
 if __name__ == '__main__':
