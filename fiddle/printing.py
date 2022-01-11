@@ -35,6 +35,7 @@ class _ParamName:
 
 @dataclasses.dataclass(frozen=True)
 class _UnsetValue:
+  """A wrapper class indicating an unset value."""
   __slots__ = ('parameter',)
   parameter: inspect.Parameter
 
@@ -42,7 +43,9 @@ class _UnsetValue:
     if self.parameter.default is self.parameter.empty:
       return '<[unset]>'
     else:
-      return f'<[unset; default: {self.parameter.default!r}]>'
+      default_value = _format_value(
+          self.parameter.default, raw_value_repr=False)
+      return f'<[unset; default: {default_value}]>'
 
 
 _Leaf = Any
