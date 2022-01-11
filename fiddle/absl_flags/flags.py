@@ -117,6 +117,8 @@ Thank you!
 """
 
 import ast
+import inspect
+import re
 import sys
 from typing import Any, List, Sequence
 
@@ -128,21 +130,21 @@ from fiddle import config
 from fiddle import module_reflection
 from fiddle import printing
 
-flags.DEFINE_string(
+_FDL_CONFIG = flags.DEFINE_string(
     'fdl_config',
     default=None,
     help='The name of the no-arity function to construct a fdl.Buildable.')
-flags.DEFINE_multi_string(
+_FIDDLER = flags.DEFINE_multi_string(
     'fiddler', default=[], help='Fiddlers are functions that tweak a config.')
-flags.DEFINE_multi_string(
+_FDL_SET = flags.DEFINE_multi_string(
     'fdl_set', default=[], help='Fiddle configuration settings.')
-flags.DEFINE_bool(
+_FDL_HELP = flags.DEFINE_bool(
     'fdl_help', False, help='Print out the flags-built config and exit.')
 
 
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
-  for flag in flags.FLAGS.fdl_set:
+  for flag in _FDL_SET.value:
     path, value = flag.split(' = ', maxsplit=1)
     *parents, name = path.split('.')  # TODO: Support list indexes.
     walk = cfg
@@ -193,7 +195,7 @@ def flags_parser(args: Sequence[str]):
 def apply_fiddlers_to(cfg: config.Buildable, source_module: Any):
   """Applies fiddlers to `cfg`."""
   # TODO: Consider allowing arbitrary imports using importlib.
-  for fiddler_name in flags.FLAGS.fiddler:
+  for fiddler_name in _FIDDLER.value:
     if not hasattr(source_module, fiddler_name):
       available_fiddlers = ', '.join(
           module_reflection.find_fiddler_like_things(source_module))
@@ -212,7 +214,29 @@ def create_buildable_from_flags(module: Any) -> config.Buildable:
       fiddlers.
   """
   # TODO: Explore allowing arbitrary imports.
-  base_name = flags.FLAGS.fdl_config
+  base_name = _FDL_CONFIG.value
+  if _FDL_HELP.value or base_name is None:
+    print(
+        'Available symbols (may be base configs or fiddlers):\n',
+        file=sys.stderr)
+    for key in dir(module):
+      # Ignore private and module objects.
+      if key.startswith('_'):
+        continue
+      obj = getattr(module, key)
+      if inspect.ismodule(obj):
+        continue
+
+      if hasattr(obj, '__doc__') and obj.__doc__:
+        obj_doc = '\n'.join(obj.__doc__.strip().split('\n\n')[:2])
+        obj_doc = re.sub(r'\s+', ' ', obj_doc)
+        docstring = f' - {obj_doc}'
+      else:
+        docstring = ''
+      print(f'  {key}{docstring}', file=sys.stderr)
+  print(file=sys.stderr)
+  if base_name is None:
+    raise app.UsageError('--fdl_config is required.')
   if not hasattr(module, base_name):
     available_names = module_reflection.find_base_config_like_things(module)
     raise ValueError(f'Could not init a buildable from {base_name}; '
@@ -224,7 +248,10 @@ def create_buildable_from_flags(module: Any) -> config.Buildable:
     buildable = base_fn()
   apply_fiddlers_to(buildable, source_module=module)
   apply_overrides_to(buildable)
-  if flags.FLAGS.fdl_help:
-    printing.as_str_flattened(buildable)
+  if _FDL_HELP.value:
+    print(
+        'Config values (override as --fdl.<name>=<value>):\n\n ',
+        printing.as_str_flattened(buildable).replace('\n', '\n  '),
+        file=sys.stderr)
     sys.exit()
   return buildable
