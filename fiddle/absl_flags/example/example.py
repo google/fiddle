@@ -36,8 +36,8 @@ from fiddle.absl_flags.example import configs
 
 
 def main(argv: Sequence[str]) -> None:
-  if argv:
-    raise ValueError('Unexpected CLI arguments.')
+  if len(argv) > 1:
+    raise ValueError(f'Unexpected CLI arguments: {argv!r}')
   cfg = absl_flags.create_buildable_from_flags(configs)
   print(printing.as_str_flattened(cfg))
   runner = fdl.build(cfg)

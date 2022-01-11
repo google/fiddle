@@ -38,7 +38,7 @@ class MyDataLoader:
     pass
 
   def __iter__(self):
-    return iter([])  # Empty iterator
+    return iter([1.0])  # Empty iterator
 
 
 @dataclasses.dataclass
