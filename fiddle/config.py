@@ -21,7 +21,7 @@ import collections
 import copy
 import functools
 import inspect
-from typing import Any, Callable, Collection, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, overload
+from typing import Any, Callable, Collection, Dict, Generic, List, Tuple, Type, TypeVar, Union, overload
 
 from fiddle import build_guard
 from fiddle import history
@@ -400,7 +400,6 @@ class Partial(Generic[T], Buildable[T]):
 @overload
 def build(
     config: Partial[T],
-    memo: Optional[Dict[Buildable, Any]] = None,
 ) -> SubtypeOrCallableProducingT:
   pass
 
@@ -409,7 +408,6 @@ def build(
 @overload
 def build(
     config: Config[T],
-    memo: Optional[Dict[Buildable, Any]] = None,
 ) -> T:
   pass
 
@@ -417,7 +415,7 @@ def build(
 # This is a free function instead of a method on the `Config` object in order
 # to avoid potential naming collisions (e.g., if a function or class has a
 # parameter named `build`).
-def build(config, memo=None):
+def build(config):
   """Builds `config`, recursively building any nested `Buildable` instances.
 
   This is the core function for turning a `Config` into a usable object. It
@@ -438,17 +436,11 @@ def build(config, memo=None):
 
   Args:
     config: A `Config` instance to build.
-    memo: An optional dictionary mapping `Config` instances to their built
-      values. This is used to map shared instances of a `Config` in the
-      configuration tree to a single shared object instance/value after
-      building. If an empty dictionary is supplied, it will be filled with a
-      mapping of all `Config` instances in the full tree reachable from `config`
-      to their corresponding built values.
 
   Returns:
     The built version of `config`.
   """
-  memo = {} if memo is None else memo
+  memo = {}
 
   def _build(config, path_str: str):
 

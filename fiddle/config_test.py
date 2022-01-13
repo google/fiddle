@@ -221,10 +221,9 @@ class ConfigTest(absltest.TestCase):
         'key2': (class_config,)
     })
 
-    memo = {}
-    fn_args = config.build(fn_config, memo=memo)
+    fn_args = config.build(fn_config)
     separate_instance = fn_args['arg1']
-    shared_instance = memo[id(class_config)]
+    shared_instance = fn_args['arg2']['key1'][0]
     structure = fn_args['arg2']
 
     self.assertIsNot(shared_instance, separate_instance)
@@ -282,28 +281,6 @@ class ConfigTest(absltest.TestCase):
 
     partial = config.Partial(TestClass, 'arg1')
     self.assertNotEqual(cfg2, partial)
-
-  def test_memo_override(self):
-    class_config = config.Config(
-        TestClass, 'arg1', 'arg2', kwarg1='kwarg1', kwarg2='kwarg2')
-    # Passing `class_config` as the first arg (`arg1`) to `test_fn`, and then as
-    # all the leaves of the dict passed as the second arg (`arg2`). Below, we
-    # make sure all the resulting instances really are the same, and are
-    # properly overridden via the `memo` dictionary.
-    fn_config = config.Config(test_fn, class_config, {
-        'key1': [class_config, class_config],
-        'key2': (class_config,)
-    })
-
-    overridden_instance_value = object()
-    memo = {id(class_config): overridden_instance_value}
-    fn_args = config.build(fn_config, memo=memo)
-    instance = fn_args['arg1']
-    structure = fn_args['arg2']
-
-    self.assertIs(instance, overridden_instance_value)
-    for leaf in tree.flatten(structure):
-      self.assertIs(leaf, overridden_instance_value)
 
   def test_unsetting_argument(self):
     fn_config = config.Config(test_fn)
