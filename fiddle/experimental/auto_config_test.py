@@ -17,9 +17,11 @@
 
 import dataclasses
 import functools
+import sys
 from typing import Any
 
 from absl.testing import absltest
+from absl.testing import parameterized
 
 from fiddle import config
 from fiddle.experimental import auto_config
@@ -47,7 +49,11 @@ def explicit_config_building_fn(x: int) -> config.Config:
   return config.Config(test_fn, 5, kwarg=x)
 
 
-class AutoConfigTest(absltest.TestCase):
+def _line_number():
+  return sys._getframe(1).f_lineno
+
+
+class AutoConfigTest(parameterized.TestCase):
 
   def test_create_basic_config(self):
     expected_config = config.Config(TestClass, 1, arg2=2)
@@ -156,29 +162,13 @@ class AutoConfigTest(absltest.TestCase):
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_calling_builtins(self):
-    expected_config = [
-        config.Config(test_fn_with_kwargs, value=i) for i in range(3)
-    ]
+    expected_config = config.Config(TestClass, [0, 1, 2], ['a', 'b'])
 
     @auto_config.auto_config
     def test_config():
-      mapping = {'a': 0, 'b': 1, 'c': 2}
-      return [test_fn_with_kwargs(value=value) for value in mapping.values()]
+      return TestClass(list(range(3)), list({'a': 0, 'b': 1}.keys()))
 
     self.assertEqual(expected_config, test_config.as_buildable())
-    self.assertEqual([{
-        'kwargs': {
-            'value': 0
-        }
-    }, {
-        'kwargs': {
-            'value': 1
-        }
-    }, {
-        'kwargs': {
-            'value': 2
-        }
-    }], test_config())
 
   def test_auto_config_eligibility(self):
     # Some common types that have no signature.
@@ -210,6 +200,62 @@ class AutoConfigTest(absltest.TestCase):
   def test_auto_configuring_non_function(self):
     with self.assertRaisesRegex(ValueError, 'only compatible with functions'):
       auto_config.auto_config(3)
+
+  def test_control_flow_is_unsupported_if(self):
+
+    def test_config():
+      if test_fn(1):
+        pass
+
+    error_line_number = _line_number() - 3
+
+    exception_type = auto_config.UnsupportedControlFlowError
+    msg = (r'Control flow \(If\) is unsupported by auto_config\. '
+           r'\(auto_config_test\.py, line \d+\)')
+    with self.assertRaisesRegex(exception_type, msg) as context:
+      auto_config.auto_config(test_config)
+    self.assertEqual(error_line_number, context.exception.lineno)
+    # The text and offset here don't quite match with the indentation level of
+    # test_config above, due to the `dedent` performed inside `auto_config`.
+    # This slight discrepancy is unlikely to cause any confusion.
+    self.assertEqual('  if test_fn(1):', context.exception.text)
+    self.assertEqual(2, context.exception.offset)
+
+  def test_control_flow_is_unsupported_for(self):
+
+    def test_config():
+      for _ in range(3):
+        pass
+
+    msg = (r'Control flow \(For\) is unsupported by auto_config\. '
+           r'\(auto_config_test\.py, line \d+\)')
+    with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
+      auto_config.auto_config(test_config)
+
+  def test_control_flow_is_unsupported_while(self):
+
+    def test_config():
+      i = 10
+      while i > 0:
+        i -= 1
+
+    msg = (r'Control flow \(While\) is unsupported by auto_config\. '
+           r'\(auto_config_test\.py, line \d+\)')
+    with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
+      auto_config.auto_config(test_config)
+
+  @parameterized.parameters(
+      (lambda: [i + 1 for i in [1, 2, 3]], 'ListComp'),
+      (lambda: {i + 1 for i in [1, 2, 3]}, 'SetComp'),
+      (lambda: {'foo': i for i in [1, 2, 3]}, 'DictComp'),
+      (lambda: (i + 1 for i in [1, 2, 3]), 'GeneratorExp'),
+      (lambda: 1 if test_fn(1) else 2, 'IfExp'),
+  )
+  def test_control_flow_is_unsupported_expression(self, test_config, node_name):
+    msg = (rf'Control flow \({node_name}\) is unsupported by auto_config\. '
+           r'\(auto_config_test\.py, line \d+\)')
+    with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
+      auto_config.auto_config(test_config)
 
 
 if __name__ == '__main__':
