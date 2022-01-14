@@ -115,7 +115,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     )
 
 
-def auto_config(fn) -> Any:  # TODO: Make a more precise return type.
+def auto_config(fn=None) -> Any:  # TODO: More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
   This function creates a new function from `fn` by rewriting its AST (abstract
@@ -174,58 +174,67 @@ def auto_config(fn) -> Any:  # TODO: Make a more precise return type.
   Returns:
     The rewritten function.
   """
-  if not inspect.isfunction(fn):
-    raise ValueError('Auto-configuration is only compatible with functions.')
 
-  # Get the source code of the function, and remove any indentation which would
-  # cause parsing issues when creating the AST (indentation generally is present
-  # for nested functions or class methods).
-  source = inspect.getsource(fn)
-  source = textwrap.dedent(source)
+  def make_auto_config(fn):
+    if not inspect.isfunction(fn):
+      raise ValueError('Auto-configuration is only compatible with functions.')
 
-  # Parse the AST, and modify it by intercepting all `Call`s with the
-  # `auto_config_call_handler`. Finally, ensure line numbers and code locations
-  # match up with the original function, to make errors interpretable.
-  node = ast.parse(source)
-  node = _AutoConfigNodeTransformer().visit(node)
-  node = ast.fix_missing_locations(node)
-  node = ast.increment_lineno(node, fn.__code__.co_firstlineno - 1)
+    # Get the source code of the function, and remove any indentation which
+    # would cause parsing issues when creating the AST (indentation generally is
+    # present for nested functions or class methods).
+    source = inspect.getsource(fn)
+    source = textwrap.dedent(source)
 
-  # Compile the modified AST, and then find the function code object within the
-  # returned module-level code object. Generally, the function is present at
-  # `code.co_consts[0]`, but the comprehension below finds it by name. Assuming
-  # compilation was successful, the function should really be there, so an
-  # assert is used to verify that it was found.
-  code = compile(node, inspect.getsourcefile(fn), 'exec')
-  code = [
-      const for const in code.co_consts  # pytype: disable=attribute-error
-      if inspect.iscode(const) and const.co_name == fn.__name__
-  ]
-  assert len(code) == 1, "Couldn't find modified function code."
-  code = code[0]
+    # Parse the AST, and modify it by intercepting all `Call`s with the
+    # `auto_config_call_handler`. Finally, ensure line numbers and code
+    # locations match up with the original function, to make errors
+    # interpretable.
+    node = ast.parse(source)
+    node = _AutoConfigNodeTransformer().visit(node)
+    node = ast.fix_missing_locations(node)
+    node = ast.increment_lineno(node, fn.__code__.co_firstlineno - 1)
 
-  # Make sure that the proper globals and closure variables are available to the
-  # newly created function, and also add in `auto_config_call_handler`, which is
-  # referenced from the modified AST via the `_CALL_HANDLER_ID` (see `ast.Name`
-  # node in `_AutoConfigNodeTransformer.visit_Call()`).
-  closure_vars = inspect.getclosurevars(fn)
-  scope = {
-      **fn.__globals__,
-      **closure_vars.globals,
-      **closure_vars.nonlocals,
-      _CALL_HANDLER_ID: auto_config_call_handler,
-  }
+    # Compile the modified AST, and then find the function code object within
+    # the returned module-level code object. Generally, the function is present
+    # at `code.co_consts[0]`, but the comprehension below finds it by name.
+    # Assuming compilation was successful, the function should really be there,
+    # so an assert is used to verify that it was found.
+    code = compile(node, inspect.getsourcefile(fn), 'exec')
+    code = [
+        const for const in code.co_consts  # pytype: disable=attribute-error
+        if inspect.iscode(const) and const.co_name == fn.__name__
+    ]
+    assert len(code) == 1, "Couldn't find modified function code."
+    code = code[0]
 
-  # Then, create a function from the compiled function code object, providing
-  # the scope.
-  auto_config_fn = types.FunctionType(code, scope)
-  auto_config_fn.__defaults__ = fn.__defaults__
-  auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
+    # Make sure that the proper globals and closure variables are available to
+    # the newly created function, and also add in `auto_config_call_handler`,
+    # which is referenced from the modified AST via the `_CALL_HANDLER_ID` (see
+    # `ast.Name` node in `_AutoConfigNodeTransformer.visit_Call()`).
+    closure_vars = inspect.getclosurevars(fn)
+    scope = {
+        **fn.__globals__,
+        **closure_vars.globals,
+        **closure_vars.nonlocals,
+        _CALL_HANDLER_ID: auto_config_call_handler,
+    }
 
-  @functools.wraps(fn)
-  def wrapper(*args, **kwargs):
-    return fn(*args, **kwargs)
+    # Then, create a function from the compiled function code object, providing
+    # the scope.
+    auto_config_fn = types.FunctionType(code, scope)
+    auto_config_fn.__defaults__ = fn.__defaults__
+    auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
 
-  wrapper.as_buildable = auto_config_fn
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+      return fn(*args, **kwargs)
 
-  return wrapper
+    wrapper.as_buildable = auto_config_fn
+
+    return wrapper
+
+  # Decorator with empty parenthesis.
+  if fn is None:
+    return make_auto_config
+  else:
+    return make_auto_config(fn)

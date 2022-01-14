@@ -59,6 +59,16 @@ class AutoConfigTest(absltest.TestCase):
     self.assertEqual(expected_config, test_class_config.as_buildable())
     self.assertEqual(TestClass(1, 2), test_class_config())
 
+  def test_create_basic_config_parents(self):
+    expected_config = config.Config(TestClass, 1, arg2=2)
+
+    @auto_config.auto_config()  # Note the parenthesis!
+    def test_class_config():
+      return TestClass(1, 2)
+
+    self.assertEqual(expected_config, test_class_config.as_buildable())
+    self.assertEqual(TestClass(1, 2), test_class_config())
+
   def test_create_basic_partial(self):
     expected_config = config.Partial(test_fn, 1, kwarg='kwarg')
 
@@ -196,6 +206,10 @@ class AutoConfigTest(absltest.TestCase):
       return test_fn(x)
 
     self.assertEqual(expected_config, autobuilder_using_fn.as_buildable())
+
+  def test_auto_configuring_non_function(self):
+    with self.assertRaisesRegex(ValueError, 'only compatible with functions'):
+      auto_config.auto_config(3)
 
 
 if __name__ == '__main__':
