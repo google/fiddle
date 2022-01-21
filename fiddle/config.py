@@ -259,8 +259,33 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     return self.__arguments__ == other.__arguments__
 
-  def __setstate__(self, state):
+  def __getstate__(self):
+    """Gets pickle serialization state, removing some fields.
+
+    For now, we discard the __signature__ (which can be recalculated) and
+    __argument_history__, because these tend to contain values which cannot be
+    serialized.
+
+    Returns:
+      Dict of serialized state.
+    """
+    result = dict(self.__dict__)
+    result.pop('__signature__', None)
+    return result
+
+  def __setstate__(self, state) -> None:
+    """Loads pickle serialization state.
+
+    This re-derives the signature if not present, and adds an empty
+    __argument_history__, if it was removed.
+
+    Args:
+      state: State dictionary, from __getstate__.
+    """
     self.__dict__.update(state)  # Support unpickle.
+    if '__signature__' not in self.__dict__:
+      object.__setattr__(self, '__signature__',
+                         inspect.signature(self.__fn_or_cls__))
 
 
 class Config(Generic[T], Buildable[T]):
@@ -398,17 +423,13 @@ class Partial(Generic[T], Buildable[T]):
 
 # Define Pytypes for `build(Partial)`
 @overload
-def build(
-    config: Partial[T],
-) -> SubtypeOrCallableProducingT:
+def build(config: Partial[T],) -> SubtypeOrCallableProducingT:
   pass
 
 
 # Define Pytypes for `build(Config)`
 @overload
-def build(
-    config: Config[T],
-) -> T:
+def build(config: Config[T],) -> T:
   pass
 
 

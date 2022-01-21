@@ -76,6 +76,16 @@ def make_untyped_partial(arg_to_configure, **kwargs) -> config.Partial:
   return config.Partial(arg_to_configure, **kwargs)
 
 
+class Unserializable:
+
+  def __getstate__(self):
+    raise NotImplementedError()
+
+
+def _test_fn_unserializable_default(x=Unserializable()):
+  return x
+
+
 class ConfigTest(absltest.TestCase):
 
   def test_config_for_classes(self):
@@ -528,6 +538,9 @@ class ConfigTest(absltest.TestCase):
     cfg.kwarg2 = config.Partial(TestClass)
     cfg.kwarg2.arg1 = 'something'
     self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
+
+  def test_pickling_non_serializable_default(self):
+    pickle.dumps(config.Config(_test_fn_unserializable_default))
 
   def test_build_raises_nice_error_too_few_args(self):
     cfg = config.Config(test_fn, config.Config(TestClass, 1), 2)
