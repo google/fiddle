@@ -104,7 +104,7 @@ def auto_config_call_handler(fn_or_cls, *args, **kwargs):
   return fn_or_cls(*args, **kwargs)
 
 
-class UnsupportedControlFlowError(SyntaxError):
+class UnsupportedLanguageConstructError(SyntaxError):
   pass
 
 
@@ -125,55 +125,104 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       line_offset: The line offset of `source` within `filename`.
       allow_control_flow: Whether to permit control flow constructs (loops,
         conditionals, comprehensions, etc). By default, this is `False`, and
-        control flow constructs will cause an `UnsupportedControlFlowError` to
-        be thrown.
+        control flow constructs will cause an
+        `UnsupportedLanguageConstructError` to be raised.
     """
     self._lines = source.splitlines()
     self._filename = filename
     self._line_offset = line_offset
     self._allow_control_flow = allow_control_flow
 
-  def visit_Call(self, node: ast.Call):  # pylint: disable=invalid-name
-    return ast.Call(
-        func=ast.Name(id=_CALL_HANDLER_ID, ctx=ast.Load()),
-        args=[node.func, *(self.visit(arg) for arg in node.args)],
-        keywords=[self.visit(keyword) for keyword in node.keywords],
-    )
+    self._function_def_depth = 0
 
   def _location_for(self, node: ast.AST):
     line_number = node.lineno + self._line_offset
     line = self._lines[node.lineno - 1]
     return (self._filename, line_number, node.col_offset, line)
 
-  def _handle_control_flow(self, node: ast.AST):
-    if self._allow_control_flow:
+  def _handle_control_flow(self, node: ast.AST, activatable: bool = False):
+    if self._allow_control_flow and activatable:
       return self.generic_visit(node)
     msg = f'Control flow ({type(node).__name__}) is unsupported by auto_config.'
-    raise UnsupportedControlFlowError(msg, self._location_for(node))
+    raise UnsupportedLanguageConstructError(msg, self._location_for(node))
 
-  def visit_For(self, node: ast.For):  # pylint: disable=invalid-name
+  def _generic_visit_inside_function(self, node):
+    try:
+      self._function_def_depth += 1
+      return self.generic_visit(node)
+    finally:
+      self._function_def_depth -= 1
+
+  # pylint: disable=invalid-name
+  def visit_Call(self, node: ast.Call):
+    return ast.Call(
+        func=ast.Name(id=_CALL_HANDLER_ID, ctx=ast.Load()),
+        args=[node.func, *(self.visit(arg) for arg in node.args)],
+        keywords=[self.visit(keyword) for keyword in node.keywords],
+    )
+
+  def visit_For(self, node: ast.For):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_While(self, node: ast.While):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_If(self, node: ast.If):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_IfExp(self, node: ast.IfExp):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_ListComp(self, node: ast.ListComp):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_SetComp(self, node: ast.SetComp):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_DictComp(self, node: ast.DictComp):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_GeneratorExp(self, node: ast.GeneratorExp):
+    return self._handle_control_flow(node, activatable=True)
+
+  def visit_Try(self, node: ast.Try):
     return self._handle_control_flow(node)
 
-  def visit_While(self, node: ast.While):  # pylint: disable=invalid-name
+  def visit_Raise(self, node: ast.Try):
     return self._handle_control_flow(node)
 
-  def visit_If(self, node: ast.If):  # pylint: disable=invalid-name
+  def visit_With(self, node: ast.With):
     return self._handle_control_flow(node)
 
-  def visit_IfExp(self, node: ast.IfExp):  # pylint: disable=invalid-name
+  def visit_Yield(self, node: ast.Yield):
     return self._handle_control_flow(node)
 
-  def visit_ListComp(self, node: ast.ListComp):  # pylint: disable=invalid-name
+  def visit_YieldFrom(self, node: ast.YieldFrom):
     return self._handle_control_flow(node)
 
-  def visit_SetComp(self, node: ast.SetComp):  # pylint: disable=invalid-name
-    return self._handle_control_flow(node)
+  def visit_FunctionDef(self, node: ast.FunctionDef):
+    if self._function_def_depth > 0:
+      msg = 'Nested function definitions are not supported by auto_config.'
+      raise UnsupportedLanguageConstructError(msg, self._location_for(node))
+    else:
+      return self._generic_visit_inside_function(node)
 
-  def visit_DictComp(self, node: ast.DictComp):  # pylint: disable=invalid-name
-    return self._handle_control_flow(node)
+  def visit_Lambda(self, node: ast.Lambda):
+    if self._function_def_depth > 0:
+      msg = 'Lambda definitions are not supported by auto_config.'
+      raise UnsupportedLanguageConstructError(msg, self._location_for(node))
+    else:
+      return self._generic_visit_inside_function(node)
 
-  def visit_GeneratorExp(self, node: ast.GeneratorExp):  # pylint: disable=invalid-name
-    return self._handle_control_flow(node)
+  def visit_ClassDef(self, node: ast.ClassDef):
+    msg = 'Class definitions are not supported by auto_config.'
+    raise UnsupportedLanguageConstructError(msg, self._location_for(node))
+
+  def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+    msg = 'Async function definitions are not supported by auto_config.'
+    raise UnsupportedLanguageConstructError(msg, self._location_for(node))
+
+  # pylint: enable=invalid-name
 
 
 def auto_config(
@@ -240,10 +289,10 @@ def auto_config(
   the calls to `itertools` functions will be turned into `fdl.Config` objects).
 
   Args:
-    fn: The function to rewrite into a config-generating function.
-    experimental_allow_control_flow: Whether to allow control flow constructs
-      in `fn`. By default, control flow constructs will cause an
-      `UnsupportedControlFlowError` to be thrown.
+    fn: The function to create a config-generating function from.
+    experimental_allow_control_flow: Whether to allow control flow constructs in
+      `fn`. By default, control flow constructs will cause an
+      `UnsupportedLanguageConstructError` to be thrown.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
@@ -252,7 +301,7 @@ def auto_config(
 
   def make_auto_config(fn):
     if not inspect.isfunction(fn):
-      raise ValueError('Auto-configuration is only compatible with functions.')
+      raise ValueError('`auto_config` is only compatible with functions.')
 
     # Get the source code of the function, and remove any indentation which
     # would cause parsing issues when creating the AST (indentation generally is
@@ -260,6 +309,9 @@ def auto_config(
     source = inspect.getsource(fn)
     source = textwrap.dedent(source)
 
+    # Create the NodeTransformer that will transform the AST. The
+    # `_AutoConfigNodeTransformer` requires some additional information about
+    # the source to provide more informative error messages.
     filename = inspect.getsourcefile(fn)
     line_offset = fn.__code__.co_firstlineno - 1
     node_transformer = _AutoConfigNodeTransformer(
@@ -308,11 +360,24 @@ def auto_config(
     auto_config_fn.__defaults__ = fn.__defaults__
     auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
 
+    # Finally we wrap the rewritten function to perform additional error
+    # checking and enforce that the output is a `fdl.Buildable`.
+    @functools.wraps(auto_config_fn)
+    def as_buildable(*args, **kwargs):
+      output = auto_config_fn(*args, **kwargs)  # pylint: disable=not-callable
+      if not isinstance(output, config.Buildable):
+        raise TypeError(
+            f'The `auto_config` rewritten version of `{fn.__qualname__}` '
+            f'returned a `{type(output).__name__}`, which is not a '
+            '`fdl.Buildable`. Please ensure this function returns the result '
+            'of an `auto_config`-eligible call expression.')
+      return output
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       return fn(*args, **kwargs)
 
-    wrapper.as_buildable = auto_config_fn
+    wrapper.as_buildable = as_buildable
 
     return wrapper
 

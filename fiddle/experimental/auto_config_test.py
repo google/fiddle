@@ -205,6 +205,20 @@ class AutoConfigTest(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, 'only compatible with functions'):
       auto_config.auto_config(3)
 
+  def test_require_buildable_return_type(self):
+
+    @auto_config.auto_config
+    def test_config():
+      pass
+
+    with self.assertRaisesRegex(
+        TypeError, r'The `auto_config` rewritten version of '
+        r'`AutoConfigTest\.\w+\.<locals>\.test_config` '
+        r'returned a `NoneType`, which is not a `fdl\.Buildable`\. Please '
+        r'ensure this function returns the result of an `auto_config`-eligible '
+        r'call expression\.'):
+      test_config.as_buildable()
+
   def test_control_flow_if(self):
 
     def test_config(condition):
@@ -215,11 +229,12 @@ class AutoConfigTest(parameterized.TestCase):
 
     error_line_number = _line_number() - 5
 
-    exception_type = auto_config.UnsupportedControlFlowError
-    msg = (r'Control flow \(If\) is unsupported by auto_config\. '
-           r'\(auto_config_test\.py, line \d+\)')
-    with self.assertRaisesRegex(exception_type, msg) as context:
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(If\) is unsupported by auto_config\. '
+        r'\(auto_config_test\.py, line \d+\)') as context:
       auto_config.auto_config(test_config)
+
     self.assertEqual(error_line_number, context.exception.lineno)
     # The text and offset here don't quite match with the indentation level of
     # test_config above, due to the `dedent` performed inside `auto_config`.
@@ -240,9 +255,9 @@ class AutoConfigTest(parameterized.TestCase):
         layers.append(TestClass(i, i))
       return pass_through(layers)
 
-    msg = (r'Control flow \(For\) is unsupported by auto_config\. '
-           r'\(auto_config_test\.py, line \d+\)')
-    with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(For\) is unsupported by auto_config\.'):
       auto_config.auto_config(test_config)
 
     expected_config = config.Config(
@@ -259,9 +274,9 @@ class AutoConfigTest(parameterized.TestCase):
         i -= 1
       return pass_through(i)
 
-    msg = (r'Control flow \(While\) is unsupported by auto_config\. '
-           r'\(auto_config_test\.py, line \d+\)')
-    with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(While\) is unsupported by auto_config\.'):
       auto_config.auto_config(test_config)
 
     pass_through_config = auto_config.auto_config(
@@ -276,9 +291,9 @@ class AutoConfigTest(parameterized.TestCase):
       (lambda: pass_through(None if list() else [1, 2, 3]), 'IfExp'),
   )
   def test_control_flow_expression(self, test_config, node_name):
-    msg = (rf'Control flow \({node_name}\) is unsupported by auto_config\. '
-           r'\(auto_config_test\.py, line \d+\)')
-    with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        rf'Control flow \({node_name}\) is unsupported by auto_config\.'):
       auto_config.auto_config(test_config)
 
     pass_through_config = auto_config.auto_config(
@@ -293,6 +308,107 @@ class AutoConfigTest(parameterized.TestCase):
 
     self.assertEqual([1, 2, 3], config.build(test_config.as_buildable()))
 
+  def test_disallow_try(self):
+
+    def test_config():
+      try:
+        pass
+      except:  # pylint: disable=bare-except
+        pass
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(Try\) is unsupported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_raise(self):
+
+    def test_config():
+      raise Exception()
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(Raise\) is unsupported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_with(self):
+
+    def test_config():
+      with open(''):
+        pass
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(With\) is unsupported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_yield(self):
+
+    def test_config():
+      yield
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(Yield\) is unsupported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_yield_from(self):
+
+    def test_config():
+      yield from (i for i in range(5))
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Control flow \(YieldFrom\) is unsupported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_function_definitions(self):
+
+    def test_config():
+
+      def nested_fn():
+        pass
+
+      return nested_fn()
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Nested function definitions are not supported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_class_definitions(self):
+
+    def test_config():
+
+      class NestedClass:
+        pass
+
+      return NestedClass()
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Class definitions are not supported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_lambda_definitions(self):
+
+    def test_config():
+      return pass_through(lambda: TestClass(1, 2))
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Lambda definitions are not supported by auto_config\.'):
+      auto_config.auto_config(test_config)
+
+  def test_disallow_async_function_definitions(self):
+
+    async def test_config():
+      pass
+
+    with self.assertRaisesRegex(
+        auto_config.UnsupportedLanguageConstructError,
+        r'Async function definitions are not supported by auto_config\.'):
+      auto_config.auto_config(test_config)
 
 if __name__ == '__main__':
   absltest.main()
