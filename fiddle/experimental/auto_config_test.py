@@ -49,6 +49,10 @@ def explicit_config_building_fn(x: int) -> config.Config:
   return config.Config(test_fn, 5, kwarg=x)
 
 
+def pass_through(arg):
+  return arg
+
+
 def _line_number():
   return sys._getframe(1).f_lineno
 
@@ -201,13 +205,15 @@ class AutoConfigTest(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, 'only compatible with functions'):
       auto_config.auto_config(3)
 
-  def test_control_flow_is_unsupported_if(self):
+  def test_control_flow_if(self):
 
-    def test_config():
-      if test_fn(1):
-        pass
+    def test_config(condition):
+      if condition:
+        return pass_through('true branch')
+      else:
+        return pass_through('false branch')
 
-    error_line_number = _line_number() - 3
+    error_line_number = _line_number() - 5
 
     exception_type = auto_config.UnsupportedControlFlowError
     msg = (r'Control flow \(If\) is unsupported by auto_config\. '
@@ -218,44 +224,74 @@ class AutoConfigTest(parameterized.TestCase):
     # The text and offset here don't quite match with the indentation level of
     # test_config above, due to the `dedent` performed inside `auto_config`.
     # This slight discrepancy is unlikely to cause any confusion.
-    self.assertEqual('  if test_fn(1):', context.exception.text)
+    self.assertEqual('  if condition:', context.exception.text)
     self.assertEqual(2, context.exception.offset)
 
-  def test_control_flow_is_unsupported_for(self):
+    build_config_fn = auto_config.auto_config(
+        test_config, experimental_allow_control_flow=True).as_buildable
+    self.assertEqual('true branch', config.build(build_config_fn(True)))
+    self.assertEqual('false branch', config.build(build_config_fn(False)))
+
+  def test_control_flow_for(self):
 
     def test_config():
-      for _ in range(3):
-        pass
+      layers = []
+      for i in range(3):
+        layers.append(TestClass(i, i))
+      return pass_through(layers)
 
     msg = (r'Control flow \(For\) is unsupported by auto_config\. '
            r'\(auto_config_test\.py, line \d+\)')
     with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
       auto_config.auto_config(test_config)
 
-  def test_control_flow_is_unsupported_while(self):
+    expected_config = config.Config(
+        pass_through, [config.Config(TestClass, i, i) for i in range(3)])
+    actual_config = auto_config.auto_config(
+        test_config, experimental_allow_control_flow=True).as_buildable()
+    self.assertEqual(expected_config, actual_config)
+
+  def test_control_flow_while(self):
 
     def test_config():
       i = 10
       while i > 0:
         i -= 1
+      return pass_through(i)
 
     msg = (r'Control flow \(While\) is unsupported by auto_config\. '
            r'\(auto_config_test\.py, line \d+\)')
     with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
       auto_config.auto_config(test_config)
 
+    pass_through_config = auto_config.auto_config(
+        test_config, experimental_allow_control_flow=True).as_buildable()
+    self.assertEqual(0, config.build(pass_through_config))
+
   @parameterized.parameters(
-      (lambda: [i + 1 for i in [1, 2, 3]], 'ListComp'),
-      (lambda: {i + 1 for i in [1, 2, 3]}, 'SetComp'),
-      (lambda: {'foo': i for i in [1, 2, 3]}, 'DictComp'),
-      (lambda: (i + 1 for i in [1, 2, 3]), 'GeneratorExp'),
-      (lambda: 1 if test_fn(1) else 2, 'IfExp'),
+      (lambda: pass_through([i + 1 for i in [0, 1, 2]]), 'ListComp'),
+      (lambda: pass_through({i + 1 for i in [0, 1, 2]}), 'SetComp'),
+      (lambda: pass_through({i + 1: None for i in [0, 1, 2]}), 'DictComp'),
+      (lambda: pass_through((i + 1 for i in [0, 1, 2])), 'GeneratorExp'),
+      (lambda: pass_through(None if list() else [1, 2, 3]), 'IfExp'),
   )
-  def test_control_flow_is_unsupported_expression(self, test_config, node_name):
+  def test_control_flow_expression(self, test_config, node_name):
     msg = (rf'Control flow \({node_name}\) is unsupported by auto_config\. '
            r'\(auto_config_test\.py, line \d+\)')
     with self.assertRaisesRegex(auto_config.UnsupportedControlFlowError, msg):
       auto_config.auto_config(test_config)
+
+    pass_through_config = auto_config.auto_config(
+        test_config, experimental_allow_control_flow=True).as_buildable()
+    self.assertCountEqual([1, 2, 3], config.build(pass_through_config))
+
+  def test_allow_control_flow_decorator(self):
+
+    @auto_config.auto_config(experimental_allow_control_flow=True)
+    def test_config():
+      return pass_through([i + 1 for i in range(3)])
+
+    self.assertEqual([1, 2, 3], config.build(test_config.as_buildable()))
 
 
 if __name__ == '__main__':

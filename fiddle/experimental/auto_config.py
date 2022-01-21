@@ -111,7 +111,11 @@ class UnsupportedControlFlowError(SyntaxError):
 class _AutoConfigNodeTransformer(ast.NodeTransformer):
   """A NodeTransformer that adds the auto-config call handler into an AST."""
 
-  def __init__(self, source: str, filename: str, line_offset: int):
+  def __init__(self,
+               source: str,
+               filename: str,
+               line_offset: int,
+               allow_control_flow=False):
     """Initializes the auto config node transformer instance.
 
     Args:
@@ -119,10 +123,15 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
         instance. This is used for better error reporting.
       filename: The filename `source` is from.
       line_offset: The line offset of `source` within `filename`.
+      allow_control_flow: Whether to permit control flow constructs (loops,
+        conditionals, comprehensions, etc). By default, this is `False`, and
+        control flow constructs will cause an `UnsupportedControlFlowError` to
+        be thrown.
     """
     self._lines = source.splitlines()
     self._filename = filename
     self._line_offset = line_offset
+    self._allow_control_flow = allow_control_flow
 
   def visit_Call(self, node: ast.Call):  # pylint: disable=invalid-name
     return ast.Call(
@@ -137,35 +146,40 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     return (self._filename, line_number, node.col_offset, line)
 
   def _handle_control_flow(self, node: ast.AST):
+    if self._allow_control_flow:
+      return self.generic_visit(node)
     msg = f'Control flow ({type(node).__name__}) is unsupported by auto_config.'
     raise UnsupportedControlFlowError(msg, self._location_for(node))
 
   def visit_For(self, node: ast.For):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_While(self, node: ast.While):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_If(self, node: ast.If):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_IfExp(self, node: ast.IfExp):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_ListComp(self, node: ast.ListComp):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_SetComp(self, node: ast.SetComp):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_DictComp(self, node: ast.DictComp):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
   def visit_GeneratorExp(self, node: ast.GeneratorExp):  # pylint: disable=invalid-name
-    self._handle_control_flow(node)
+    return self._handle_control_flow(node)
 
 
-def auto_config(fn=None) -> Any:  # TODO: More precise return type.
+def auto_config(
+    fn=None,
+    experimental_allow_control_flow=False
+) -> Any:  # TODO: More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
   This function creates a new function from `fn` by rewriting its AST (abstract
@@ -213,10 +227,23 @@ def auto_config(fn=None) -> Any:  # TODO: More precise return type.
 
       modified_model = fdl.build(config)
 
-  Currently, control flow is not supported by `auto_config`.
+  Currently, control flow is not supported by default in `auto_config`.
+  Experimental support for control flow can be enabled using the
+  `experimental_allow_control_flow` argument. If enabled, control flow
+  constructs may be used within the function to construct the resulting config
+  (for example, a `for` loop could be used to build a list of layers). Control
+  flow is never encoded directly as part of the resulting `fdl.Config` (for
+  example, there is no `fdl.Config` that will correspond to a conditional or
+  loop). While many simple constructs (`for _ in range(10)` etc) work, there
+  will also likely be surprising behavior in some circumstances (for example,
+  using `itertools` functions in conjunction with a loop will not work, since
+  the calls to `itertools` functions will be turned into `fdl.Config` objects).
 
   Args:
     fn: The function to rewrite into a config-generating function.
+    experimental_allow_control_flow: Whether to allow control flow constructs
+      in `fn`. By default, control flow constructs will cause an
+      `UnsupportedControlFlowError` to be thrown.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
@@ -235,7 +262,11 @@ def auto_config(fn=None) -> Any:  # TODO: More precise return type.
 
     filename = inspect.getsourcefile(fn)
     line_offset = fn.__code__.co_firstlineno - 1
-    node_transformer = _AutoConfigNodeTransformer(source, filename, line_offset)
+    node_transformer = _AutoConfigNodeTransformer(
+        source=source,
+        filename=filename,
+        line_offset=line_offset,
+        allow_control_flow=experimental_allow_control_flow)
 
     # Parse the AST, and modify it by intercepting all `Call`s with the
     # `auto_config_call_handler`. Finally, ensure line numbers and code
