@@ -20,9 +20,10 @@ of base configuration, and these APIs allow such overrides to take place
 imperatively.
 """
 
-from typing import Any, Callable, Iterator, Optional, Set, Type, Union
+from typing import Any, Callable, Hashable, Iterator, Optional, Set, Type, Union
 
 from fiddle import config
+from fiddle import placeholders
 import tree
 
 # Maybe DRY up with type declaration in autobuilders.py?
@@ -42,6 +43,7 @@ class Selection:
   """
   cfg: config.Buildable
   fn_or_cls: Optional[FnOrClass]
+  tag: Optional[Hashable]
   match_subclasses: bool
   buildable_type: Type[config.Buildable]
 
@@ -50,12 +52,22 @@ class Selection:
       cfg: config.Buildable,
       fn_or_cls: Optional[FnOrClass] = None,
       *,
+      tag: Optional[Hashable] = None,
       match_subclasses: bool = True,
-      buildable_type: Type[config.Buildable] = config.Buildable,
+      buildable_type: Optional[Type[config.Buildable]] = None,
   ):
     super().__setattr__("cfg", cfg)
     super().__setattr__("fn_or_cls", fn_or_cls)
+    super().__setattr__("tag", tag)
     super().__setattr__("match_subclasses", match_subclasses)
+
+    if buildable_type is None:
+      # Set `buildable_type` for implementation in `_matches` below. In general
+      # buildable_type should only be None when `tag` is set and `fn_or_cls` is
+      # not.
+      if tag is None or fn_or_cls is not None:
+        buildable_type = config.Buildable
+
     super().__setattr__("buildable_type", buildable_type)
 
   def _matches(self, node: config.Buildable) -> bool:
@@ -63,8 +75,20 @@ class Selection:
 
     # Implementation note: To allow for future expansion of this class, checks
     # here should be expressed as `if not my_matcher.match(x): return False`.
-    if not isinstance(node, self.buildable_type):
-      return False
+
+    # For placeholders, check that the key (now "tag") is present, and then
+    # refer to underlying configuration.
+    if self.tag is not None:
+      if not isinstance(node, placeholders.Placeholder):
+        return False
+      if self.tag not in node.keys:
+        return False
+      node = node.value
+
+    if self.buildable_type is not None:
+      if not isinstance(node, self.buildable_type):
+        return False
+
     if self.fn_or_cls is not None:
       if self.fn_or_cls != node.__fn_or_cls__:
         # Determines if subclass matching is allowed, and if the node is a
@@ -78,6 +102,7 @@ class Selection:
             and issubclass(node.__fn_or_cls__, self.fn_or_cls))
         if not is_subclass:
           return False
+
     return True
 
   def _iter_helper(self, node: config.Buildable, seen: Set[int]):

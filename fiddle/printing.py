@@ -93,8 +93,7 @@ class _PlaceholderWrapper:
       value_repr = '<[unset]>'
     else:
       value_repr = repr(self.wrapped.value)
-    return (f'fdl.Placeholder({self.wrapped.key.name!r}, '
-            f'value={value_repr})')
+    return f'fdl.Placeholder({self.wrapped.keys}, value={value_repr})'
 
 
 def as_str_flattened(cfg: config.Buildable,

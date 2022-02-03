@@ -180,19 +180,19 @@ z = <[unset; default: 'abc']>
   def test_placeholders(self):
     cfg = fdl.Config(
         test_helper,
-        x=placeholders.Placeholder(key=test_key),
-        y=placeholders.Placeholder(key=test_key, default='abc'))
+        x=placeholders.Placeholder(keys={test_key}),
+        y=placeholders.Placeholder(keys={test_key}, default='abc'))
     output = printing.as_str_flattened(cfg)
     expected = """
-x = fdl.Placeholder('test_key', value=<[unset]>)
-y = fdl.Placeholder('test_key', value='abc')
+x = fdl.Placeholder({PlaceholderKey(name='test_key')}, value=<[unset]>)
+y = fdl.Placeholder({PlaceholderKey(name='test_key')}, value='abc')
 """.strip()
     self.assertEqual(output, expected)
     placeholders.set_placeholder(cfg, test_key, 'cba')
     output = printing.as_str_flattened(cfg)
     expected = """
-x = fdl.Placeholder('test_key', value='cba')
-y = fdl.Placeholder('test_key', value='cba')
+x = fdl.Placeholder({PlaceholderKey(name='test_key')}, value='cba')
+y = fdl.Placeholder({PlaceholderKey(name='test_key')}, value='cba')
 """.strip()
     self.assertEqual(output, expected)
 
@@ -296,6 +296,7 @@ x\[1\].b = <\[unset\]>
 y = <\[unset\]>
 """.strip()
     self.assertRegex(output, expected)
+
 
 if __name__ == '__main__':
   absltest.main()

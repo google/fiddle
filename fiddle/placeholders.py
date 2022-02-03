@@ -51,7 +51,7 @@ import copy
 import dataclasses
 import pathlib
 import traceback
-from typing import Any, FrozenSet, Generic, Optional, TypeVar, Union
+from typing import Any, FrozenSet, Generic, Optional, Set, TypeVar, Union
 
 from fiddle import config
 import tree
@@ -92,6 +92,9 @@ class PlaceholderKey:
   def __hash__(self):
     return id(self)
 
+  def __repr__(self):
+    return f"PlaceholderKey(name={self.name!r})"
+
   def __deepcopy__(self, memo):
     """Override for deepcopy that does not copy this immutable object.
 
@@ -108,11 +111,11 @@ class PlaceholderKey:
     return self
 
 
-def placeholder_fn(key: PlaceholderKey, value: Any = NO_VALUE) -> Any:
+def placeholder_fn(keys: Set[PlaceholderKey], value: Any = NO_VALUE) -> Any:
   if value is NO_VALUE:
     raise config.PlaceholderNotFilledError(
         "Expected all placeholders to be replaced via fdl.set_placeholder() "
-        f"calls, but one with name {key.name!r} was not set.")
+        f"calls, but one with keys {keys} was not set.")
   else:
     return value
 
@@ -123,30 +126,36 @@ T = TypeVar("T")
 class Placeholder(Generic[T], config.Config[T]):
   """Declares a placeholder in a configuration."""
 
-  def __init__(self,
-               key: Union[PlaceholderKey, Placeholder[T]],
-               default: Union[_NoValue, T] = NO_VALUE):
+  def __init__(
+      self,
+      keys: Union[Set[PlaceholderKey], Placeholder[T]] = None,
+      default: Union[_NoValue, T] = NO_VALUE,
+  ):
     """Initializes the placeholder.
 
     Args:
-      key: Normally a key identifying the type of placeholder, so that all
-        placeholders of a given type can be set at once. Alternately an existing
-        Placeholder can be specified, and it will be copied.
+      keys: Set of keys for this placeholder. Identifies types of this
+        placeholder, so that all placeholders matching a given key can be set at
+        once. Alternately an existing Placeholder can be specified, and it will
+        be copied.
       default: Default value of the placeholder. This is normally a sentinel
         which will cause the configuration to fail to build when the
         placeholders are not set.
     """
-    if isinstance(key, Placeholder):
+    if isinstance(keys, Placeholder):
       assert default is NO_VALUE
-      super().__init__(key)
+      super().__init__(keys)
     else:
-      if not isinstance(key, PlaceholderKey):
-        raise TypeError(f"Expected key to be a PlaceholderKey, got {key}")
-      super().__init__(placeholder_fn, key=key, value=default)
+      if not keys:
+        raise ValueError(
+            "Placeholder(): Please provide a nonempty set for `keys`")
+      super().__init__(placeholder_fn, keys=keys, value=default)
 
   def __deepcopy__(self, memo) -> config.Buildable[T]:
     """Implements the deepcopy API."""
-    return Placeholder(self.key, copy.deepcopy(self.value, memo))
+    return Placeholder(
+        keys=copy.deepcopy(self.keys, memo),
+        default=copy.deepcopy(self.value, memo))
 
 
 def set_placeholder(cfg: config.Buildable, key: PlaceholderKey,
@@ -167,7 +176,7 @@ def set_placeholder(cfg: config.Buildable, key: PlaceholderKey,
     value: Value to set for these placeholders.
   """
   if isinstance(cfg, Placeholder):
-    if key is cfg.key:
+    if key in cfg.keys:
       cfg.value = value
 
   def map_fn(leaf):
@@ -191,7 +200,7 @@ def list_placeholder_keys(cfg: config.Buildable) -> FrozenSet[PlaceholderKey]:
 
   def _inner(node: config.Buildable):
     if isinstance(node, Placeholder):
-      keys.add(node.key)
+      keys.update(node.keys)
 
     def map_fn(leaf):
       if isinstance(leaf, config.Buildable):

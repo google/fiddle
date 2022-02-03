@@ -16,12 +16,13 @@
 """Tests for placeholders."""
 
 import copy
+from unittest import mock
 
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import config
 from fiddle import placeholders
-import mock
+from fiddle.experimental import selectors
 
 
 def return_kwargs(**kwargs):
@@ -32,47 +33,55 @@ fine_key = placeholders.PlaceholderKey("fine_key")
 test_key = placeholders.PlaceholderKey("my_test_key", "Description of Test Key")
 
 
+def get_single_key(placeholder: placeholders.Placeholder):
+  """Gets a single key from a placeholder, errors if there are multiple."""
+  if not isinstance(placeholder, placeholders.Placeholder):
+    raise TypeError("Not a placeholder")
+  key, = placeholder.keys
+  return key
+
+
 class PlaceholdersTest(absltest.TestCase):
 
   def test_placeholder_fn_exception(self):
     with self.assertRaisesRegex(
         config.PlaceholderNotFilledError,
         "Expected.*placeholders.*replaced.*one "
-        "with name 'my_test_key' was not set"):
-      placeholders.placeholder_fn(key=test_key)
+        r"with keys \{PlaceholderKey\(name='my_test_key'\)\} was not set"):
+      placeholders.placeholder_fn(keys={test_key})
 
   def test_placeholder_fn_none_value(self):
     # Test that when the value is None, that's OK.
-    self.assertIsNone(placeholders.placeholder_fn(key=test_key, value=None))
+    self.assertIsNone(placeholders.placeholder_fn(keys={test_key}, value=None))
 
   def test_placeholder_default_none(self):
-    cfg = placeholders.Placeholder(key=test_key, default=None)
+    cfg = placeholders.Placeholder(keys={test_key}, default=None)
     self.assertIsNone(fdl.build(cfg))
 
   def test_one_placeholder_unset_in_config(self):
     cfg = fdl.Config(
         return_kwargs,
-        foo=placeholders.Placeholder(key=fine_key, default=None),
-        bar=placeholders.Placeholder(key=test_key))
+        foo=placeholders.Placeholder(keys={fine_key}, default=None),
+        bar=placeholders.Placeholder(keys={test_key}))
     with self.assertRaisesRegex(
         config.PlaceholderNotFilledError,
         "Expected.*placeholders.*replaced.*one "
-        "with name 'my_test_key' was not set"):
+        r"with keys \{PlaceholderKey\(name='my_test_key'\)\} was not set"):
       fdl.build(cfg)
 
   def test_set_placeholder(self):
     cfg = fdl.Config(
         return_kwargs,
-        foo=placeholders.Placeholder(key=fine_key, default=None),
-        bar=placeholders.Placeholder(key=test_key))
+        foo=placeholders.Placeholder(keys={fine_key}, default=None),
+        bar=placeholders.Placeholder(keys={test_key}))
     placeholders.set_placeholder(cfg, key=test_key, value=1)
     self.assertDictEqual(fdl.build(cfg), {"foo": None, "bar": 1})
 
   def test_set_two_placeholders(self):
     cfg = fdl.Config(
         return_kwargs,
-        foo=placeholders.Placeholder(key=fine_key, default=None),
-        bar=placeholders.Placeholder(key=test_key))
+        foo=placeholders.Placeholder(keys={fine_key}, default=None),
+        bar=placeholders.Placeholder(keys={test_key}))
     placeholders.set_placeholder(cfg, key=test_key, value=1)
     placeholders.set_placeholder(cfg, key=fine_key, value=2)
     self.assertDictEqual(fdl.build(cfg), {"foo": 2, "bar": 1})
@@ -80,8 +89,8 @@ class PlaceholdersTest(absltest.TestCase):
   def test_double_set_placeholder(self):
     cfg = fdl.Config(
         return_kwargs,
-        foo=placeholders.Placeholder(key=fine_key, default=None),
-        bar=placeholders.Placeholder(key=test_key))
+        foo=placeholders.Placeholder(keys={fine_key}, default=None),
+        bar=placeholders.Placeholder(keys={test_key}))
     placeholders.set_placeholder(cfg, key=test_key, value=1)
     placeholders.set_placeholder(cfg, key=test_key, value=2)
     self.assertDictEqual(fdl.build(cfg), {"foo": None, "bar": 2})
@@ -89,16 +98,16 @@ class PlaceholdersTest(absltest.TestCase):
   def test_list_keys(self):
     cfg = fdl.Config(
         return_kwargs,
-        foo=placeholders.Placeholder(key=fine_key, default=None),
-        bar=placeholders.Placeholder(key=test_key))
+        foo=placeholders.Placeholder(keys={fine_key}, default=None),
+        bar=placeholders.Placeholder(keys={test_key}))
     keys = placeholders.list_placeholder_keys(cfg)
     self.assertEqual(keys, {fine_key, test_key})
 
   def test_print_keys(self):
     cfg = fdl.Config(
         return_kwargs,
-        foo=placeholders.Placeholder(key=fine_key, default=None),
-        bar=placeholders.Placeholder(key=test_key))
+        foo=placeholders.Placeholder(keys={fine_key}, default=None),
+        bar=placeholders.Placeholder(keys={test_key}))
     keys = placeholders.list_placeholder_keys(cfg)
     with mock.patch.object(placeholders, "print") as mock_print:
       placeholders.print_keys(cfg)
@@ -121,10 +130,10 @@ class PlaceholdersTest(absltest.TestCase):
         return_kwargs,
         output_logits=fdl.Config(
             return_kwargs,
-            dtype=placeholders.Placeholder(activation_dtype, "float32")),
+            dtype=placeholders.Placeholder({activation_dtype}, "float32")),
         encoder=fdl.Config(
             return_kwargs,
-            dtype=placeholders.Placeholder(activation_dtype, "float32")),
+            dtype=placeholders.Placeholder({activation_dtype}, "float32")),
     )
 
     # At first, the defaults are used.
@@ -171,9 +180,9 @@ class PlaceholdersTest(absltest.TestCase):
       return a, b, c, d
 
     cfg = fdl.Config(foo)
-    cfg.a = placeholders.Placeholder(fine_key1)
-    cfg.b = placeholders.Placeholder(fine_key2)
-    cfg.c = placeholders.Placeholder(fine_key1)
+    cfg.a = placeholders.Placeholder({fine_key1})
+    cfg.b = placeholders.Placeholder({fine_key2})
+    cfg.c = placeholders.Placeholder({fine_key1})
     cfg.d = 4
     copied = copy.deepcopy(cfg)
     copied.d = 40
@@ -198,22 +207,23 @@ class PlaceholdersTest(absltest.TestCase):
     shared_value = fdl.Config(foo, 1, 2)
     cfg = fdl.Config(
         foo,
-        a=fdl.Placeholder(fine_key, shared_value),
-        b=fdl.Placeholder(fine_key, shared_value),
+        a=fdl.Placeholder({fine_key}, shared_value),
+        b=fdl.Placeholder({fine_key}, shared_value),
     )
     copied = copy.deepcopy(cfg)
     self.assertIsNot(copied.a, cfg.a)
     self.assertIsNot(copied.a.value, cfg.a.value)
-    self.assertIs(copied.a.key, cfg.a.key)
-    self.assertIs(copied.b.key, cfg.b.key)
+
+    self.assertIs(get_single_key(copied.a), get_single_key(cfg.a))
+    self.assertIs(get_single_key(copied.b), get_single_key(cfg.b))
     self.assertIs(cfg.a.value, cfg.b.value)
     self.assertIs(copied.a.value, copied.b.value)
 
   def test_shallow_copy_placeholders(self):
-    cfg = placeholders.Placeholder(fine_key)
+    cfg = placeholders.Placeholder({fine_key})
     copied = copy.copy(cfg)
 
-    self.assertIs(copied.key, fine_key)
+    self.assertIs(get_single_key(copied), fine_key)
     self.assertIs(copied.value, placeholders.NO_VALUE)
 
     with self.assertRaises(config.PlaceholderNotFilledError):
@@ -226,6 +236,35 @@ class PlaceholdersTest(absltest.TestCase):
     placeholders.set_placeholder(copied, fine_key, 2)
     self.assertEqual(fdl.build(cfg), 1)
     self.assertEqual(fdl.build(copied), 2)
+
+  def test_multiple_keys(self):
+    cfg = placeholders.Placeholder(keys={test_key, fine_key}, default=4)
+    self.assertEqual(fdl.build(cfg), 4)
+
+    # Set the value using the first key.
+    placeholders.set_placeholder(cfg, test_key, 5)
+    self.assertEqual(fdl.build(cfg), 5)
+
+    # Now set it using the second key.
+    placeholders.set_placeholder(cfg, fine_key, 6)
+    self.assertEqual(fdl.build(cfg), 6)
+
+
+class TestWithSelectorMock(PlaceholdersTest):
+
+  def setUp(self):
+    super().setUp()
+
+    def new_set_impl(cfg, key, value):
+      selectors.select(cfg, tag=key).set(value=value)
+
+    self.mock_set = mock.patch.object(placeholders, "set_placeholder",
+                                      new_set_impl)
+    self.mock_set.start()
+
+  def tearDown(self):
+    self.mock_set.stop()
+    super().tearDown()
 
 
 if __name__ == "__main__":
