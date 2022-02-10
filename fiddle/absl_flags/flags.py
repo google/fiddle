@@ -117,10 +117,11 @@ Thank you!
 """
 
 import ast
+import dataclasses
 import inspect
 import re
 import sys
-from typing import Any, List, Sequence
+from typing import Any, List, Union, Sequence
 
 from absl import app
 from absl import flags
@@ -142,19 +143,72 @@ _FDL_HELP = flags.DEFINE_bool(
     'fdl_help', False, help='Print out the flags-built config and exit.')
 
 
+@dataclasses.dataclass
+class _IndexKey:
+  """Wraps a string or integer index into a dictionary or list/tuple."""
+  key: Union[str, int]
+
+  def __post_init__(self):
+    try:
+      self.key = ast.literal_eval(self.key)
+    except Exception:  # pylint: disable=broad-except
+      pass  # leave self as-is.
+
+  def __call__(self, obj):
+    return obj[self.key]
+
+  def update(self, obj, new_value):
+    """Updates `obj`'s `self.key` to `new_value`."""
+    obj[self.key] = new_value
+
+
+@dataclasses.dataclass
+class _AttributeKey:
+  """Wraps the name of an attribute."""
+  __slots__ = ('name')
+  name: str
+
+  def __call__(self, obj):
+    return getattr(obj, self.name)
+
+  def update(self, obj, new_value):
+    setattr(obj, self.name, new_value)
+
+
+_PATH_COMPONENT_REGEX = re.compile(r'(?:\.([A-Za-z_][^\.\[]*))|\[([^]]+)\]')
+
+
+def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
+  """Parses a path into a list of either attributes or index lookups."""
+  path = f'.{path}'  # Add a leading `.` to make parsing work properly.
+  result = []
+  curr_index = 0
+  while curr_index < len(path):
+    match = _PATH_COMPONENT_REGEX.match(path, curr_index)
+    if match is None:
+      raise ValueError(
+          f'Could not parse {path[1:]} (failed index: {curr_index - 1}).')
+    curr_index = match.end(0)  # Advance
+    if match[1] is not None:
+      result.append(_AttributeKey(match[1]))
+    else:
+      result.append(_IndexKey(match[2]))
+  return result
+
+
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
   for flag in _FDL_SET.value:
     path, value = flag.split(' = ', maxsplit=1)
-    *parents, name = path.split('.')  # TODO: Support list indexes.
+    *parents, last = _parse_path(path)
     walk = cfg
     try:
       for parent in parents:
-        walk = getattr(walk, parent)
+        walk = parent(walk)
     except Exception:  # pylint: disable=broad-except
       raise ValueError(f'Invalid path "{path}".')
     try:
-      setattr(walk, name, ast.literal_eval(value))
+      last.update(walk, ast.literal_eval(value))
     except:
       raise ValueError(f'Could not set "{value}" path "{path}".')
 
