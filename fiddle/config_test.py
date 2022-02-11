@@ -457,7 +457,8 @@ class ConfigTest(absltest.TestCase):
     del cfg.arg1
 
     self.assertEqual(
-        set(['arg1', 'arg2']), set(cfg.__argument_history__.keys()))
+        set(['arg1', 'arg2', '__fn_or_cls__']),
+        set(cfg.__argument_history__.keys()))
     self.assertLen(cfg.__argument_history__['arg1'], 2)
     self.assertLen(cfg.__argument_history__['arg2'], 1)
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][0].param_name)
@@ -486,7 +487,8 @@ class ConfigTest(absltest.TestCase):
       cfg = config.Config(TestClass, 'arg1')
     cfg.arg2 = 'arg2'
     self.assertEqual(
-        set(['arg1', 'arg2']), set(cfg.__argument_history__.keys()))
+        set(['arg1', 'arg2', '__fn_or_cls__']),
+        set(cfg.__argument_history__.keys()))
     self.assertLen(cfg.__argument_history__['arg1'], 1)
     self.assertLen(cfg.__argument_history__['arg2'], 1)
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][0].param_name)
@@ -604,6 +606,42 @@ class ConfigTest(absltest.TestCase):
     thread.join()
     self.assertEqual(1, obj)
     self.assertEqual(3, output)
+
+  def test_update_callable(self):
+    cfg = config.Config(test_fn, 1, 'xyz', kwarg1='abc')
+    config.update_callable(cfg, TestClass)
+    cfg.kwarg2 = '123'
+    obj = config.build(cfg)
+    self.assertIsInstance(obj, TestClass)
+    self.assertEqual(1, obj.arg1)
+    self.assertEqual('xyz', obj.arg2)
+    self.assertEqual('abc', obj.kwarg1)
+    self.assertEqual('123', obj.kwarg2)
+
+  def test_update_callable_invalid_arg(self):
+    cfg = config.Config(test_fn_with_var_kwargs, abc='123', xyz='321')
+    with self.assertRaisesRegex(TypeError,
+                                r"have invalid arguments \['abc', 'xyz'\]"):
+      config.update_callable(cfg, TestClass)
+
+  def test_update_callable_new_kwargs(self):
+    cfg = config.Config(TestClass)
+    cfg.arg1 = 1
+    config.update_callable(cfg, test_fn_with_var_kwargs)
+    cfg.abc = '123'  # A **kwargs value should now be allowed.
+    self.assertEqual({
+        'arg1': 1,
+        'kwarg1': None,
+        'kwargs': {
+            'abc': '123'
+        }
+    }, config.build(cfg))
+
+  def test_update_callable_varargs(self):
+    cfg = config.Config(test_fn_with_var_kwargs, 1, 2)
+    with self.assertRaisesRegex(NotImplementedError,
+                                'Variable positional arguments'):
+      config.update_callable(cfg, test_fn_with_var_args_and_kwargs)
 
 
 if __name__ == '__main__':

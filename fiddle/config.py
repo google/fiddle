@@ -112,7 +112,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__signature__', signature)
     has_var_keyword = any(param.kind == param.VAR_KEYWORD
                           for param in signature.parameters.values())
-    super().__setattr__('__argument_history__', collections.defaultdict(list))
+    arg_history = collections.defaultdict(list)
+    arg_history['__fn_or_cls__'].append(
+        history.entry('__fn_or_cls__', fn_or_cls))
+    super().__setattr__('__argument_history__', arg_history)
     super().__setattr__('_has_var_keyword', has_var_keyword)
 
     arguments = signature.bind_partial(*args, **kwargs).arguments
@@ -483,3 +486,52 @@ def build(config):
 
   with build_guard.in_build():
     return _build(config, '<root>')
+
+
+def update_callable(config: Buildable, new_callable: TypeOrCallableProducingT):
+  """Updates `config` to build `new_callable` instead.
+
+  When extending a base configuration, it can often be useful to swap one class
+  for another. For example, an experiment may want to swap in a subclass that
+  has augmented functionality.
+
+  `update_callable` updates `config` in-place (preserving argument history).
+
+  Args:
+    config: A `Buildable` to mutate.
+    new_callable: The new callable `config` should call when built.
+
+  Raises:
+    TypeError: if `new_callable` has varargs, or if there are arguments set on
+      `config` that are invalid to pass to `new_callable`.
+  """
+  # TODO: Consider adding a "drop_invalid_args: bool = False" argument.
+
+  # Note: can't just call config.__init__(new_callable, **config.__arguments__)
+  # to preserve history.
+  #
+  # Note: can't call `setattr` on all the args to validate them, because that
+  # will result in duplicate history entries.
+
+  original_args = config.__arguments__
+  signature = inspect.signature(new_callable)
+  if any(param.kind == param.VAR_POSITIONAL
+         for param in signature.parameters.values()):
+    raise NotImplementedError(
+        'Variable positional arguments (aka `*args`) not supported.')
+  has_var_keyword = any(param.kind == param.VAR_KEYWORD
+                        for param in signature.parameters.values())
+  if not has_var_keyword:
+    invalid_args = [
+        arg for arg in original_args.keys() if arg not in signature.parameters
+    ]
+    if invalid_args:
+      raise TypeError(f'Cannot switch to {new_callable} (from '
+                      f'{config.__fn_or_cls__}) because the Buildable would '
+                      f'have invalid arguments {invalid_args}.')
+
+  object.__setattr__(config, '__fn_or_cls__', new_callable)
+  object.__setattr__(config, '__signature__', signature)
+  object.__setattr__(config, '_has_var_keyword', has_var_keyword)
+  config.__argument_history__['__fn_or_cls__'].append(
+      history.entry('__fn_or_cls__', new_callable))

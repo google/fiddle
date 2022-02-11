@@ -285,15 +285,33 @@ y = 'abc' @ .*/printing_test.py:\d+:test_simple_history
     cfg.x[0].x = 4
     output = printing.history_per_leaf_parameter(cfg)
     expected = r"""
+__fn_or_cls__ = .*test_helper .+/printing_test.py:\d+:test_nested_in_collections
+x\[0\].__fn_or_cls__ = .*test_helper .+/printing_test.py:\d+:test_nested_in_collections
 x\[0\].x = 4 @ .*/printing_test.py:\d+:test_nested_in_collections
   - previously: 3 @ .*/printing_test.py:\d+:test_nested_in_collections
   - previously: 1 @ .*/printing_test.py:\d+:test_nested_in_collections
 x\[0\].y = 'abc' @ .*/printing_test.py:\d+:test_nested_in_collections
   - previously: '1' @ .*/printing_test.py:\d+:test_nested_in_collections
+x\[1\].__fn_or_cls__ = .*__main__.TestHelper.*/printing_test.py:\d+:test_nested_in_collections
 x\[1\].a = 2 @ .*/printing_test.py:\d+:test_nested_in_collections
   - previously: 2 @ .*/printing_test.py:\d+:test_nested_in_collections
 x\[1\].b = <\[unset\]>
 y = <\[unset\]>
+""".strip()
+    self.assertRegex(output, expected)
+
+  def test_update_callable_history(self):
+    cfg = fdl.Config(test_helper, x=1, y=2)
+    fdl.update_callable(cfg, test_kwarg_helper)
+    cfg.abc = '123'
+    output = printing.history_per_leaf_parameter(cfg)
+    expected = r"""
+__fn_or_cls__ = .*test_kwarg_helper .+/printing_test.py:\d+:test_update_callable_history
+  - previously: .*test_helper .+/printing_test.py:\d+:test_update_callable_history
+x = 1 @ .+/printing_test.py:\d+:test_update_callable_history
+y = 2 @ .+/printing_test.py:\d+:test_update_callable_history
+abc = '123' @ .+/printing_test.py:\d+:test_update_callable_history
+kwargs = <\[unset\]>
 """.strip()
     self.assertRegex(output, expected)
 
