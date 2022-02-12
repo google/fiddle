@@ -21,6 +21,6 @@ from fiddle.config import BuildError
 from fiddle.config import Config
 from fiddle.config import Partial
 from fiddle.config import update_callable
-from fiddle.placeholders import Placeholder
-from fiddle.placeholders import PlaceholderKey
-from fiddle.placeholders import set_placeholder
+from fiddle.tagging import set_tagged
+from fiddle.tagging import Tag
+from fiddle.tagging import TaggedValue

@@ -21,7 +21,7 @@ from typing import Any, Iterator, List, Optional, Sequence, Tuple, Type, Union
 
 from fiddle import config
 from fiddle import history
-from fiddle import placeholders
+from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 import tree
 
@@ -83,17 +83,18 @@ def _format_value(value: Any, *, raw_value_repr: bool) -> str:
 
 
 @dataclasses.dataclass(frozen=True)
-class _PlaceholderWrapper:
-  """Customizes representation for placeholders in flattened output."""
+class _TaggedValueWrapper:
+  """Customizes representation for TaggedValues in flattened output."""
   __slots__ = ('wrapped',)
-  wrapped: placeholders.Placeholder
+  wrapped: tagging.TaggedValue
 
   def __repr__(self):
-    if self.wrapped.value is placeholders.NO_VALUE:
+    if self.wrapped.value is tagging.NO_VALUE:
       value_repr = '<[unset]>'
     else:
       value_repr = repr(self.wrapped.value)
-    return f'fdl.Placeholder({self.wrapped.keys}, value={value_repr})'
+    tag_str = ' '.join(str(t) for t in self.wrapped.tags)
+    return f'{value_repr} {tag_str}'
 
 
 def as_str_flattened(cfg: config.Buildable,
@@ -121,8 +122,8 @@ def as_str_flattened(cfg: config.Buildable,
     flattened_children = tree.flatten_with_path(value)
     if _has_nested_builder(flattened_children):
       for child_path, leaf in flattened_children:
-        if isinstance(leaf, placeholders.Placeholder):
-          yield path + child_path, None, _PlaceholderWrapper(leaf)
+        if isinstance(leaf, tagging.TaggedValue):
+          yield path + child_path, None, _TaggedValueWrapper(leaf)
         elif isinstance(leaf, config.Buildable):
           for subpath, subannotation, actual_leaf in recursive_flatten(leaf):
             yield path + child_path + subpath, subannotation, actual_leaf

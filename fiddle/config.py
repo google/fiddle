@@ -67,9 +67,9 @@ class BuildError(ValueError):
 
 
 # This error lives here to avoid a circular dependency. Please see
-# placeholders.py.
-class PlaceholderNotFilledError(ValueError):
-  """A placeholder was not filled when build() was called."""
+# tagging.py.
+class TaggedValueNotFilledError(ValueError):
+  """A TaggedValue was not filled when build() was called."""
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
@@ -477,7 +477,7 @@ def build(config):
       kwargs = tree.map_structure_with_path(map_fn, config.__arguments__)
       try:
         memo[id(config)] = config.__build__(**kwargs)
-      except PlaceholderNotFilledError:
+      except TaggedValueNotFilledError:
         raise
       except Exception as e:
         raise BuildError(config, path_str, e, (), kwargs) from e

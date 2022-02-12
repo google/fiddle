@@ -20,10 +20,16 @@ from typing import Union
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle import placeholders
 from fiddle import printing
+from fiddle import tagging
 
-test_key = placeholders.PlaceholderKey('test_key')
+
+class DummyTag(tagging.Tag):
+  """Dummy tag for testing."""
+
+
+class OtherTag(tagging.Tag):
+  """Second tag, for fun & profit!"""
 
 
 def test_helper(x, y):  # pylint: disable=unused-argument
@@ -177,22 +183,39 @@ z = <[unset; default: 'abc']>
 """.strip()
     self.assertEqual(output, expected)
 
-  def test_placeholders(self):
+  def test_tagged_values(self):
     cfg = fdl.Config(
-        test_helper,
-        x=placeholders.Placeholder(keys={test_key}),
-        y=placeholders.Placeholder(keys={test_key}, default='abc'))
+        test_helper, x=DummyTag.new(), y=DummyTag.new(default='abc'))
     output = printing.as_str_flattened(cfg)
     expected = """
-x = fdl.Placeholder({PlaceholderKey(name='test_key')}, value=<[unset]>)
-y = fdl.Placeholder({PlaceholderKey(name='test_key')}, value='abc')
+x = <[unset]> #__main__.DummyTag
+y = 'abc' #__main__.DummyTag
 """.strip()
     self.assertEqual(output, expected)
-    placeholders.set_placeholder(cfg, test_key, 'cba')
+    tagging.set_tagged(cfg, tag=DummyTag, value='cba')
     output = printing.as_str_flattened(cfg)
     expected = """
-x = fdl.Placeholder({PlaceholderKey(name='test_key')}, value='cba')
-y = fdl.Placeholder({PlaceholderKey(name='test_key')}, value='cba')
+x = 'cba' #__main__.DummyTag
+y = 'cba' #__main__.DummyTag
+""".strip()
+    self.assertEqual(output, expected)
+
+  def test_tagged_values_multiple_tags(self):
+    cfg = fdl.Config(
+        test_helper,
+        x=tagging.TaggedValue(tags=(DummyTag, OtherTag)),
+        y=tagging.TaggedValue(tags=(DummyTag, OtherTag), default='abc'))
+    output = printing.as_str_flattened(cfg)
+    expected = """
+x = <[unset]> #__main__.DummyTag #__main__.OtherTag
+y = 'abc' #__main__.DummyTag #__main__.OtherTag
+""".strip()
+    self.assertEqual(output, expected)
+    tagging.set_tagged(cfg, tag=DummyTag, value='cba')
+    output = printing.as_str_flattened(cfg)
+    expected = """
+x = 'cba' #__main__.DummyTag #__main__.OtherTag
+y = 'cba' #__main__.DummyTag #__main__.OtherTag
 """.strip()
     self.assertEqual(output, expected)
 

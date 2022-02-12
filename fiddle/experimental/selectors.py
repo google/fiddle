@@ -20,10 +20,10 @@ of base configuration, and these APIs allow such overrides to take place
 imperatively.
 """
 
-from typing import Any, Callable, Hashable, Iterator, Optional, Set, Type, Union
+from typing import Any, Callable, Iterator, Optional, Set, Type, Union
 
 from fiddle import config
-from fiddle import placeholders
+from fiddle import tagging
 import tree
 
 # Maybe DRY up with type declaration in autobuilders.py?
@@ -43,7 +43,7 @@ class Selection:
   """
   cfg: config.Buildable
   fn_or_cls: Optional[FnOrClass]
-  tag: Optional[Hashable]
+  tag: Optional[tagging.TagType]
   match_subclasses: bool
   buildable_type: Type[config.Buildable]
 
@@ -52,7 +52,7 @@ class Selection:
       cfg: config.Buildable,
       fn_or_cls: Optional[FnOrClass] = None,
       *,
-      tag: Optional[Hashable] = None,
+      tag: Optional[tagging.TagType] = None,
       match_subclasses: bool = True,
       buildable_type: Optional[Type[config.Buildable]] = None,
   ):
@@ -76,12 +76,12 @@ class Selection:
     # Implementation note: To allow for future expansion of this class, checks
     # here should be expressed as `if not my_matcher.match(x): return False`.
 
-    # For placeholders, check that the key (now "tag") is present, and then
+    # For tags, check that the tag is present, and then
     # refer to underlying configuration.
     if self.tag is not None:
-      if not isinstance(node, placeholders.Placeholder):
+      if not isinstance(node, tagging.TaggedValue):
         return False
-      if self.tag not in node.keys:
+      if not any(issubclass(tag, self.tag) for tag in node.tags):
         return False
       node = node.value
 

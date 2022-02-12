@@ -22,7 +22,7 @@ import itertools
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from fiddle import config as fdl
-from fiddle import placeholders
+from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 import graphviz
 import typing_extensions
@@ -181,8 +181,8 @@ class _GraphvizRenderer:
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
     type_font = self.tag('font', point_size=8)
     type_name = config.__class__.__name__
-    if isinstance(config, placeholders.Placeholder):
-      key_names = ', '.join(repr(key.name) for key in config.keys)
+    if isinstance(config, tagging.TaggedValue):
+      key_names = ', '.join(repr(key.name) for key in config.tags)
       title = (type_font(html.escape(f'{type_name}: {key_names}')) + '&nbsp;')
       header = self._header_row(title, colspan=1, bgcolor=bgcolor, style=style)
     else:
@@ -193,7 +193,7 @@ class _GraphvizRenderer:
       header = self._header_row(title, bgcolor=bgcolor, style=style)
 
     # Generate the arguments table.
-    if isinstance(config, placeholders.Placeholder):
+    if isinstance(config, tagging.TaggedValue):
       table = self.tag('table')
       tr = self.tag('tr')
       value_td = self.tag('td', align='left')
@@ -211,8 +211,8 @@ class _GraphvizRenderer:
 
   def _render_value(self, value: Any):
     """Renders an arbitrary value inside a `Config` rendering."""
-    if value is placeholders.NO_VALUE:
-      return self.tag('i')('placeholders.NO_VALUE')
+    if value is tagging.NO_VALUE:
+      return self.tag('i')('tagging.NO_VALUE')
     elif isinstance(value, CustomGraphvizBuildable):
       return value.__render_value__(self)
     elif isinstance(value, fdl.Buildable):
