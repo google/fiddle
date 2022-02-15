@@ -93,7 +93,7 @@ class _TaggedValueWrapper:
       value_repr = '<[unset]>'
     else:
       value_repr = repr(self.wrapped.value)
-    tag_str = ' '.join(str(t) for t in self.wrapped.tags)
+    tag_str = ' '.join(sorted(str(t) for t in self.wrapped.tags))
     return f'{value_repr} {tag_str}'
 
 
