@@ -128,6 +128,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
 
+    if hasattr(fn_or_cls, '__init_fiddle__'):
+      fn_or_cls.__init_fiddle__(self)
+
     for name, value in arguments.items():
       setattr(self, name, value)
 
