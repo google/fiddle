@@ -49,7 +49,7 @@ def _is_autofillable(annotation: Type[Any]) -> bool:
     False otherwise.
   """
   return (dataclasses.is_dataclass(annotation) or
-          hasattr(annotation, '__init_fiddle__'))
+          hasattr(annotation, '__fiddle_init__'))
 
 
 def autofill(cfg: config.Buildable):

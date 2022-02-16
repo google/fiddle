@@ -56,6 +56,69 @@ def test_fn_with_var_args_and_kwargs(arg1, *args, kwarg1=None, **kwargs):  # pyl
   return locals()
 
 
+class FiddleInitStaticMethod:
+
+  def __init__(self, x, y=3, **kwargs):
+    self.x = x
+    self.y = y
+    for key, value in kwargs.items():
+      setattr(self, key, value)
+
+  @staticmethod
+  def __fiddle_init__(cfg):
+    cfg.z = 5
+
+
+class FiddleInitStaticMethodChild(FiddleInitStaticMethod):
+
+  @classmethod
+  def __fiddle_init__(cls, cfg):
+    super().__fiddle_init__(cfg)
+    cfg.w = 42
+
+
+class FiddleInitClassMethod:
+
+  def __init__(self, x, y=3, **kwargs):
+    self.x = x
+    self.y = y
+    for key, value in kwargs.items():
+      setattr(self, key, value)
+
+  @classmethod
+  def __fiddle_init__(cls, cfg):
+    cfg.z = 5
+
+
+class FiddleInitClassMethodChild(FiddleInitClassMethod):
+
+  @classmethod
+  def __fiddle_init__(cls, cfg):
+    super().__fiddle_init__(cfg)
+    cfg.w = 10
+
+
+class FiddleInitIncompatibleChild(FiddleInitClassMethod):
+
+  def __init__(self, a, b):
+    self.a = a
+    self.b = b
+    super().__init__(x=a + 1, y=b - 3, z=a + b)
+
+  @classmethod
+  def __fiddle_init__(cls, cfg):
+    # Since FiddleInitClassMethod has different init arguments, we cannot call
+    # super().__fiddle_init__(cfg).
+    super_cfg = config.Config(FiddleInitClassMethod)
+    cfg.b = super_cfg.y + 3  # Demonstrate copying over.
+
+
+class FiddleInitIncompatibleChildBroken(FiddleInitClassMethod):
+
+  def __init__(self, a, b):  # pylint: disable=super-init-not-called
+    pass
+
+
 def make_typed_config() -> config.Config[TestClass]:
   """Helper function which returns a config.Config whose type is known."""
   return config.Config(TestClass, arg1=1, arg2=2)
@@ -169,6 +232,86 @@ class ConfigTest(absltest.TestCase):
         'args': 'kwarg_called_arg',
         'kwargs': 'kwarg_called_kwarg'
     })
+
+  def test_fiddle_init_config_static(self):
+    cfg = config.Config(FiddleInitStaticMethod)
+    self.assertEqual(5, cfg.z)
+    cfg.x = 1
+    obj = config.build(cfg)
+    self.assertIsInstance(obj, FiddleInitStaticMethod)
+    self.assertEqual(1, obj.x)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_partial_static(self):
+    cfg = config.Partial(FiddleInitStaticMethod)
+    self.assertEqual(5, cfg.z)
+    partial = config.build(cfg)
+    obj = partial(x=1)
+    self.assertIsInstance(obj, FiddleInitStaticMethod)
+    self.assertEqual(1, obj.x)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_config_static_subclass(self):
+    cfg = config.Config(FiddleInitStaticMethodChild)
+    self.assertEqual(3, cfg.y)
+    self.assertEqual(5, cfg.z)
+    self.assertEqual(42, cfg.w)
+    cfg.x = 1
+    obj = config.build(cfg)
+    self.assertIsInstance(obj, FiddleInitStaticMethodChild)
+    self.assertEqual(42, obj.w)  # pytype: disable=attribute-error
+    self.assertEqual(1, obj.x)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(5, cfg.z)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_config_class(self):
+    cfg = config.Config(FiddleInitClassMethod, 1)
+    self.assertEqual(5, cfg.z)
+    obj = config.build(cfg)
+    self.assertIsInstance(obj, FiddleInitClassMethod)
+    self.assertEqual(1, obj.x)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_partial_class(self):
+    cfg = config.Partial(FiddleInitClassMethod, 1)
+    self.assertEqual(5, cfg.z)
+    partial = config.build(cfg)
+    obj = partial(x=1)
+    self.assertIsInstance(obj, FiddleInitClassMethod)
+    self.assertEqual(1, obj.x)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_config_subclass(self):
+    cfg = config.Config(FiddleInitClassMethodChild, 0)
+    self.assertEqual(5, cfg.z)
+    self.assertEqual(10, cfg.w)
+    obj = config.build(cfg)
+    self.assertIsInstance(obj, FiddleInitClassMethodChild)
+    self.assertEqual(0, obj.x)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
+    self.assertEqual(10, obj.w)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_incompatible_subclass(self):
+    cfg = config.Config(FiddleInitIncompatibleChild)
+    self.assertEqual(6, cfg.b)
+    cfg.a = 8
+    obj = config.build(cfg)
+    self.assertIsInstance(obj, FiddleInitIncompatibleChild)
+    self.assertEqual(8, obj.a)
+    self.assertEqual(9, obj.x)
+    self.assertEqual(6, obj.b)
+    self.assertEqual(3, obj.y)
+    self.assertEqual(14, obj.z)  # pytype: disable=attribute-error
+
+  def test_fiddle_init_incompatible_broken(self):
+    with self.assertRaisesRegex(
+        TypeError, 'No parameter named.*; valid parameter names: a, b'):
+      _ = config.Config(FiddleInitIncompatibleChildBroken)
 
   def test_config_with_default_args(self):
 

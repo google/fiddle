@@ -28,7 +28,7 @@ class Child:
     self.x = x
 
   @staticmethod
-  def __init_fiddle__(cfg):
+  def __fiddle_init__(cfg):
     cfg.x = 42
 
 
