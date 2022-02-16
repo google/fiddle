@@ -77,48 +77,48 @@ class AsStrFlattenedTests(absltest.TestCase):
   def test_simple_printing(self):
     cfg = fdl.Config(test_helper, 1, 'abc')
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = 1
-y = 'abc'
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 1
+        y = 'abc'""")
     self.assertEqual(output, expected)
 
   def test_unset_argument(self):
     cfg = fdl.Config(test_helper, 3.14)
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = 3.14
-y = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 3.14
+        y = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_nested(self):
     cfg = fdl.Config(test_helper, 'x', fdl.Config(test_helper, 'nest_x', 123))
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = 'x'
-y.x = 'nest_x'
-y.y = 123
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 'x'
+        y.x = 'nest_x'
+        y.y = 123""")
     self.assertEqual(output, expected)
 
   def test_class(self):
     cfg = fdl.Config(TestHelper, 'a_param', b=123)
     output = printing.as_str_flattened(cfg)
-    expected = """
-a = 'a_param'
-b = 123
-""".strip()
+
+    expected = textwrap.dedent("""\
+        a = 'a_param'
+        b = 123""")
     self.assertEqual(output, expected)
 
   def test_kwargs(self):
     cfg = fdl.Config(test_kwarg_helper, 1, abc='extra kwarg value')
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = 1
-y = <[unset]>
-abc = 'extra kwarg value'
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 1
+        y = <[unset]>
+        abc = 'extra kwarg value'""")
     self.assertEqual(output, expected)
 
   def test_nested_kwargs(self):
@@ -126,13 +126,13 @@ abc = 'extra kwarg value'
         test_kwarg_helper,
         extra=fdl.Config(test_kwarg_helper, 1, nested_extra='whee'))
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = <[unset]>
-y = <[unset]>
-extra.x = 1
-extra.y = <[unset]>
-extra.nested_extra = 'whee'
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = <[unset]>
+        y = <[unset]>
+        extra.x = 1
+        extra.y = <[unset]>
+        extra.nested_extra = 'whee'""")
     self.assertEqual(output, expected)
 
   def test_nested_collections(self):
@@ -141,13 +141,13 @@ extra.nested_extra = 'whee'
         [fdl.Config(test_helper, 1, '1'),
          fdl.Config(TestHelper, 2)])
     output = printing.as_str_flattened(cfg)
-    expected = """
-x[0].x = 1
-x[0].y = '1'
-x[1].a = 2
-x[1].b = <[unset]>
-y = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x[0].x = 1
+        x[0].y = '1'
+        x[1].a = 2
+        x[1].b = <[unset]>
+        y = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_multiple_nested_collections(self):
@@ -156,17 +156,17 @@ y = <[unset]>
         'b': [3, 2, 1]
     }, [fdl.Config(test_helper, [fdl.Config(test_helper, 1, 2)])])
     output = printing.as_str_flattened(cfg)
-    expected = """
-x['a'].x = <[unset]>
-x['a'].y = <[unset]>
-x['a'].abc = [1, 2, 3]
-x['b'][0] = 3
-x['b'][1] = 2
-x['b'][2] = 1
-y[0].x[0].x = 1
-y[0].x[0].y = 2
-y[0].y = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x['a'].x = <[unset]>
+        x['a'].y = <[unset]>
+        x['a'].abc = [1, 2, 3]
+        x['b'][0] = 3
+        x['b'][1] = 2
+        x['b'][2] = 1
+        y[0].x[0].x = 1
+        y[0].x[0].y = 2
+        y[0].y = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_default_values(self):
@@ -176,29 +176,30 @@ y[0].y = <[unset]>
 
     cfg = fdl.Config(test_fn, 1)
     output = printing.as_str_flattened(cfg)
-    expected = """
-w = 1
-x = <[unset]>
-y = <[unset; default: 3]>
-z = <[unset; default: 'abc']>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        w = 1
+        x = <[unset]>
+        y = <[unset; default: 3]>
+        z = <[unset; default: 'abc']>""")
     self.assertEqual(output, expected)
 
   def test_tagged_values(self):
     cfg = fdl.Config(
         test_helper, x=DummyTag.new(), y=DummyTag.new(default='abc'))
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = <[unset]> #__main__.DummyTag
-y = 'abc' #__main__.DummyTag
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = <[unset]> #__main__.DummyTag
+        y = 'abc' #__main__.DummyTag""")
     self.assertEqual(output, expected)
+
     tagging.set_tagged(cfg, tag=DummyTag, value='cba')
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = 'cba' #__main__.DummyTag
-y = 'cba' #__main__.DummyTag
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 'cba' #__main__.DummyTag
+        y = 'cba' #__main__.DummyTag""")
     self.assertEqual(output, expected)
 
   def test_tagged_values_multiple_tags(self):
@@ -207,69 +208,70 @@ y = 'cba' #__main__.DummyTag
         x=tagging.TaggedValue(tags=(DummyTag, OtherTag)),
         y=tagging.TaggedValue(tags=(DummyTag, OtherTag), default='abc'))
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = <[unset]> #__main__.DummyTag #__main__.OtherTag
-y = 'abc' #__main__.DummyTag #__main__.OtherTag
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = <[unset]> #__main__.DummyTag #__main__.OtherTag
+        y = 'abc' #__main__.DummyTag #__main__.OtherTag""")
     self.assertEqual(output, expected)
+
     tagging.set_tagged(cfg, tag=DummyTag, value='cba')
     output = printing.as_str_flattened(cfg)
-    expected = """
-x = 'cba' #__main__.DummyTag #__main__.OtherTag
-y = 'cba' #__main__.DummyTag #__main__.OtherTag
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 'cba' #__main__.DummyTag #__main__.OtherTag
+        y = 'cba' #__main__.DummyTag #__main__.OtherTag""")
     self.assertEqual(output, expected)
 
   def test_partial(self):
     partial = fdl.Partial(test_helper)
     partial.x = 'abc'
     output = printing.as_str_flattened(partial)
-    expected = """
-x = 'abc'
-y = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 'abc'
+        y = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_builtin_types_annotations(self):
     cfg = fdl.Config(test_annotated_helper, 1)
     cfg.y = 'abc'
     output = printing.as_str_flattened(cfg)
-    expected = """
-x: int = 1
-y: str = 'abc'
-z: float = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x: int = 1
+        y: str = 'abc'
+        z: float = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_advanced_type_annotations(self):
     cfg = fdl.Config(advanced_annotations_helper)
     cfg.abc = fdl.Config(DataclassHelper)
     output = printing.as_str_flattened(cfg)
-    expected = """
-x: TestHelper = <[unset]>
-abc.x: int = <[unset]>
-abc.y: str = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x: TestHelper = <[unset]>
+        abc.x: int = <[unset]>
+        abc.y: str = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_annotated_kwargs(self):
     cfg = fdl.Config(annotated_kwargs_helper, x=1, y='oops')
     output = printing.as_str_flattened(cfg)
-    expected = """
-x: int = 1
-y: int = 'oops'
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x: int = 1
+        y: int = 'oops'""")
     self.assertEqual(output, expected)
 
   def test_disabling_type_annotations(self):
     cfg = fdl.Config(test_annotated_helper, 1)
     cfg.y = 'abc'
     output = printing.as_str_flattened(cfg, include_types=False)
-    expected = """
-x = 1
-y = 'abc'
-z = <[unset]>
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x = 1
+        y = 'abc'
+        z = <[unset]>""")
     self.assertEqual(output, expected)
 
   def test_can_print_union_type(self):
@@ -279,9 +281,9 @@ z = <[unset]>
 
     cfg = fdl.Config(to_integer, 1)
     output = printing.as_str_flattened(cfg, include_types=True)
-    expected = """
-x: typing.Union[int, str] = 1
-""".strip()
+
+    expected = textwrap.dedent("""\
+        x: typing.Union[int, str] = 1""")
     self.assertEqual(output, expected)
 
   def test_materialized_default_values(self):
@@ -306,11 +308,10 @@ class HistoryPerLeafParamTests(absltest.TestCase):
     cfg = fdl.Config(test_helper, 1, 'abc')
     cfg.x = 2
     output = printing.history_per_leaf_parameter(cfg)
-    expected = r"""
-x = 2 @ .*/printing_test.py:\d+:test_simple_history
-  - previously: 1 @ .*/printing_test.py:\d+:test_simple_history
-y = 'abc' @ .*/printing_test.py:\d+:test_simple_history
-""".strip()
+    expected = textwrap.dedent(r"""
+        x = 2 @ .*/printing_test.py:\d+:test_simple_history
+          - previously: 1 @ .*/printing_test.py:\d+:test_simple_history
+        y = 'abc' @ .*/printing_test.py:\d+:test_simple_history""".strip('\n'))
     self.assertRegex(output, expected)
 
   def test_nested_in_collections(self):
@@ -323,20 +324,19 @@ y = 'abc' @ .*/printing_test.py:\d+:test_simple_history
     cfg.x[0].y = 'abc'
     cfg.x[0].x = 4
     output = printing.history_per_leaf_parameter(cfg)
-    expected = r"""
-__fn_or_cls__ = .*test_helper .+/printing_test.py:\d+:test_nested_in_collections
-x\[0\].__fn_or_cls__ = .*test_helper .+/printing_test.py:\d+:test_nested_in_collections
-x\[0\].x = 4 @ .*/printing_test.py:\d+:test_nested_in_collections
-  - previously: 3 @ .*/printing_test.py:\d+:test_nested_in_collections
-  - previously: 1 @ .*/printing_test.py:\d+:test_nested_in_collections
-x\[0\].y = 'abc' @ .*/printing_test.py:\d+:test_nested_in_collections
-  - previously: '1' @ .*/printing_test.py:\d+:test_nested_in_collections
-x\[1\].__fn_or_cls__ = .*__main__.TestHelper.*/printing_test.py:\d+:test_nested_in_collections
-x\[1\].a = 2 @ .*/printing_test.py:\d+:test_nested_in_collections
-  - previously: 2 @ .*/printing_test.py:\d+:test_nested_in_collections
-x\[1\].b = <\[unset\]>
-y = <\[unset\]>
-""".strip()
+    expected = textwrap.dedent(r"""
+        __fn_or_cls__ = .*test_helper .+/printing_test.py:\d+:test_nested_in_collections
+        x\[0\].__fn_or_cls__ = .*test_helper .+/printing_test.py:\d+:test_nested_in_collections
+        x\[0\].x = 4 @ .*/printing_test.py:\d+:test_nested_in_collections
+          - previously: 3 @ .*/printing_test.py:\d+:test_nested_in_collections
+          - previously: 1 @ .*/printing_test.py:\d+:test_nested_in_collections
+        x\[0\].y = 'abc' @ .*/printing_test.py:\d+:test_nested_in_collections
+          - previously: '1' @ .*/printing_test.py:\d+:test_nested_in_collections
+        x\[1\].__fn_or_cls__ = .*__main__.TestHelper.*/printing_test.py:\d+:test_nested_in_collections
+        x\[1\].a = 2 @ .*/printing_test.py:\d+:test_nested_in_collections
+          - previously: 2 @ .*/printing_test.py:\d+:test_nested_in_collections
+        x\[1\].b = <\[unset\]>
+        y = <\[unset\]>""".strip('\n'))
     self.assertRegex(output, expected)
 
   def test_update_callable_history(self):
@@ -344,14 +344,13 @@ y = <\[unset\]>
     fdl.update_callable(cfg, test_kwarg_helper)
     cfg.abc = '123'
     output = printing.history_per_leaf_parameter(cfg)
-    expected = r"""
-__fn_or_cls__ = .*test_kwarg_helper .+/printing_test.py:\d+:test_update_callable_history
-  - previously: .*test_helper .+/printing_test.py:\d+:test_update_callable_history
-x = 1 @ .+/printing_test.py:\d+:test_update_callable_history
-y = 2 @ .+/printing_test.py:\d+:test_update_callable_history
-abc = '123' @ .+/printing_test.py:\d+:test_update_callable_history
-kwargs = <\[unset\]>
-""".strip()
+    expected = textwrap.dedent(r"""
+        __fn_or_cls__ = .*test_kwarg_helper .+/printing_test.py:\d+:test_update_callable_history
+          - previously: .*test_helper .+/printing_test.py:\d+:test_update_callable_history
+        x = 1 @ .+/printing_test.py:\d+:test_update_callable_history
+        y = 2 @ .+/printing_test.py:\d+:test_update_callable_history
+        abc = '123' @ .+/printing_test.py:\d+:test_update_callable_history
+        kwargs = <\[unset\]>""".strip('\n'))
     self.assertRegex(output, expected)
 
   def test_materialize_defaults_history(self):
