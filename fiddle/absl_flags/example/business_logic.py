@@ -27,6 +27,7 @@ import dataclasses
 class MyLinearModel:
   w: float
   b: float
+  activation_dtype: str
 
   def __call__(self, x: float) -> float:
     return x * self.w + self.b

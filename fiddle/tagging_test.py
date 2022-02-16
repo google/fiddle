@@ -141,7 +141,7 @@ class TaggingTest(absltest.TestCase):
     tagging.set_tagged(cfg, tag=tst.ParameterDType, value=42)
     self.assertEqual(fdl.build(cfg), {"foo": 42, "bar": 42})
 
-  def test_list_keys(self):
+  def test_list_tags(self):
     cfg = fdl.Config(
         return_kwargs,
         foo=tagging.TaggedValue(tags=[tst.ParameterDType], default=None),
@@ -149,7 +149,7 @@ class TaggingTest(absltest.TestCase):
     tags = tagging.list_tags(cfg)
     self.assertEqual(tags, {tst.LinearParamDType, tst.ParameterDType})
 
-  def test_list_keys_multiple_tags(self):
+  def test_list_tags_multiple_tags(self):
     cfg = fdl.Config(
         return_kwargs,
         foo=tagging.TaggedValue(tags=(tst.ParameterDType, tst.ActivationDType)),
@@ -157,6 +157,11 @@ class TaggingTest(absltest.TestCase):
     tags = tagging.list_tags(cfg)
     self.assertEqual(
         tags, {tst.ParameterDType, tst.ActivationDType, tst.LinearParamDType})
+
+  def test_list_tags_superclasses(self):
+    cfg = tst.LinearParamDType.new()
+    tags = tagging.list_tags(cfg, add_superclasses=True)
+    self.assertEqual(tags, {tst.ParameterDType, tst.LinearParamDType})
 
   def test_set_only_placeholders_in_subtree(self):
     cfg = fdl.Config(

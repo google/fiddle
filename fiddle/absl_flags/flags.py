@@ -130,6 +130,8 @@ from absl import logging
 from fiddle import config
 from fiddle import module_reflection
 from fiddle import printing
+from fiddle import tagging
+from fiddle.experimental import selectors
 
 _FDL_CONFIG = flags.DEFINE_string(
     'fdl_config',
@@ -139,6 +141,11 @@ _FIDDLER = flags.DEFINE_multi_string(
     'fiddler', default=[], help='Fiddlers are functions that tweak a config.')
 _FDL_SET = flags.DEFINE_multi_string(
     'fdl_set', default=[], help='Fiddle configuration settings.')
+_FDL_TAGS_SET = flags.DEFINE_multi_string(
+    'fdl_tags_set',
+    default=[],
+    help='Fiddle tags setting, by name. Typically accessed via the alias '
+    '--fdl_tag.foo.Bar=123')
 _FDL_HELP = flags.DEFINE_bool(
     'fdl_help', False, help='Print out the flags-built config and exit.')
 
@@ -199,7 +206,7 @@ def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
   for flag in _FDL_SET.value:
-    path, value = flag.split(' = ', maxsplit=1)
+    path, value = flag.split('=', maxsplit=1)
     *parents, last = _parse_path(path)
     walk = cfg
     try:
@@ -214,20 +221,38 @@ def apply_overrides_to(cfg: config.Buildable):
 
 
 def _rewrite_fdl_args(args: Sequence[str]) -> List[str]:
-  """Rewrites `--fdl.NAME=VALUE` to `--fdl_set=NAME = VALUE`."""
+  """Rewrites short-form Fiddle flags.
+
+  There are two main rewrites:
+
+    * `--fdl.NAME=VALUE` to `--fdl_set=NAME = VALUE`.
+    * `--fdl_tag.NAME=VALUE` to `--fdl_tags_set=NAME = VALUE`.
+
+  Args:
+    args: Command-line args.
+
+  Returns:
+    Rewritten args.
+  """
 
   def _rewrite(arg: str) -> str:
-    if not arg.startswith('--fdl.'):
+    if arg.startswith('--fdl.') or arg.startswith('--fdl_tag.'):
+      if '=' not in arg:
+        prefix = arg.split('.', maxsplit=1)[0]
+        raise ValueError(
+            f'Fiddle setting must be of the form `{prefix}.NAME=VALUE`; '
+            f'`got: "{arg}".')
+      if arg.startswith('--fdl.'):
+        explicit_name = 'fdl_set'
+      elif arg.startswith('--fdl_tag.'):
+        explicit_name = 'fdl_tags_set'
+      _, arg = arg.split('.', maxsplit=1)  # Strip --fdl. or --fdl_tag. prefix.
+      path, value = arg.split('=', maxsplit=1)
+      rewritten = f'--{explicit_name}={path}={value}'
+      logging.debug('Rewrote flag "%s" to "%s".', arg, rewritten)
+      return rewritten
+    else:
       return arg
-    if '=' not in arg:
-      raise ValueError(
-          'Fiddle settings must be of the form `--fdl.NAME=VALUE`; got: '
-          f'"{arg}".')
-    arg = arg[len('--fdl.'):]  # Strip --fdl. prefix.
-    path, value = arg.split('=', maxsplit=1)
-    rewritten = f'--fdl_set={path} = {value}'
-    logging.debug('Rewrote flag "%s" to "%s".', arg, rewritten)
-    return rewritten
 
   return list(map(_rewrite, args))
 
@@ -244,6 +269,31 @@ def flags_parser(args: Sequence[str]):
     Whatever `absl.app.parse_flags_with_usage` returns. Sorry!
   """
   return app.parse_flags_with_usage(_rewrite_fdl_args(args))
+
+
+def set_tags(cfg: config.Buildable):
+  """Sets tags based on their name, from CLI flags."""
+  all_tags = tagging.list_tags(cfg, add_superclasses=True)
+  for flag in _FDL_TAGS_SET.value:
+    name, value = flag.split('=', maxsplit=1)
+    matching_tags = [tag for tag in all_tags if tag.name == name]
+    if not matching_tags:
+      # TODO: Improve and unify these errors.
+      loose_matches = [
+          tag for tag in all_tags
+          if name.lower().replace('_', '') in tag.name.lower().replace('_', '')
+      ]
+      did_you_mean = f' Did you mean {loose_matches}?' if loose_matches else ''
+      raise ValueError(f'No tags with name {name!r} in config.{did_you_mean}')
+    elif len(matching_tags) > 1:
+      raise EnvironmentError(
+          f'There were multiple tags with name {name}; perhaps some module '
+          'reloading weirdness is going on? This should be very rare. Please '
+          'make sure that you are not dynamically creating subclasses of '
+          '`fdl.Tag` and using 2 instances with the same module and name '
+          'in the configuration.')
+    selectors.select(
+        cfg, tag=matching_tags[0]).set(value=ast.literal_eval(value))
 
 
 def apply_fiddlers_to(cfg: config.Buildable, source_module: Any):
@@ -301,8 +351,12 @@ def create_buildable_from_flags(module: Any) -> config.Buildable:
   else:
     buildable = base_fn()
   apply_fiddlers_to(buildable, source_module=module)
+  set_tags(buildable)
   apply_overrides_to(buildable)
   if _FDL_HELP.value:
+    print('Tags (override as --fdl_tag.<name>=<value>):\n\n', file=sys.stderr)
+    for tag in tagging.list_tags(buildable):
+      print(f' - {tag.name} ({tag.description})', file=sys.stderr)
     print(
         'Config values (override as --fdl.<name>=<value>):\n\n ',
         printing.as_str_flattened(buildable).replace('\n', '\n  '),

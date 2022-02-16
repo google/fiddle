@@ -60,6 +60,7 @@ with the value.
 from __future__ import annotations
 
 import copy
+import inspect
 from typing import Any, Collection, FrozenSet, Generic, Set, TypeVar, Union
 
 from fiddle import config
@@ -211,11 +212,16 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
   tree.map_structure(map_fn, root.__arguments__)
 
 
-def list_tags(root: config.Buildable) -> FrozenSet[TagType]:
+def list_tags(
+    root: config.Buildable,
+    add_superclasses=False,
+) -> FrozenSet[TagType]:
   """Lists all tags in a buildable.
 
   Args:
     root: The root of a DAG of `Buildable`s.
+    add_superclasses: For tags that inherit from other tags, add the
+      superclasses as well.
 
   Returns:
     Set of tags used in this buildable.
@@ -234,4 +240,12 @@ def list_tags(root: config.Buildable) -> FrozenSet[TagType]:
     tree.map_structure(map_fn, node.__arguments__)
 
   _inner(root)
+
+  # Add superclasses if desired.
+  if add_superclasses:
+    for tag in list(tags):
+      for base in inspect.getmro(tag):
+        if base not in tags and base is not Tag and issubclass(base, Tag):
+          tags.add(base)
+
   return frozenset(tags)

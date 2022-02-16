@@ -17,13 +17,17 @@
 
 import fiddle as fdl
 from fiddle.absl_flags.example import business_logic
+from fiddle.absl_flags.example import tags
 from fiddle.experimental import auto_config
 
 
 @auto_config.auto_config
 def simple(filename="data.txt") -> fdl.Config:
   """A simple base configuration-generating function."""
-  model = business_logic.MyLinearModel(w=-3.8, b=0.5)
+  model = business_logic.MyLinearModel(
+      w=-3.8,
+      b=0.5,
+      activation_dtype=tags.ActivationDtype.new(default="float32"))
   loader = business_logic.MyDataLoader(filename=filename)
   return business_logic.BulkInferenceRunner(model, loader)
 
