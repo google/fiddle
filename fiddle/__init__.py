@@ -21,6 +21,7 @@ from fiddle.config import BuildError
 from fiddle.config import Config
 from fiddle.config import Partial
 from fiddle.config import update_callable
+from fiddle.materialize import materialize_defaults
 from fiddle.tagging import set_tagged
 from fiddle.tagging import Tag
 from fiddle.tagging import TaggedValue

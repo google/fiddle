@@ -16,6 +16,7 @@
 """Tests for print."""
 
 import dataclasses
+import textwrap
 from typing import Union
 
 from absl.testing import absltest
@@ -283,6 +284,21 @@ x: typing.Union[int, str] = 1
 """.strip()
     self.assertEqual(output, expected)
 
+  def test_materialized_default_values(self):
+
+    def test_fn(w, x, y=3, z='abc'):
+      del w, x, y, z  # Unused.
+
+    cfg = fdl.Config(test_fn, 1)
+    fdl.materialize_defaults(cfg)
+    output = printing.as_str_flattened(cfg)
+    expected = textwrap.dedent("""\
+        w = 1
+        x = <[unset]>
+        y = 3
+        z = 'abc'""")
+    self.assertEqual(output, expected)
+
 
 class HistoryPerLeafParamTests(absltest.TestCase):
 
@@ -336,6 +352,25 @@ y = 2 @ .+/printing_test.py:\d+:test_update_callable_history
 abc = '123' @ .+/printing_test.py:\d+:test_update_callable_history
 kwargs = <\[unset\]>
 """.strip()
+    self.assertRegex(output, expected)
+
+  def test_materialize_defaults_history(self):
+
+    def test_defaulting_helper(w, x, y=1, z=2):
+      del w, x, y, z  # Unused.
+
+    cfg = fdl.Config(test_defaulting_helper, w=0)
+    cfg.y = 5
+    cfg.y = 6
+    fdl.materialize_defaults(cfg)
+    output = printing.history_per_leaf_parameter(cfg)
+    expected = textwrap.dedent(r"""
+        __fn_or_cls__ = .*test_defaulting_helper .+/printing_test.py:\d+:test_materialize_defaults_history
+        w = 0 @ .*/printing_test.py:\d+:test_materialize_defaults_history
+        y = 6 @ .*/printing_test.py:\d+:test_materialize_defaults_history
+          - previously: 5 .*
+        z = 2 @ .*/printing_test.py:\d+:test_materialize_defaults_history
+        x = <\[unset\]>""".strip('\n'))
     self.assertRegex(output, expected)
 
 

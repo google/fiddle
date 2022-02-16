@@ -188,6 +188,21 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(2, obj['x'])
     self.assertEqual('xyz', obj['y'])
 
+  def test_config_defaults_not_materialized(self):
+
+    def my_func(x: int, y: str = 'abc', z: float = 2.0):  # pylint: disable=unused-argument
+      return locals()
+
+    cfg = config.Config(my_func)
+
+    self.assertEqual('abc', cfg.y)  # Should return the default.
+    self.assertEqual({}, cfg.__arguments__)  # but not materialized.
+
+    cfg.x = 42
+    output = config.build(cfg)
+
+    self.assertEqual({'x': 42, 'y': 'abc', 'z': 2.0}, output)
+
   def test_nested_configs(self):
     fn_config1_args = {
         'arg1': 'innermost1',
