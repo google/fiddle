@@ -401,6 +401,22 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(shared_instance.arg1, 'arg1')
     self.assertEqual(separate_instance.arg1, 'separate_arg1')
 
+  @absltest.expectedFailure  # TODO: Fix instance sharing bug.
+  def test_instance_sharing_collections(self):
+    child_configs = [
+        config.Config(test_fn, 1, 'a'),
+        config.Config(test_fn, 2, 'b')
+    ]
+    cfg = config.Config(TestClass)
+    cfg.arg1 = child_configs
+    cfg.arg2 = child_configs
+    obj = config.build(cfg)
+
+    self.assertIsInstance(obj, TestClass)
+    self.assertIs(obj.arg1, obj.arg2)
+    self.assertIs(obj.arg1[0], obj.arg2[0])
+    self.assertIs(obj.arg1[1], obj.arg2[1])
+
   def test_shallow_copy(self):
     class_config = config.Config(TestClass, 'arg1', 'arg2')
     fn_config = config.Config(test_fn, class_config, 'fn_arg2')
