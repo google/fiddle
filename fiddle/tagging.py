@@ -118,6 +118,16 @@ class TagType(type):
   def __repr__(cls) -> str:  # pylint: disable=invalid-repr-returned
     return cls.name
 
+
+class Tag(metaclass=TagType):
+  """Metadata associated with a Fiddle configurable value.
+
+  To see a usage example, please see the documentation on the tagging module.
+
+  Note: Tags cannot be instantiated.
+  """
+
+  @classmethod
   def new(cls, default: Any = NO_VALUE) -> TaggedValue:
     """Creates a new `TaggedValue` with `cls` as the only tag.
 
@@ -135,15 +145,6 @@ class TagType(type):
       A TaggedValue tagged with the tag `cls`.
     """
     return TaggedValue(tags=(cls,), default=default)
-
-
-class Tag(metaclass=TagType):
-  """Metadata associated with a Fiddle configurable value.
-
-  To see a usage example, please see the documentation on the tagging module.
-
-  Note: Tags cannot be instantiated.
-  """
 
 
 def tagvalue_fn(tags: Set[TagType], value: Any = NO_VALUE) -> Any:
