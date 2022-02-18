@@ -179,8 +179,10 @@ class AutoConfigTest(parameterized.TestCase):
     for builtin_type in (range, dict):
       self.assertFalse(auto_config._is_auto_config_eligible(builtin_type))
     # Some common builtins.
-    for builtin in (list, tuple, sum, any, all):
+    for builtin in (list, tuple, sum, any, all, iter):
       self.assertFalse(auto_config._is_auto_config_eligible(builtin))
+    self.assertFalse(auto_config._is_auto_config_eligible([].append))
+    self.assertFalse(auto_config._is_auto_config_eligible({}.keys))
     # A method.
     test_class = TestClass(1, 2)
     self.assertFalse(auto_config._is_auto_config_eligible(test_class.method))
