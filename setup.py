@@ -42,11 +42,13 @@ setup(
     package_data={'testdata': ['testdata/*.fiddle']},
     install_requires=[
         'dm-tree',
+        'typing-extensions',
     ],
     extras_require={
         'testing': [
             'absl-py',
             'pytest',
+            'seqio',
         ]
     },
     description='Fiddle: A Python-first configuration library',
