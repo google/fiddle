@@ -100,6 +100,16 @@ def partial_config() -> fdl.Config[Baz]:
   return fdl.Partial(Baz, foo=x, bar=fdl.Partial(Bar, foo1=x))
 
 
+# Depending on how the test harness invokes this test, the expected values may
+# or may not include a module name.
+if __name__ == "__main__":
+  this_module_import = ""
+  this_module_prefix = ""
+else:
+  this_module_import = "from fiddle.codegen import codegen_test"
+  this_module_prefix = "codegen_test."
+
+
 class CodegenTest(absltest.TestCase):
 
   def test_map_buildables_plain_tree_preorder(self):
@@ -132,21 +142,22 @@ class CodegenTest(absltest.TestCase):
   def test_codegen_dot_syntax_shared(self):
     cfg = shared_config()
     result = codegen.codegen_dot_syntax(cfg)
-    expected = """
+    expected = f"""
 import fiddle as fdl
+{this_module_import}
 
 
 def build_config():
-  shared_foo = fdl.Config(Foo)
+  shared_foo = fdl.Config({this_module_prefix}Foo)
   shared_foo.a = 1
 
-  root = fdl.Config(Baz)
+  root = fdl.Config({this_module_prefix}Baz)
   root.foo = shared_foo
 
-  root.bar = fdl.Config(Bar)
+  root.bar = fdl.Config({this_module_prefix}Bar)
   root.bar.foo2 = shared_foo
 
-  root.bar.foo1 = fdl.Config(Foo)
+  root.bar.foo1 = fdl.Config({this_module_prefix}Foo)
   root.bar.foo1.a = 2
 
   return root
@@ -158,26 +169,27 @@ def build_config():
   def test_codegen_multi_shared(self):
     cfg = multi_shared_config()
     result = codegen.codegen_dot_syntax(cfg)
-    expected = """
+    expected = f"""
 import fiddle as fdl
+{this_module_import}
 
 
 def build_config():
-  shared_foo = fdl.Config(Foo)
+  shared_foo = fdl.Config({this_module_prefix}Foo)
   shared_foo.a = 1
 
-  shared_foo_2 = fdl.Config(Foo)
+  shared_foo_2 = fdl.Config({this_module_prefix}Foo)
   shared_foo_2.a = 2
   shared_foo_2.leaves = [shared_foo]
 
-  root = fdl.Config(Foo)
+  root = fdl.Config({this_module_prefix}Foo)
   root.a = 3
   root.leaves = [shared_foo_2, NotImplemented, NotImplemented]  # fdl.Config sub-nodes will replace NotImplemented
 
-  root.leaves[1] = fdl.Config(Foo)
+  root.leaves[1] = fdl.Config({this_module_prefix}Foo)
   root.leaves[1].a = 4
 
-  root.leaves[2] = fdl.Config(Foo)
+  root.leaves[2] = fdl.Config({this_module_prefix}Foo)
   root.leaves[2].a = 5
   root.leaves[2].leaves = [shared_foo, shared_foo_2]
 
@@ -224,27 +236,28 @@ def build_config():
   def test_codegen_unshared_child_of_shared(self):
     cfg = unshared_child_of_shared()
     result = codegen.codegen_dot_syntax(cfg)
-    expected = """
+    expected = f"""
 import fiddle as fdl
+{this_module_import}
 
 
 def build_config():
-  shared_foo = fdl.Config(Foo)
+  shared_foo = fdl.Config({this_module_prefix}Foo)
   shared_foo.a = 2
 
-  shared_foo_2 = fdl.Config(Foo)
+  shared_foo_2 = fdl.Config({this_module_prefix}Foo)
   shared_foo_2.a = 1
   shared_foo_2.leaves = [shared_foo]
 
-  root = fdl.Config(Foo)
+  root = fdl.Config({this_module_prefix}Foo)
   root.a = 3
   root.leaves = [NotImplemented, NotImplemented]  # fdl.Config sub-nodes will replace NotImplemented
 
-  root.leaves[0] = fdl.Config(Foo)
+  root.leaves[0] = fdl.Config({this_module_prefix}Foo)
   root.leaves[0].a = 4
   root.leaves[0].leaves = [shared_foo_2]
 
-  root.leaves[1] = fdl.Config(Foo)
+  root.leaves[1] = fdl.Config({this_module_prefix}Foo)
   root.leaves[1].a = 5
   root.leaves[1].leaves = [shared_foo_2]
 
@@ -257,18 +270,19 @@ def build_config():
   def test_codegen_partial(self):
     cfg = partial_config()
     result = codegen.codegen_dot_syntax(cfg)
-    expected = """
+    expected = f"""
 import fiddle as fdl
+{this_module_import}
 
 
 def build_config():
-  shared_foo = fdl.Partial(Foo)
+  shared_foo = fdl.Partial({this_module_prefix}Foo)
   shared_foo.a = 1
 
-  root = fdl.Partial(Baz)
+  root = fdl.Partial({this_module_prefix}Baz)
   root.foo = shared_foo
 
-  root.bar = fdl.Partial(Bar)
+  root.bar = fdl.Partial({this_module_prefix}Bar)
   root.bar.foo1 = shared_foo
 
   return root
@@ -295,15 +309,16 @@ def build_config():
   def test_dict_value(self):
     cfg = fdl.Config(identity, x={"foo": fdl.Config(Foo, a=1)})
     code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
-    expected = """
+    expected = f"""
 import fiddle as fdl
+{this_module_import}
 
 
 def build_config():
-  root = fdl.Config(identity)
-  root.x = {'foo': NotImplemented}  # fdl.Config sub-nodes will replace NotImplemented
+  root = fdl.Config({this_module_prefix}identity)
+  root.x = {{'foo': NotImplemented}}  # fdl.Config sub-nodes will replace NotImplemented
 
-  root.x['foo'] = fdl.Config(Foo)
+  root.x['foo'] = fdl.Config({this_module_prefix}Foo)
   root.x['foo'].a = 1
 
   return root
@@ -311,15 +326,16 @@ def build_config():
     self.assertSequenceEqual(tokens(code), tokens(expected), code)
 
   def test_deeply_nested_constant(self):
-    cfg = fdl.Config(identity, x={"foo": [1, 2], "bar": [3, 4]})
+    cfg = fdl.Config(identity, x={"bar": [3, 4], "foo": [1, 2]})
     code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
-    expected = """
+    expected = f"""
 import fiddle as fdl
+{this_module_import}
 
 
 def build_config():
-  root = fdl.Config(identity)
-  root.x = {'bar': [3, 4], 'foo': [1, 2]}
+  root = fdl.Config({this_module_prefix}identity)
+  root.x = {{'bar': [3, 4], 'foo': [1, 2]}}
 
   return root
     """
