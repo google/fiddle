@@ -26,11 +26,12 @@ def _make_meta_call_wrapper(cls: Type[object]):
   This function works in tandem with `partialclass` below. It wraps
   `type(cls).__call__`, which is in general responsible for creating a new
   instance of `cls` or one of its subclasses. In cases where the to-be-created
-  class is Gin's dynamically-subclassed version of `cls`, the wrapper here
+  class is Fiddle's dynamically-subclassed version of `cls`, the wrapper here
   instead returns an instance of `cls`, which isn't a dynamic subclass and more
-  generally doesn't have any Gin-related magic applied. This means the instance
-  is compatible with pickling, and is totally transparent to any inspections by
-  user code (since it really is an instance of the original type).
+  generally doesn't have any Fiddle-related magic applied. This means the
+  instance is compatible with pickling, and is totally transparent to any
+  inspections by user code (since it really is an instance of the original
+  type).
 
   Note that the resulting partial class type itself is not pickle-compatible,
   only instances created from it (and then only if the partial class was not
@@ -47,12 +48,12 @@ def _make_meta_call_wrapper(cls: Type[object]):
   @functools.wraps(cls_meta.__call__)
   def meta_call_wrapper(new_cls: Type[object], *args, **kwargs):
     # If `new_cls` (the to-be-created class) is a direct subclass of `cls`, we
-    # can be sure that it's Gin's dynamically created subclass. In this case,
+    # can be sure that it's Fiddle's dynamically created subclass. In this case,
     # we directly create an instance of `cls` instead. Otherwise, some further
     # dynamic subclassing by user code has likely occurred, and we just create
     # an instance of `new_cls` to avoid issues. This instance is likely not
     # compatible with pickle, but that's generally true of dynamically created
-    # subclasses and would require some user workaround with or without Gin.
+    # subclasses and would require some user workaround with or without Fiddle.
     if new_cls.__bases__ == (cls,):
       new_cls = cls
     return cls_meta.__call__(new_cls, *args, **kwargs)
