@@ -166,7 +166,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if param is not None:
       if param.kind == param.POSITIONAL_ONLY:
         # TODO: Add positional-only arg support.
-        raise NotImplementedError('Positional only arguments not supported.')
+        raise NotImplementedError(
+            'Positional only arguments not supported. '
+            f'Tried to set {name!r} on {self.__fn_or_cls__}')
       elif param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
         # Just pretend it doesn't correspond to a valid parameter name... below
         # a TypeError will be thrown unless there is a **kwargs parameter.

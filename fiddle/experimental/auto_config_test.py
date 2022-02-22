@@ -28,11 +28,11 @@ from fiddle.experimental import auto_config
 from fiddle.experimental import autobuilders as ab
 
 
-def test_fn(arg, kwarg='test'):
+def basic_fn(arg, kwarg='test'):
   return {'arg': arg, 'kwarg': kwarg}
 
 
-def test_fn_with_kwargs(**kwargs):
+def fn_with_kwargs(**kwargs):
   return {'kwargs': kwargs}
 
 
@@ -46,7 +46,7 @@ class TestClass:
 
 
 def explicit_config_building_fn(x: int) -> config.Config:
-  return config.Config(test_fn, 5, kwarg=x)
+  return config.Config(basic_fn, 5, kwarg=x)
 
 
 def pass_through(arg):
@@ -80,11 +80,11 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(TestClass(1, 2), test_class_config())
 
   def test_create_basic_partial(self):
-    expected_config = config.Partial(test_fn, 1, kwarg='kwarg')
+    expected_config = config.Partial(basic_fn, 1, kwarg='kwarg')
 
     @auto_config.auto_config
     def test_fn_config():
-      return functools.partial(test_fn, 1, 'kwarg')
+      return functools.partial(basic_fn, 1, 'kwarg')
 
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
@@ -114,7 +114,7 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_calling_auto_config(self):
     expected_config = config.Config(
-        test_fn, 1, kwarg=config.Config(TestClass, 1, 2))
+        basic_fn, 1, kwarg=config.Config(TestClass, 1, 2))
 
     @auto_config.auto_config
     def test_class_config():
@@ -122,7 +122,7 @@ class AutoConfigTest(parameterized.TestCase):
 
     @auto_config.auto_config
     def test_fn_config():
-      return test_fn(1, test_class_config())
+      return basic_fn(1, test_class_config())
 
     self.assertEqual(expected_config, test_fn_config.as_buildable())
     self.assertEqual({
@@ -132,11 +132,11 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_nested_calls(self):
     expected_config = config.Config(
-        TestClass, 1, arg2=config.Config(test_fn, 2, 'kwarg'))
+        TestClass, 1, arg2=config.Config(basic_fn, 2, 'kwarg'))
 
     @auto_config.auto_config
     def test_class_config():
-      return TestClass(1, test_fn(2, 'kwarg'))
+      return TestClass(1, basic_fn(2, 'kwarg'))
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
     self.assertEqual(
@@ -147,7 +147,7 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_calling_explicit_function(self):
     expected_config = config.Config(
-        TestClass, 1, arg2=config.Config(test_fn, 5, 10))
+        TestClass, 1, arg2=config.Config(basic_fn, 5, 10))
 
     @auto_config.auto_config
     def test_nested_call():
@@ -157,11 +157,11 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_reference_nonlocal(self):
     nonlocal_var = 3
-    expected_config = config.Config(test_fn, 1, kwarg=nonlocal_var)
+    expected_config = config.Config(basic_fn, 1, kwarg=nonlocal_var)
 
     @auto_config.auto_config
     def test_fn_config():
-      return test_fn(1, nonlocal_var)
+      return basic_fn(1, nonlocal_var)
 
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
@@ -194,12 +194,12 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_autobuilders_in_auto_config(self):
     expected_config = config.Config(
-        test_fn, arg=ab.config(TestClass, require_skeleton=False))
+        basic_fn, arg=ab.config(TestClass, require_skeleton=False))
 
     @auto_config.auto_config
     def autobuilder_using_fn():
       x = ab.config(TestClass, require_skeleton=False)
-      return test_fn(x)
+      return basic_fn(x)
 
     self.assertEqual(expected_config, autobuilder_using_fn.as_buildable())
 
@@ -411,6 +411,7 @@ class AutoConfigTest(parameterized.TestCase):
         auto_config.UnsupportedLanguageConstructError,
         r'Async function definitions are not supported by auto_config\.'):
       auto_config.auto_config(test_config)
+
 
 if __name__ == '__main__':
   absltest.main()

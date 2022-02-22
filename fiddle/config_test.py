@@ -40,19 +40,19 @@ class TestClass:
     return 4  # A random number (https://xkcd.com/221/)
 
 
-def test_fn(arg1, arg2, kwarg1=None, kwarg2=None):  # pylint: disable=unused-argument
+def basic_fn(arg1, arg2, kwarg1=None, kwarg2=None):  # pylint: disable=unused-argument
   return locals()
 
 
-def test_fn_with_var_args(arg1, *args, kwarg1=None):  # pylint: disable=unused-argument
+def fn_with_var_args(arg1, *args, kwarg1=None):  # pylint: disable=unused-argument
   return locals()
 
 
-def test_fn_with_var_kwargs(arg1, kwarg1=None, **kwargs):  # pylint: disable=unused-argument
+def fn_with_var_kwargs(arg1, kwarg1=None, **kwargs):  # pylint: disable=unused-argument
   return locals()
 
 
-def test_fn_with_var_args_and_kwargs(arg1, *args, kwarg1=None, **kwargs):  # pylint: disable=unused-argument
+def fn_with_var_args_and_kwargs(arg1, *args, kwarg1=None, **kwargs):  # pylint: disable=unused-argument
   return locals()
 
 
@@ -168,7 +168,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(instance.kwarg2, 'kwarg2')
 
   def test_config_for_functions(self):
-    fn_config = config.Config(test_fn, 1, kwarg2='kwarg2')
+    fn_config = config.Config(basic_fn, 1, kwarg2='kwarg2')
     self.assertEqual(fn_config.arg1, 1)
     self.assertEqual(fn_config.kwarg2, 'kwarg2')
     fn_config.arg1 = 'arg1'
@@ -185,7 +185,7 @@ class ConfigTest(absltest.TestCase):
     })
 
   def test_config_for_functions_with_var_args(self):
-    fn_config = config.Config(test_fn_with_var_args, 'arg1', kwarg1='kwarg1')
+    fn_config = config.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')
     fn_args = config.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
@@ -198,7 +198,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_config_for_functions_with_var_kwargs(self):
     fn_config = config.Config(
-        test_fn_with_var_kwargs,
+        fn_with_var_kwargs,
         'arg1',
         kwarg1='kwarg1',
         kwarg2='kwarg2',
@@ -221,7 +221,7 @@ class ConfigTest(absltest.TestCase):
     })
 
   def test_config_for_functions_with_var_args_and_kwargs(self):
-    fn_config = config.Config(test_fn_with_var_args_and_kwargs, arg1='arg1')
+    fn_config = config.Config(fn_with_var_args_and_kwargs, arg1='arg1')
     fn_args = config.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
 
@@ -353,12 +353,12 @@ class ConfigTest(absltest.TestCase):
         'kwarg1': 'kw1',
         'kwarg2': 'kw2'
     }
-    fn_config1 = config.Config(test_fn, *fn_config1_args.values())
+    fn_config1 = config.Config(basic_fn, *fn_config1_args.values())
 
     class_config = config.Config(
         TestClass, arg1=config.Partial(fn_config1), arg2=fn_config1)
     fn_config2 = config.Config(
-        test_fn, arg1=config.Partial(class_config), arg2=class_config)
+        basic_fn, arg1=config.Partial(class_config), arg2=class_config)
 
     fn_config2_args = config.build(fn_config2)
 
@@ -384,7 +384,7 @@ class ConfigTest(absltest.TestCase):
     # Changing copied config parameters doesn't change the original config.
     self.assertEqual(class_config.arg1, 'arg1')
 
-    fn_config = config.Config(test_fn, class_config_copy, {
+    fn_config = config.Config(basic_fn, class_config_copy, {
         'key1': [class_config, class_config],
         'key2': (class_config,)
     })
@@ -404,8 +404,8 @@ class ConfigTest(absltest.TestCase):
   @absltest.expectedFailure  # TODO: Fix instance sharing bug.
   def test_instance_sharing_collections(self):
     child_configs = [
-        config.Config(test_fn, 1, 'a'),
-        config.Config(test_fn, 2, 'b')
+        config.Config(basic_fn, 1, 'a'),
+        config.Config(basic_fn, 2, 'b')
     ]
     cfg = config.Config(TestClass)
     cfg.arg1 = child_configs
@@ -419,7 +419,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_shallow_copy(self):
     class_config = config.Config(TestClass, 'arg1', 'arg2')
-    fn_config = config.Config(test_fn, class_config, 'fn_arg2')
+    fn_config = config.Config(basic_fn, class_config, 'fn_arg2')
     fn_config_copy = copy.copy(fn_config)
     # Changing the copy doesn't change the original.
     fn_config_copy.arg2 = 'fn_arg2_copy'
@@ -430,7 +430,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_deep_copy(self):
     class_config = config.Config(TestClass, 'arg1', 'arg2')
-    fn_config = config.Config(test_fn, class_config, 'fn_arg2')
+    fn_config = config.Config(basic_fn, class_config, 'fn_arg2')
     fn_config_copy = copy.deepcopy(fn_config)
     # Changing the copy doesn't change the original.
     fn_config_copy.arg2 = 'fn_arg2_copy'
@@ -441,7 +441,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_deep_copy_preserves_instance_sharing(self):
     class_config = config.Config(TestClass, 'arg1', 'arg2')
-    fn_config = config.Config(test_fn, arg1=class_config, arg2=class_config)
+    fn_config = config.Config(basic_fn, arg1=class_config, arg2=class_config)
     self.assertIs(fn_config.arg1, fn_config.arg2)
     fn_config_copy = copy.deepcopy(fn_config)
     self.assertIsNot(fn_config.arg1, fn_config_copy.arg1)
@@ -450,7 +450,7 @@ class ConfigTest(absltest.TestCase):
   def test_deep_copy_partials(self):
     class_partial = config.Partial(TestClass, 'arg1', 'arg2')
     fn_config = config.Config(
-        test_fn, arg1=class_partial(), arg2=class_partial())
+        basic_fn, arg1=class_partial(), arg2=class_partial())
     self.assertIsNot(fn_config.arg1, fn_config.arg2)
     fn_config_copy = copy.deepcopy(fn_config)
     self.assertIsNot(fn_config_copy.arg1, fn_config_copy.arg2)
@@ -467,7 +467,7 @@ class ConfigTest(absltest.TestCase):
     self.assertNotEqual(cfg2, partial)
 
   def test_unsetting_argument(self):
-    fn_config = config.Config(test_fn)
+    fn_config = config.Config(basic_fn)
     fn_config.arg1 = 3
     fn_config.arg2 = 4
 
@@ -486,7 +486,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(4, fn_config.arg2)
 
   def test_dir_simple(self):
-    fn_config = config.Config(test_fn)
+    fn_config = config.Config(basic_fn)
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(fn_config))
 
   def test_dir_cls(self):
@@ -494,7 +494,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(cfg))
 
   def test_dir_var_args_and_kwargs(self):
-    varargs_config = config.Config(test_fn_with_var_args_and_kwargs)
+    varargs_config = config.Config(fn_with_var_args_and_kwargs)
     varargs_config.abc = '123'
     self.assertEqual(['abc', 'arg1', 'kwarg1'], dir(varargs_config))
 
@@ -568,8 +568,8 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(repr(class_config), expected_repr)
 
   def test_repr_fn_config(self):
-    fn_config = config.Config(test_fn, 1, 2, kwarg1='kwarg1')
-    expected_repr = "<Config[test_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
+    fn_config = config.Config(basic_fn, 1, 2, kwarg1='kwarg1')
+    expected_repr = "<Config[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_config), expected_repr)
 
   def test_repr_class_partial(self):
@@ -578,8 +578,8 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(repr(class_partial), expected_repr)
 
   def test_repr_fn_partial(self):
-    fn_partial = config.Partial(test_fn, 1, 2, kwarg1='kwarg1')
-    expected_repr = "<Partial[test_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
+    fn_partial = config.Partial(basic_fn, 1, 2, kwarg1='kwarg1')
+    expected_repr = "<Partial[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_partial), expected_repr)
 
   def test_nonexistent_attribute_error(self):
@@ -592,13 +592,13 @@ class ConfigTest(absltest.TestCase):
   def test_nonexistent_parameter_error(self):
     class_config = config.Config(TestClass)
     expected_msg = (r"No parameter named 'nonexistent_arg' exists for "
-                    r"<class '__main__.TestClass'>; valid parameter names: "
+                    r"<class '.*\.TestClass'>; valid parameter names: "
                     r'arg1, arg2, kwarg1, kwarg2\.')
     with self.assertRaisesRegex(TypeError, expected_msg):
       class_config.nonexistent_arg = 'error!'
 
   def test_nonexistent_var_args_parameter_error(self):
-    fn_config = config.Config(test_fn_with_var_args)
+    fn_config = config.Config(fn_with_var_args)
     expected_msg = (r'Variadic arguments \(e.g. \*args\) are not supported\.')
     with self.assertRaisesRegex(TypeError, expected_msg):
       fn_config.args = (1, 2, 3)
@@ -607,7 +607,7 @@ class ConfigTest(absltest.TestCase):
     expected_msg = (r'Variable positional arguments \(aka `\*args`\) not '
                     r'supported\.')
     with self.assertRaisesRegex(NotImplementedError, expected_msg):
-      config.Config(test_fn_with_var_args, 1, 2, 3)
+      config.Config(fn_with_var_args, 1, 2, 3)
 
   def test_build_inside_build(self):
 
@@ -719,7 +719,7 @@ class ConfigTest(absltest.TestCase):
     pickle.dumps(config.Config(_test_fn_unserializable_default))
 
   def test_build_raises_nice_error_too_few_args(self):
-    cfg = config.Config(test_fn, config.Config(TestClass, 1), 2)
+    cfg = config.Config(basic_fn, config.Config(TestClass, 1), 2)
     with self.assertRaisesRegex(config.BuildError, '.*TestClass.*') as e:
       config.build(cfg)
     self.assertIs(e.exception.buildable, cfg.arg1)
@@ -742,9 +742,9 @@ class ConfigTest(absltest.TestCase):
 
   def test_build_error_path(self):
     # This will raise an error, because it doesn't have one arg populated.
-    sub_cfg = config.Config(test_fn, 1)
+    sub_cfg = config.Config(basic_fn, 1)
     sub_dict = {'a': 0, 'b': 2, 'c': sub_cfg, 'd': 10}
-    cfg = config.Config(test_fn_with_var_kwargs, [1, sub_dict])
+    cfg = config.Config(fn_with_var_kwargs, [1, sub_dict])
 
     with self.assertRaises(config.BuildError) as e:
       config.build(cfg)
@@ -782,7 +782,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(3, output)
 
   def test_update_callable(self):
-    cfg = config.Config(test_fn, 1, 'xyz', kwarg1='abc')
+    cfg = config.Config(basic_fn, 1, 'xyz', kwarg1='abc')
     config.update_callable(cfg, TestClass)
     cfg.kwarg2 = '123'
     obj = config.build(cfg)
@@ -793,7 +793,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual('123', obj.kwarg2)
 
   def test_update_callable_invalid_arg(self):
-    cfg = config.Config(test_fn_with_var_kwargs, abc='123', xyz='321')
+    cfg = config.Config(fn_with_var_kwargs, abc='123', xyz='321')
     with self.assertRaisesRegex(TypeError,
                                 r"have invalid arguments \['abc', 'xyz'\]"):
       config.update_callable(cfg, TestClass)
@@ -801,7 +801,7 @@ class ConfigTest(absltest.TestCase):
   def test_update_callable_new_kwargs(self):
     cfg = config.Config(TestClass)
     cfg.arg1 = 1
-    config.update_callable(cfg, test_fn_with_var_kwargs)
+    config.update_callable(cfg, fn_with_var_kwargs)
     cfg.abc = '123'  # A **kwargs value should now be allowed.
     self.assertEqual({
         'arg1': 1,
@@ -812,10 +812,10 @@ class ConfigTest(absltest.TestCase):
     }, config.build(cfg))
 
   def test_update_callable_varargs(self):
-    cfg = config.Config(test_fn_with_var_kwargs, 1, 2)
+    cfg = config.Config(fn_with_var_kwargs, 1, 2)
     with self.assertRaisesRegex(NotImplementedError,
                                 'Variable positional arguments'):
-      config.update_callable(cfg, test_fn_with_var_args_and_kwargs)
+      config.update_callable(cfg, fn_with_var_args_and_kwargs)
 
 
 if __name__ == '__main__':

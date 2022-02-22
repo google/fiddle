@@ -49,7 +49,7 @@ class TestNamedTuple(typing.NamedTuple):
   kwarg2: str = 'default'
 
 
-def test_function(arg1, arg2, kwarg1=None, kwarg2=None):
+def basic_function(arg1, arg2, kwarg1=None, kwarg2=None):
   return (arg1, arg2, kwarg1, kwarg2)
 
 

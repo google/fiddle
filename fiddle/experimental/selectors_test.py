@@ -23,7 +23,7 @@ import fiddle as fdl
 from fiddle.experimental import selectors
 
 
-def test_init_fn(rng, shape, dtype):
+def fake_init_fn(rng, shape, dtype):
   del rng, shape, dtype  # unused
   return 1234
 
@@ -70,7 +70,7 @@ class FakeEncoderDecoder:
 def encoder_decoder_config() -> fdl.Config[FakeEncoderDecoder]:
   # This config node would usually not be shared, but is here so that we can
   # test how seen nodes are only visited once for efficiency.
-  bias_init = fdl.Partial(test_init_fn, None, None, None)
+  bias_init = fdl.Partial(fake_init_fn, None, None, None)
   encoder_cfg = fdl.Config(
       FakeEncoder,
       attention=fdl.Config(Attention, "float32", "kernel1", bias_init),
@@ -111,8 +111,8 @@ class SelectionTest(absltest.TestCase):
 
   def test_matches_function_call(self):
     cfg = encoder_decoder_config()
-    for cfg_node in selectors.select(cfg, test_init_fn):
-      self.assertIs(cfg_node.__fn_or_cls__, test_init_fn)
+    for cfg_node in selectors.select(cfg, fake_init_fn):
+      self.assertIs(cfg_node.__fn_or_cls__, fake_init_fn)
 
   def test___iter__(self):
     cfg = encoder_decoder_config()
@@ -128,7 +128,7 @@ class SelectionTest(absltest.TestCase):
     self.assertLen(list(selectors.select(cfg, CrossAttention)), 1)
 
     # The shared kernel init node is only visited once.
-    self.assertLen(list(selectors.select(cfg, test_init_fn)), 1)
+    self.assertLen(list(selectors.select(cfg, fake_init_fn)), 1)
 
   def test_setattr(self):
     cfg = encoder_decoder_config()

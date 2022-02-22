@@ -28,27 +28,27 @@ class Unserializable:
     raise NotImplementedError()
 
 
-def test_fn(arg1):
+def identity_fn(arg1):
   return arg1
 
 
 class SerializationTest(absltest.TestCase):
 
   def test_pickling_non_serializable_history_deepcopy_default(self):
-    cfg = fdl.Config(test_fn, arg1=Unserializable())
+    cfg = fdl.Config(identity_fn, arg1=Unserializable())
     cfg.arg1 = 4
     serialization.clear_argument_history(cfg)
     with self.assertRaises(NotImplementedError):
       pickle.dumps(cfg)
 
   def test_pickling_non_serializable_history(self):
-    cfg = fdl.Config(test_fn, arg1=Unserializable())
+    cfg = fdl.Config(identity_fn, arg1=Unserializable())
     cfg.arg1 = 4
     cfg = serialization.clear_argument_history(cfg)
     pickle.dumps(cfg)
 
   def test_pickling_non_serializable_history_mutation(self):
-    cfg = fdl.Config(test_fn, arg1=Unserializable())
+    cfg = fdl.Config(identity_fn, arg1=Unserializable())
     cfg.arg1 = 4
     serialization.clear_argument_history(cfg, deepcopy=False)
     pickle.dumps(cfg)
