@@ -107,13 +107,8 @@ run_part_2(fdl.build(my_program_part_2))
 
 ## Acknowledgements
 
-This implementation has drawn inspiration from multiple sources, including:
-
- - [T5X](https://github.com/google-research/t5x)
- - JAX Borealis
- - And many others!
-
-Thank you!
+This implementation has drawn inspiration from multiple sources, including
+[T5X](https://github.com/google-research/t5x), among others. Thank you!
 """
 
 import ast
