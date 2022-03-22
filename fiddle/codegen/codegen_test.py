@@ -93,7 +93,7 @@ def unshared_child_of_shared() -> fdl.Config[Foo]:
   return foo(3, leaves=[foo(4, leaves=[shared]), foo(5, leaves=[shared])])
 
 
-def partial_config() -> fdl.Config[Baz]:
+def partial_config() -> fdl.Partial[Baz]:
   # Not sure what it means to share a partial, but let's make sure the code
   # works.
   x = fdl.Partial(Foo, a=1)

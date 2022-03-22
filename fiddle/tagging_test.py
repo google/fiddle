@@ -20,7 +20,6 @@ from unittest import mock
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle import config
 from fiddle import tagging
 from fiddle import tagging_test_module as tst
 from fiddle.experimental import selectors
@@ -71,7 +70,7 @@ class TaggingTest(absltest.TestCase):
 
   def test_tagvalue_fn_exception(self):
     with self.assertRaisesRegex(
-        config.TaggedValueNotFilledError,
+        tagging.TaggedValueNotFilledError,
         "Expected.*TaggedValue.*replaced.*one "
         r"with tags \{fiddle.tagging_test_module.LinearParamDType\} was "
         "not set"):
@@ -92,7 +91,7 @@ class TaggingTest(absltest.TestCase):
         foo=tst.ParameterDType.new(default=None),
         bar=tst.ParameterDType.new())
     with self.assertRaisesRegex(
-        config.TaggedValueNotFilledError,
+        tagging.TaggedValueNotFilledError,
         "Expected.*TaggedValue.*replaced.*one "
         r"with tags \{fiddle.tagging_test_module.ParameterDType\} was "
         "not set"):
@@ -227,7 +226,7 @@ class TaggingTest(absltest.TestCase):
 
     self.assertEqual(fdl.build(cfg), (1, 2, 1, 4))
 
-    with self.assertRaises(config.TaggedValueNotFilledError):
+    with self.assertRaises(tagging.TaggedValueNotFilledError):
       fdl.build(copied)
 
     tagging.set_tagged(copied, tag=tst.ParameterDType, value=10)
@@ -261,12 +260,12 @@ class TaggingTest(absltest.TestCase):
     self.assertIs(get_single_tag(copied), tst.ParameterDType)
     self.assertIs(copied.value, tagging.NO_VALUE)
 
-    with self.assertRaises(config.TaggedValueNotFilledError):
+    with self.assertRaises(tagging.TaggedValueNotFilledError):
       fdl.build(copied)
     tagging.set_tagged(cfg, tag=tst.ParameterDType, value=1)
     self.assertEqual(fdl.build(cfg), 1)
 
-    with self.assertRaises(config.TaggedValueNotFilledError):
+    with self.assertRaises(tagging.TaggedValueNotFilledError):
       fdl.build(copied)
     tagging.set_tagged(copied, tag=tst.ParameterDType, value=2)
     self.assertEqual(fdl.build(cfg), 1)

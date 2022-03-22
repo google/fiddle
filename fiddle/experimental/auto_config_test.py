@@ -23,6 +23,7 @@ from typing import Any
 from absl.testing import absltest
 from absl.testing import parameterized
 
+from fiddle import building
 from fiddle import config
 from fiddle.experimental import auto_config
 from fiddle.experimental import autobuilders as ab
@@ -246,8 +247,8 @@ class AutoConfigTest(parameterized.TestCase):
 
     build_config_fn = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable
-    self.assertEqual('true branch', config.build(build_config_fn(True)))
-    self.assertEqual('false branch', config.build(build_config_fn(False)))
+    self.assertEqual('true branch', building.build(build_config_fn(True)))
+    self.assertEqual('false branch', building.build(build_config_fn(False)))
 
   def test_control_flow_for(self):
 
@@ -283,7 +284,7 @@ class AutoConfigTest(parameterized.TestCase):
 
     pass_through_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
-    self.assertEqual(0, config.build(pass_through_config))
+    self.assertEqual(0, building.build(pass_through_config))
 
   @parameterized.parameters(
       (lambda: pass_through([i + 1 for i in [0, 1, 2]]), 'ListComp'),
@@ -300,7 +301,7 @@ class AutoConfigTest(parameterized.TestCase):
 
     pass_through_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
-    self.assertCountEqual([1, 2, 3], config.build(pass_through_config))
+    self.assertCountEqual([1, 2, 3], building.build(pass_through_config))
 
   def test_allow_control_flow_decorator(self):
 
@@ -308,7 +309,7 @@ class AutoConfigTest(parameterized.TestCase):
     def test_config():
       return pass_through([i + 1 for i in range(3)])
 
-    self.assertEqual([1, 2, 3], config.build(test_config.as_buildable()))
+    self.assertEqual([1, 2, 3], building.build(test_config.as_buildable()))
 
   def test_disallow_try(self):
 

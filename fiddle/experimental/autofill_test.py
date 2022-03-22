@@ -18,6 +18,7 @@
 import dataclasses
 
 from absl.testing import absltest
+from fiddle import building
 from fiddle import config
 from fiddle.experimental import autofill
 
@@ -126,7 +127,7 @@ class AutoFillTest(absltest.TestCase):
     self.assertIsInstance(cfg.child2, ChildDC)  # Not a config instance!
 
     cfg.child1.x = 42
-    obj = config.build(cfg)
+    obj = building.build(cfg)
 
     self.assertEqual(-1, obj.child2.a)
     self.assertEqual('static', obj.child2.b)
@@ -155,7 +156,7 @@ class AutoFillTest(absltest.TestCase):
     cfg.a = 42
     cfg.c.child2.a = 'a'
     cfg.c.child2.b = 'b'
-    obj = config.build(cfg)
+    obj = building.build(cfg)
 
     self.assertEqual(42, obj['a'])
     self.assertIsInstance(obj['c'], ParentDC)

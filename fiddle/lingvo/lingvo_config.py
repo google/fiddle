@@ -53,6 +53,7 @@ You can nest fdl.Config's and fdl.lingvo.LingvoConfig's arbitrarily.
 
 import copy
 import inspect
+import typing
 from typing import Any, Union
 
 from fiddle import config
@@ -127,7 +128,6 @@ class LingvoConfig(config.Config):
   For additional context, see the docstring associated with
   `LingvoParamsAdapter`.
   """
-  __fn_or_cls__: LingvoParamsAdapter
 
   def __init__(self, params_or_cls: Union["LingvoConfig", LingvoParamsAdapter,
                                           ParamInitable, hyperparams.Params],
@@ -143,9 +143,10 @@ class LingvoConfig(config.Config):
       params_or_cls = LingvoParamsAdapter(params_or_cls)
     super().__init__(params_or_cls, *args, **kwargs)
     # Must set all param values and not leave them as defaults.
-    for param_name in self.__fn_or_cls__.params.GetKeys():
+    params = typing.cast(LingvoParamsAdapter, self.__fn_or_cls__).params
+    for param_name in params.GetKeys():
       if param_name not in self.__arguments__:
-        setattr(self, param_name, self.__fn_or_cls__.params.Get(param_name))
+        setattr(self, param_name, params.Get(param_name))
 
   def __setattr__(self, name: str, value: Any):
     if isinstance(value, hyperparams.Params):

@@ -67,6 +67,10 @@ from fiddle import config
 import tree
 
 
+class TaggedValueNotFilledError(ValueError):
+  """A TaggedValue was not filled when build() was called."""
+
+
 class _NoValue:
   """Sentinel class (used in place of object for more precise errors)."""
 
@@ -150,7 +154,7 @@ class Tag(metaclass=TagType):
 
 def tagvalue_fn(tags: Set[TagType], value: Any = NO_VALUE) -> Any:
   if value is NO_VALUE:
-    raise config.TaggedValueNotFilledError(
+    raise TaggedValueNotFilledError(
         'Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
         f'calls, but one with tags {tags} was not set.')
   else:

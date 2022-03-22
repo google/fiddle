@@ -15,9 +15,9 @@
 
 """Init file for the `fiddle` package."""
 
-from fiddle.config import build
+from fiddle.building import build
+from fiddle.building import BuildError
 from fiddle.config import Buildable
-from fiddle.config import BuildError
 from fiddle.config import Config
 from fiddle.config import Partial
 from fiddle.config import update_callable

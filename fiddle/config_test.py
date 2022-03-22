@@ -21,6 +21,7 @@ import threading
 from typing import Any
 
 from absl.testing import absltest
+from fiddle import building
 from fiddle import config
 from fiddle import history
 
@@ -161,7 +162,7 @@ class ConfigTest(absltest.TestCase):
     class_config.arg2 = 'arg2'
     class_config.kwarg1 = 'kwarg1'
 
-    instance = config.build(class_config)
+    instance = building.build(class_config)
     self.assertEqual(instance.arg1, 'arg1')
     self.assertEqual(instance.arg2, 'arg2')
     self.assertEqual(instance.kwarg1, 'kwarg1')
@@ -176,7 +177,7 @@ class ConfigTest(absltest.TestCase):
     fn_config.arg2 = 'arg2'
     fn_config.kwarg1 = 'kwarg1'
 
-    result = config.build(fn_config)
+    result = building.build(fn_config)
     self.assertEqual(result, {
         'arg1': 'arg1',
         'arg2': 'arg2',
@@ -186,13 +187,13 @@ class ConfigTest(absltest.TestCase):
 
   def test_config_for_functions_with_var_args(self):
     fn_config = config.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
 
     fn_config.arg1 = 'new_arg1'
     fn_config.kwarg1 = 'new_kwarg1'
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'new_arg1')
     self.assertEqual(fn_args['kwarg1'], 'new_kwarg1')
 
@@ -203,7 +204,7 @@ class ConfigTest(absltest.TestCase):
         kwarg1='kwarg1',
         kwarg2='kwarg2',
         kwarg3='kwarg3')
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
     self.assertEqual(fn_args['kwargs'], {
@@ -213,7 +214,7 @@ class ConfigTest(absltest.TestCase):
 
     fn_config.kwarg1 = 'new_kwarg1'
     fn_config.kwarg3 = 'new_kwarg3'
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     self.assertEqual(fn_args['kwarg1'], 'new_kwarg1')
     self.assertEqual(fn_args['kwargs'], {
         'kwarg2': 'kwarg2',
@@ -222,12 +223,12 @@ class ConfigTest(absltest.TestCase):
 
   def test_config_for_functions_with_var_args_and_kwargs(self):
     fn_config = config.Config(fn_with_var_args_and_kwargs, arg1='arg1')
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
 
     fn_config.args = 'kwarg_called_arg'
     fn_config.kwargs = 'kwarg_called_kwarg'
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     self.assertEqual(fn_args['kwargs'], {
         'args': 'kwarg_called_arg',
         'kwargs': 'kwarg_called_kwarg'
@@ -237,7 +238,7 @@ class ConfigTest(absltest.TestCase):
     cfg = config.Config(FiddleInitStaticMethod)
     self.assertEqual(5, cfg.z)
     cfg.x = 1
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertIsInstance(obj, FiddleInitStaticMethod)
     self.assertEqual(1, obj.x)
     self.assertEqual(3, obj.y)
@@ -246,7 +247,7 @@ class ConfigTest(absltest.TestCase):
   def test_fiddle_init_partial_static(self):
     cfg = config.Partial(FiddleInitStaticMethod)
     self.assertEqual(5, cfg.z)
-    partial = config.build(cfg)
+    partial = building.build(cfg)
     obj = partial(x=1)
     self.assertIsInstance(obj, FiddleInitStaticMethod)
     self.assertEqual(1, obj.x)
@@ -259,7 +260,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(5, cfg.z)
     self.assertEqual(42, cfg.w)
     cfg.x = 1
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertIsInstance(obj, FiddleInitStaticMethodChild)
     self.assertEqual(42, obj.w)  # pytype: disable=attribute-error
     self.assertEqual(1, obj.x)
@@ -269,7 +270,7 @@ class ConfigTest(absltest.TestCase):
   def test_fiddle_init_config_class(self):
     cfg = config.Config(FiddleInitClassMethod, 1)
     self.assertEqual(5, cfg.z)
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertIsInstance(obj, FiddleInitClassMethod)
     self.assertEqual(1, obj.x)
     self.assertEqual(3, obj.y)
@@ -278,7 +279,7 @@ class ConfigTest(absltest.TestCase):
   def test_fiddle_init_partial_class(self):
     cfg = config.Partial(FiddleInitClassMethod, 1)
     self.assertEqual(5, cfg.z)
-    partial = config.build(cfg)
+    partial = building.build(cfg)
     obj = partial(x=1)
     self.assertIsInstance(obj, FiddleInitClassMethod)
     self.assertEqual(1, obj.x)
@@ -289,7 +290,7 @@ class ConfigTest(absltest.TestCase):
     cfg = config.Config(FiddleInitClassMethodChild, 0)
     self.assertEqual(5, cfg.z)
     self.assertEqual(10, cfg.w)
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertIsInstance(obj, FiddleInitClassMethodChild)
     self.assertEqual(0, obj.x)
     self.assertEqual(3, obj.y)
@@ -300,7 +301,7 @@ class ConfigTest(absltest.TestCase):
     cfg = config.Config(FiddleInitIncompatibleChild)
     self.assertEqual(6, cfg.b)
     cfg.a = 8
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertIsInstance(obj, FiddleInitIncompatibleChild)
     self.assertEqual(8, obj.a)
     self.assertEqual(9, obj.x)
@@ -322,12 +323,12 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(2, cfg.x)
     self.assertEqual('abc', cfg.y)
 
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertEqual(2, obj['x'])
     self.assertEqual('abc', obj['y'])
 
     cfg.y = 'xyz'
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertEqual(2, obj['x'])
     self.assertEqual('xyz', obj['y'])
 
@@ -342,7 +343,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual({}, cfg.__arguments__)  # but not materialized.
 
     cfg.x = 42
-    output = config.build(cfg)
+    output = building.build(cfg)
 
     self.assertEqual({'x': 42, 'y': 'abc', 'z': 2.0}, output)
 
@@ -360,7 +361,7 @@ class ConfigTest(absltest.TestCase):
     fn_config2 = config.Config(
         basic_fn, arg1=config.Partial(class_config), arg2=class_config)
 
-    fn_config2_args = config.build(fn_config2)
+    fn_config2_args = building.build(fn_config2)
 
     test_class_partialclass = fn_config2_args['arg1']
     self.assertTrue(issubclass(test_class_partialclass, TestClass))
@@ -389,7 +390,7 @@ class ConfigTest(absltest.TestCase):
         'key2': (class_config,)
     })
 
-    fn_args = config.build(fn_config)
+    fn_args = building.build(fn_config)
     separate_instance = fn_args['arg1']
     shared_instance = fn_args['arg2']['key1'][0]
     structure = fn_args['arg2']
@@ -410,7 +411,7 @@ class ConfigTest(absltest.TestCase):
     cfg = config.Config(TestClass)
     cfg.arg1 = child_configs
     cfg.arg2 = child_configs
-    obj = config.build(cfg)
+    obj = building.build(cfg)
 
     self.assertIsInstance(obj, TestClass)
     self.assertIs(obj.arg1, obj.arg2)
@@ -500,7 +501,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_partial(self):
     class_partial = config.Partial(TestClass, 'arg1', 'arg2')
-    partialclass = config.build(class_partial)
+    partialclass = building.build(class_partial)
     self.assertIsInstance(partialclass, type)
     self.assertTrue(issubclass(partialclass, TestClass))
 
@@ -518,26 +519,26 @@ class ConfigTest(absltest.TestCase):
 
   def test_typed_config(self):
     class_config = make_typed_config()
-    instance = config.build(class_config)
+    instance = building.build(class_config)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 2)
 
   def test_untyped_config(self):
     class_config = make_untyped_config(TestClass, arg1=2, arg2=3)
-    instance = config.build(class_config)
+    instance = building.build(class_config)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 3)
 
   def test_typed_partial(self):
     class_config = make_typed_partial()
-    subclass = config.build(class_config)
+    subclass = building.build(class_config)
     instance = subclass(arg2=4)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 4)
 
   def test_untyped_partial(self):
     class_config = make_untyped_partial(TestClass, arg1=2)
-    subclass = config.build(class_config)
+    subclass = building.build(class_config)
     instance = subclass(arg2=4)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 4)
@@ -547,7 +548,7 @@ class ConfigTest(absltest.TestCase):
     class_config = class_partial('new_arg1', kwarg1='new_kwarg1')
     class_config.arg2 = 'new_arg2'
     self.assertEqual(class_partial.arg2, 'arg2')
-    instance = config.build(class_config)
+    instance = building.build(class_config)
     self.assertEqual(instance.arg1, 'new_arg1')
     self.assertEqual(instance.arg2, 'new_arg2')
     self.assertEqual(instance.kwarg1, 'new_kwarg1')
@@ -555,7 +556,7 @@ class ConfigTest(absltest.TestCase):
   def test_call_partial_nested(self):
     class_partial = config.Partial(TestClass, 'arg1', 'arg2')
     class_config = config.Config(TestClass, class_partial(), class_partial())
-    instance = config.build(class_config)
+    instance = building.build(class_config)
     self.assertEqual(instance.arg1.arg1, 'arg1')
     self.assertEqual(instance.arg1.arg2, 'arg2')
     self.assertEqual(instance.arg2.arg1, 'arg1')
@@ -616,12 +617,12 @@ class ConfigTest(absltest.TestCase):
 
     def nest_call(x: int) -> str:
       cfg = config.Config(inner_build, x)
-      return config.build(cfg)
+      return building.build(cfg)
 
     outer = config.Config(nest_call, 3)
     expected_msg = r'test_build_inside_build.<locals>.nest_call \(at <root>\)'
-    with self.assertRaisesRegex(config.BuildError, expected_msg) as e:
-      config.build(outer)
+    with self.assertRaisesRegex(building.BuildError, expected_msg) as e:
+      building.build(outer)
     expected_msg = r'forbidden to call `fdl.build` inside another `fdl.build`'
     self.assertRegex(str(e.exception.__cause__), expected_msg)
 
@@ -720,8 +721,8 @@ class ConfigTest(absltest.TestCase):
 
   def test_build_raises_nice_error_too_few_args(self):
     cfg = config.Config(basic_fn, config.Config(TestClass, 1), 2)
-    with self.assertRaisesRegex(config.BuildError, '.*TestClass.*') as e:
-      config.build(cfg)
+    with self.assertRaisesRegex(building.BuildError, '.*TestClass.*') as e:
+      building.build(cfg)
     self.assertIs(e.exception.buildable, cfg.arg1)
     self.assertEqual(e.exception.path_from_config_root, '<root>.arg1')
     self.assertIsInstance(e.exception.original_error, TypeError)
@@ -735,10 +736,10 @@ class ConfigTest(absltest.TestCase):
 
     cfg = config.Config(raise_error)
     with self.assertRaisesWithLiteralMatch(
-        config.BuildError, 'Failed to construct or call ConfigTest.'
+        building.BuildError, 'Failed to construct or call ConfigTest.'
         'test_build_raises_exception_on_call.<locals>.raise_error '
         '(at <root>) with arguments\n    args: ()\n    kwargs: {}'):
-      config.build(cfg)
+      building.build(cfg)
 
   def test_build_error_path(self):
     # This will raise an error, because it doesn't have one arg populated.
@@ -746,8 +747,8 @@ class ConfigTest(absltest.TestCase):
     sub_dict = {'a': 0, 'b': 2, 'c': sub_cfg, 'd': 10}
     cfg = config.Config(fn_with_var_kwargs, [1, sub_dict])
 
-    with self.assertRaises(config.BuildError) as e:
-      config.build(cfg)
+    with self.assertRaises(building.BuildError) as e:
+      building.build(cfg)
 
     self.assertEqual(e.exception.path_from_config_root, "<root>.arg1[1]['c']")
 
@@ -766,7 +767,7 @@ class ConfigTest(absltest.TestCase):
         return x
 
       cfg = config.Config(blocking_function, 3)
-      output = config.build(cfg)
+      output = building.build(cfg)
 
     def blocking_function(x):
       foreground_entered_build.set()
@@ -776,7 +777,7 @@ class ConfigTest(absltest.TestCase):
     cfg = config.Config(blocking_function, 1)
     thread = threading.Thread(target=other_thread)
     thread.start()
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     thread.join()
     self.assertEqual(1, obj)
     self.assertEqual(3, output)
@@ -785,7 +786,7 @@ class ConfigTest(absltest.TestCase):
     cfg = config.Config(basic_fn, 1, 'xyz', kwarg1='abc')
     config.update_callable(cfg, TestClass)
     cfg.kwarg2 = '123'
-    obj = config.build(cfg)
+    obj = building.build(cfg)
     self.assertIsInstance(obj, TestClass)
     self.assertEqual(1, obj.arg1)
     self.assertEqual('xyz', obj.arg2)
@@ -809,7 +810,7 @@ class ConfigTest(absltest.TestCase):
         'kwargs': {
             'abc': '123'
         }
-    }, config.build(cfg))
+    }, building.build(cfg))
 
   def test_update_callable_varargs(self):
     cfg = config.Config(fn_with_var_kwargs, 1, 2)

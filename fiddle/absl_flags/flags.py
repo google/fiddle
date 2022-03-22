@@ -116,6 +116,7 @@ import dataclasses
 import inspect
 import re
 import sys
+import typing
 from typing import Any, List, Union, Sequence
 
 from absl import app
@@ -203,16 +204,16 @@ def apply_overrides_to(cfg: config.Buildable):
   for flag in _FDL_SET.value:
     path, value = flag.split('=', maxsplit=1)
     *parents, last = _parse_path(path)
-    walk = cfg
+    walk = typing.cast(Any, cfg)
     try:
       for parent in parents:
         walk = parent(walk)
     except Exception:  # pylint: disable=broad-except
-      raise ValueError(f'Invalid path "{path}".')
+      raise ValueError(f'Invalid path "{path}".')  # pylint: disable=raise-missing-from
     try:
       last.update(walk, ast.literal_eval(value))
     except:
-      raise ValueError(f'Could not set "{value}" path "{path}".')
+      raise ValueError(f'Could not set "{value}" path "{path}".')  # pylint: disable=raise-missing-from
 
 
 def _rewrite_fdl_args(args: Sequence[str]) -> List[str]:
