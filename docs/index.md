@@ -24,15 +24,16 @@ Fiddle attempts to satisfy the following design goals:
     leverage Python's extensive existing tooling to simplify testing and
     maintenance.
 
-*   **Readability & understandability**: Configurations can be written almost as
-    if configurability wasn't a requirement, making the structure of a
-    configuration easy to read. Fiddle additionally provides visualization and
-    printing tools to make configurations easy to understand.
+*   **Readability & understandability**: Fiddle's APIs (powered by Python's
+    flexibility) make the structure of a system's configuration easy to read.
+    Additionally, Fiddle's printing and visualization tools provide multiple
+    lenses to view a configuration to help understand both a given model run
+    and how a codebase fits together.
 
-*   **Minimal boilerplate**: Configurations don't require extensive forwarding
-    of parameters, or definitions and references spread across multiple files.
-    Changing one hyperparameter anywhere in the program is just a single line of
-    code.
+*   **Minimal boilerplate**: Fiddle is designed to reduce boilerplate, to make
+    both writing and reading configurations fast. Changing one hyperparameter
+    anywhere in the program is just a single line of code. Configurations don't
+    require extensive forwarding of parameters across multiple files.
 
 *   **Isolation & modularity**: Fiddle allows your library code to remain
     unaware of what configuration system is being used, and doesn't require
