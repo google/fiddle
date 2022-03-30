@@ -16,14 +16,17 @@
 """Tests for the `fiddle.config` module."""
 
 import copy
+import functools
 import pickle
 import threading
-from typing import Any
+from typing import Any, Callable, Dict
 
 from absl.testing import absltest
 from fiddle import building
 from fiddle import config
 from fiddle import history
+
+import pytype_extensions
 
 import tree
 
@@ -41,7 +44,7 @@ class TestClass:
     return 4  # A random number (https://xkcd.com/221/)
 
 
-def basic_fn(arg1, arg2, kwarg1=None, kwarg2=None):  # pylint: disable=unused-argument
+def basic_fn(arg1, arg2, kwarg1=None, kwarg2=None) -> Dict[str, Any]:  # pylint: disable=unused-argument
   return locals()
 
 
@@ -153,8 +156,8 @@ def _test_fn_unserializable_default(x=Unserializable()):
 class ConfigTest(absltest.TestCase):
 
   def test_config_for_classes(self):
-    class_config: config.Config[TestClass] = config.Config(
-        TestClass, 1, kwarg2='kwarg2')
+    class_config = config.Config(TestClass, 1, kwarg2='kwarg2')
+    pytype_extensions.assert_type(class_config, config.Config[TestClass])
     self.assertEqual(class_config.arg1, 1)
     self.assertEqual(class_config.kwarg2, 'kwarg2')
     class_config.arg1 = 'arg1'
@@ -163,6 +166,7 @@ class ConfigTest(absltest.TestCase):
     class_config.kwarg1 = 'kwarg1'
 
     instance = building.build(class_config)
+    pytype_extensions.assert_type(instance, TestClass)
     self.assertEqual(instance.arg1, 'arg1')
     self.assertEqual(instance.arg2, 'arg2')
     self.assertEqual(instance.kwarg1, 'kwarg1')
@@ -170,6 +174,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_config_for_functions(self):
     fn_config = config.Config(basic_fn, 1, kwarg2='kwarg2')
+    pytype_extensions.assert_type(fn_config, config.Config[Dict[str, Any]])
     self.assertEqual(fn_config.arg1, 1)
     self.assertEqual(fn_config.kwarg2, 'kwarg2')
     fn_config.arg1 = 'arg1'
@@ -178,6 +183,7 @@ class ConfigTest(absltest.TestCase):
     fn_config.kwarg1 = 'kwarg1'
 
     result = building.build(fn_config)
+    pytype_extensions.assert_type(result, Dict[str, Any])
     self.assertEqual(result, {
         'arg1': 'arg1',
         'arg2': 'arg2',
@@ -187,6 +193,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_config_for_functions_with_var_args(self):
     fn_config = config.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')
+    pytype_extensions.assert_type(fn_config, config.Config)
     fn_args = building.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
@@ -194,6 +201,7 @@ class ConfigTest(absltest.TestCase):
     fn_config.arg1 = 'new_arg1'
     fn_config.kwarg1 = 'new_kwarg1'
     fn_args = building.build(fn_config)
+    pytype_extensions.assert_type(fn_args, Any)
     self.assertEqual(fn_args['arg1'], 'new_arg1')
     self.assertEqual(fn_args['kwarg1'], 'new_kwarg1')
 
@@ -363,10 +371,8 @@ class ConfigTest(absltest.TestCase):
 
     fn_config2_args = building.build(fn_config2)
 
-    test_class_partialclass = fn_config2_args['arg1']
-    self.assertTrue(issubclass(test_class_partialclass, TestClass))
-
-    test_class_instance = test_class_partialclass()
+    test_class_partial = fn_config2_args['arg1']
+    test_class_instance = test_class_partial()
     self.assertEqual(type(test_class_instance), TestClass)
     self.assertEqual(test_class_instance.arg1(), fn_config1_args)
     self.assertEqual(test_class_instance.arg2, fn_config1_args)
@@ -499,47 +505,74 @@ class ConfigTest(absltest.TestCase):
     varargs_config.abc = '123'
     self.assertEqual(['abc', 'arg1', 'kwarg1'], dir(varargs_config))
 
-  def test_partial(self):
+  def test_partial_for_classes(self):
     class_partial = config.Partial(TestClass, 'arg1', 'arg2')
-    partialclass = building.build(class_partial)
-    self.assertIsInstance(partialclass, type)
-    self.assertTrue(issubclass(partialclass, TestClass))
+    pytype_extensions.assert_type(class_partial, config.Partial[TestClass])
+    partial = building.build(class_partial)
+    pytype_extensions.assert_type(partial, Callable[..., TestClass])
+    self.assertIsInstance(partial, functools.partial)
 
-    instance = partialclass()
+    instance = partial()
     self.assertIsInstance(instance, TestClass)
-    self.assertEqual(instance.arg1, 'arg1')  # pytype: disable=attribute-error  # kwargs-checking
-    self.assertEqual(instance.arg2, 'arg2')  # pytype: disable=attribute-error  # kwargs-checking
+    self.assertEqual(instance.arg1, 'arg1')
+    self.assertEqual(instance.arg2, 'arg2')
 
     # We can override parameters at the call site.
-    instance = partialclass(
-        arg1='new_arg1', arg2='new_arg2', kwarg1='new_kwarg1')
+    instance = partial(arg1='new_arg1', arg2='new_arg2', kwarg1='new_kwarg1')
     self.assertEqual(instance.arg1, 'new_arg1')
     self.assertEqual(instance.arg2, 'new_arg2')
     self.assertEqual(instance.kwarg1, 'new_kwarg1')
 
+  def test_partial_for_functions(self):
+    fn_partial = config.Partial(basic_fn, 1, kwarg2='kwarg2')
+    pytype_extensions.assert_type(fn_partial, config.Partial[Dict[str, Any]])
+    self.assertEqual(fn_partial.arg1, 1)
+    self.assertEqual(fn_partial.kwarg2, 'kwarg2')
+    fn_partial.arg1 = 'arg1'
+    self.assertEqual(fn_partial.arg1, 'arg1')
+    fn_partial.arg2 = 'arg2'
+    fn_partial.kwarg1 = 'kwarg1'
+
+    partial = building.build(fn_partial)
+    pytype_extensions.assert_type(partial, Callable[..., Dict[str, Any]])
+    self.assertEqual(partial(), {
+        'arg1': 'arg1',
+        'arg2': 'arg2',
+        'kwarg1': 'kwarg1',
+        'kwarg2': 'kwarg2'
+    })
+
   def test_typed_config(self):
     class_config = make_typed_config()
+    pytype_extensions.assert_type(class_config, config.Config[TestClass])
     instance = building.build(class_config)
+    pytype_extensions.assert_type(instance, TestClass)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 2)
 
   def test_untyped_config(self):
     class_config = make_untyped_config(TestClass, arg1=2, arg2=3)
+    pytype_extensions.assert_type(class_config, config.Config)
     instance = building.build(class_config)
+    pytype_extensions.assert_type(instance, Any)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 3)
 
   def test_typed_partial(self):
-    class_config = make_typed_partial()
-    subclass = building.build(class_config)
-    instance = subclass(arg2=4)
+    class_partial = make_typed_partial()
+    pytype_extensions.assert_type(class_partial, config.Partial[TestClass])
+    partial = building.build(class_partial)
+    pytype_extensions.assert_type(partial, Callable[..., TestClass])
+    instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 4)
 
   def test_untyped_partial(self):
-    class_config = make_untyped_partial(TestClass, arg1=2)
-    subclass = building.build(class_config)
-    instance = subclass(arg2=4)
+    class_partial = make_untyped_partial(TestClass, arg1=2)
+    pytype_extensions.assert_type(class_partial, config.Partial)
+    partial = building.build(class_partial)
+    pytype_extensions.assert_type(partial, Callable[..., Any])
+    instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 4)
 

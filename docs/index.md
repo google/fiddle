@@ -201,8 +201,7 @@ correspondingly built values.
 ### Support for partials
 
 The `fdl.Partial` class transforms into a `functools.partial` instance when
-built, allowing configuration of partial functions (and additionally classes,
-using a custom `partialclass` type).
+built, allowing configuration of partial functions and classes.
 
 ### Printing, codegen, and visualization
 

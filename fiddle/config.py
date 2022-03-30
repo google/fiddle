@@ -24,7 +24,6 @@ import inspect
 from typing import Any, Callable, Collection, Dict, Generic, List, Type, TypeVar, Union
 
 from fiddle import history
-from fiddle import partialclass
 
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
@@ -347,9 +346,9 @@ class Partial(Generic[T], Buildable[T]):
   """A `Partial` config creates a partial function or class when built.
 
   In some cases, it may be desired to leave a function or class uninvoked, and
-  instead output a corresponding `functools.partial` or `partialclass` object.
-  Where the `Config` base class calls its underlying `__fn_or_cls__` when built,
-  this `Partial` instead results in a partially bound function or class:
+  instead output a corresponding `functools.partial` object. Where the `Config`
+  base class calls its underlying `__fn_or_cls__` when built, this `Partial`
+  instead results in a partially bound function or class:
 
       partial_config = Partial(TestClass)
       partial_config.arg = 1
@@ -384,12 +383,10 @@ class Partial(Generic[T], Buildable[T]):
       **kwargs: Keyword arguments to partially bind to `self.__fn_or_cls__`.
 
     Returns:
-      A `functools.partial` or `partialclass` instance with `args` and `kwargs`
-      bound to `self.__fn_or_cls__`.
+      A `functools.partial` or instance with `args` and `kwargs` bound to
+      `self.__fn_or_cls__`.
     """
-    is_class = inspect.isclass(self.__fn_or_cls__)
-    partial_type = partialclass.partialclass if is_class else functools.partial
-    return partial_type(self.__fn_or_cls__, *args, **kwargs)
+    return functools.partial(self.__fn_or_cls__, *args, **kwargs)
 
   def __call__(self, *args, **kwargs):
     """Converts this `Partial` into a `Config`, with optional overrides.

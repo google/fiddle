@@ -17,17 +17,13 @@
 import contextlib
 import threading
 
-from typing import Any, Callable, Dict, List, Tuple, Type, TypeVar, Union, overload
+from typing import Any, Dict, List, Tuple
 
 from fiddle import config
 from fiddle import tagging
 
 
 import tree
-
-T = TypeVar('T')
-SubclassOfT = TypeVar('SubclassOfT', bound=T)
-SubtypeOrCallableProducingT = Union[Callable[..., T], Type[SubclassOfT]]
 
 
 class _BuildGuardState(threading.local):
@@ -53,7 +49,7 @@ def _in_build():
     _state.in_build = False
 
 
-class BuildError(ValueError):  # pylint: disable=g-bad-exception-name
+class BuildError(ValueError):
   """Error raised when building a Config fails."""
 
   def __init__(
@@ -77,18 +73,6 @@ class BuildError(ValueError):  # pylint: disable=g-bad-exception-name
             f'(at {self.path_from_config_root}) with arguments\n'
             f'    args: {self.args}\n'
             f'    kwargs: {self.kwargs}')
-
-
-# Define Pytypes for `build(Partial)`
-@overload
-def build(buildable: config.Partial[T]) -> SubtypeOrCallableProducingT:
-  pass
-
-
-# Define Pytypes for `build(Config)`
-@overload
-def build(buildable: config.Config[T]) -> T:
-  pass
 
 
 # This is a free function instead of a method on the `Buildable` object in order
