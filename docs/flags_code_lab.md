@@ -4,8 +4,9 @@
 
 You can easily fiddle with your configuration using command line flags, thanks
 to Fiddle's absl_flags integration! This code lab will describe how it all
-works. To see the complete working example, check out
-fiddle/absl_flags/example.
+works. See also the [complete working example][example].
+
+[example]: http://github.com/google/fiddle/tree/main/fiddle/absl_flags/example
 
 [TOC]
 

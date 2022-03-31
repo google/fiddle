@@ -59,7 +59,7 @@ necessary to create a Fiddle configuration.
 ## Codelab 5: CLI flags {#cli-flags}
 
 The [flags code lab](flags_code_lab.md) walks through an
-[example application](http://fiddle/absl_flags/example)
+[example application](http://github.com/google/fiddle/tree/main/fiddle/absl_flags/example)
 that uses Fiddle and Fiddle's support for overriding configurations with command
 line flags.
 
