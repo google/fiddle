@@ -17,6 +17,7 @@
 
 from fiddle.building import build
 from fiddle.building import BuildError
+from fiddle.config import assign
 from fiddle.config import Buildable
 from fiddle.config import Config
 from fiddle.config import Partial

@@ -851,6 +851,23 @@ class ConfigTest(absltest.TestCase):
                                 'Variable positional arguments'):
       config.update_callable(cfg, fn_with_var_args_and_kwargs)
 
+  def test_assign(self):
+    cfg = config.Config(fn_with_var_kwargs, 1, 2)
+    config.assign(cfg, a='a', b='b')
+    self.assertEqual({
+        'arg1': 1,
+        'kwarg1': 2,
+        'kwargs': {
+            'a': 'a',
+            'b': 'b'
+        }
+    }, building.build(cfg))
+
+  def test_assign_wrong_argument(self):
+    cfg = config.Config(basic_fn)
+    with self.assertRaisesRegex(TypeError, 'not_there'):
+      config.assign(cfg, arg1=1, not_there=2)
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -403,7 +403,8 @@ class Partial(Generic[T], Buildable[T]):
     return Config(self, *args, **kwargs)
 
 
-def update_callable(config: Buildable, new_callable: TypeOrCallableProducingT):
+def update_callable(buildable: Buildable,
+                    new_callable: TypeOrCallableProducingT):
   """Updates `config` to build `new_callable` instead.
 
   When extending a base configuration, it can often be useful to swap one class
@@ -413,7 +414,7 @@ def update_callable(config: Buildable, new_callable: TypeOrCallableProducingT):
   `update_callable` updates `config` in-place (preserving argument history).
 
   Args:
-    config: A `Buildable` to mutate.
+    buildable: A `Buildable` (e.g. a `fdl.Config`) to mutate.
     new_callable: The new callable `config` should call when built.
 
   Raises:
@@ -428,7 +429,7 @@ def update_callable(config: Buildable, new_callable: TypeOrCallableProducingT):
   # Note: can't call `setattr` on all the args to validate them, because that
   # will result in duplicate history entries.
 
-  original_args = config.__arguments__
+  original_args = buildable.__arguments__
   signature = inspect.signature(new_callable)
   if any(param.kind == param.VAR_POSITIONAL
          for param in signature.parameters.values()):
@@ -442,11 +443,39 @@ def update_callable(config: Buildable, new_callable: TypeOrCallableProducingT):
     ]
     if invalid_args:
       raise TypeError(f'Cannot switch to {new_callable} (from '
-                      f'{config.__fn_or_cls__}) because the Buildable would '
+                      f'{buildable.__fn_or_cls__}) because the Buildable would '
                       f'have invalid arguments {invalid_args}.')
 
-  object.__setattr__(config, '__fn_or_cls__', new_callable)
-  object.__setattr__(config, '__signature__', signature)
-  object.__setattr__(config, '_has_var_keyword', has_var_keyword)
-  config.__argument_history__['__fn_or_cls__'].append(
+  object.__setattr__(buildable, '__fn_or_cls__', new_callable)
+  object.__setattr__(buildable, '__signature__', signature)
+  object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
+  buildable.__argument_history__['__fn_or_cls__'].append(
       history.entry('__fn_or_cls__', new_callable))
+
+
+def assign(buildable: Buildable, **kwargs):
+  """Assigns multiple arguments to cfg.
+
+  Although this function does not enable a caller to do something they can't
+  already do with other syntax, this helper function can be useful when
+  manipulating deeply nested configs. Example:
+
+  ```py
+  cfg = # ...
+  fdl.assign(cfg.my.deeply.nested.child.object, arg_a=1, arg_b='b')
+  ```
+
+  The above code snippet is equivalent to:
+
+  ```py
+  cfg = # ...
+  cfg.my.deeply.nested.child.object.arg_a = 1
+  cfg.my.deeply.nested.child.object.arg_b = 'b'
+  ```
+
+  Args:
+    buildable: A `Buildable` (e.g. a `fdl.Config`) to set values upon.
+    **kwargs: The arguments and values to assign.
+  """
+  for name, value in kwargs.items():
+    setattr(buildable, name, value)
