@@ -173,7 +173,7 @@ trainer_config = auto_config.auto_config(build_trainer).as_buildable()
 Alternatively, `auto_config` can be used as a decorator. For more details and
 documentation, please see the [`auto_config` colab][auto_config_colab].
 
-[auto_config_colab]: https://colab.sandbox.google.com/github/google/fiddle/examples/colabs/auto_config.ipynb
+[auto_config_colab]: https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/auto_config.ipynb
 
 ## Modifying a configuration
 

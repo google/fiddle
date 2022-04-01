@@ -23,7 +23,7 @@ encourage you to do that! Play around, change things, see what happens!
 
 ## Codelab 1: Introduction / overview {#intro}
 
-<a href="https://colab.sandbox.google.com/github/google/fiddle/examples/colabs/fiddle_tutorial_with_flax.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
+<a href="https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/fiddle_tutorial_with_flax.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
 
 This colab walks through how to use Fiddle, using Flax and JAX as a motivating
 example. This tutorial includes an overview of the key Fiddle APIs, best
@@ -31,7 +31,7 @@ practices, as well as a few tips/tricks.
 
 ## Codelab 2: Basic API {#basic-api}
 
-<a href="https://colab.sandbox.google.com/github/google/fiddle/examples/colabs/basic_api.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
+<a href="https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/basic_api.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
 
 This colab walks through the core Fiddle abstractions and how they work. If you
 prefer learning in a more pedagogical than motivational style, you can start
@@ -39,7 +39,7 @@ with this colab and then go through the above intro colab.
 
 ## Codelab 3: Visualization / printing / codegen {#visualization}
 
-<a href="https://colab.sandbox.google.com/github/google/fiddle/examples/colabs/visualization_printing_codegen.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
+<a href="https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/visualization_printing_codegen.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
 
 This colab introduces a variety of ways to visualize and print Fiddle
 configurations. These can be used to communicate experiments, debug errors, and
@@ -47,7 +47,7 @@ make configuration more self-contained.
 
 ## Codelab 4: `auto_config` usage {#auto_config}
 
-<a href="https://colab.sandbox.google.com/github/google/fiddle/examples/colabs/auto_config.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
+<a href="https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/auto_config.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
 
 This colab walks through how to use Fiddle's "auto-config" functionality,
 building off of the introduction codelab above. Auto-config allows existing
@@ -65,7 +65,7 @@ line flags.
 
 ## Codelab 6: `select()` and Tag APIs {#select-and-tags}
 
-<a href="https://colab.sandbox.google.com/github/google/fiddle/examples/colabs/select_and_tag_apis.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
+<a href="https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/select_and_tag_apis.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in colab" style="float:left"/></a><br>
 
 The `select()` and `Tag` APIs for Fiddle let users concisely change many values
 in a larger configuration structure, facilitating configuration codebases which
