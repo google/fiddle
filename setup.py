@@ -48,6 +48,7 @@ setup(
         'testing': [
             'absl-py',
             'pytest',
+            'pytype',
             'seqio',
         ]
     },
