@@ -35,7 +35,7 @@ Python code.
 """
 
 setup(
-    name='fiddle',
+    name='fiddle-config',
     version=_VERSION,
     include_package_data=True,
     packages=find_packages(exclude=['docs']),  # Required
