@@ -220,8 +220,25 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     return config_copy
 
   def __eq__(self, other):
-    """Returns true iff self and other contain the same argument values."""
-    if not isinstance(other, self.__class__):
+    """Returns true iff self and other contain the same argument values.
+
+    This compares the specific types of `self` and `other`, the function or
+    class being configured, and then checks for equality in the configured
+    arguments.
+
+    Note that argument history is not compared (i.e., it doesn't matter how
+    the `Buildable`s being compared reached their current state). Additionally,
+    default argument values are not considered in this comparison: If one
+    `Buildable` has an argument explicitly set to its default value while
+    another does not, the two will not be considered equal.
+
+    Args:
+      other: The other value to compare `self` to.
+
+    Returns:
+      `True` if `self` equals `other`, `False` if not.
+    """
+    if type(self) is not type(other):
       return False
     if self.__fn_or_cls__ is not other.__fn_or_cls__:
       return False

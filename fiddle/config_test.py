@@ -463,15 +463,62 @@ class ConfigTest(absltest.TestCase):
     self.assertIsNot(fn_config_copy.arg1, fn_config_copy.arg2)
     self.assertIsNot(fn_config.arg1, fn_config_copy.arg1)
 
-  def test_equality(self):
+  def test_equality_arguments(self):
     cfg1 = config.Config(TestClass, 'arg1')
     cfg2 = config.Config(TestClass, 'arg1')
     self.assertEqual(cfg1, cfg2)
-    cfg1.arg1 = 'arg2'
+    cfg2.arg1 = 'arg2'
     self.assertNotEqual(cfg1, cfg2)
 
-    partial = config.Partial(TestClass, 'arg1')
-    self.assertNotEqual(cfg2, partial)
+  def test_equality_arguments_nested(self):
+
+    def make_nested_config():
+      fn_config1 = config.Config(
+          basic_fn,
+          arg1='innermost1',
+          arg2='innermost2',
+          kwarg1='kw1',
+          kwarg2='kw2')
+      class_config = config.Config(
+          TestClass, arg1=config.Partial(fn_config1), arg2=fn_config1)
+      fn_config2 = config.Config(
+          basic_fn, arg1=config.Partial(class_config), arg2=class_config)
+      return fn_config2
+
+    cfg1 = make_nested_config()
+    cfg2 = make_nested_config()
+    self.assertEqual(cfg1, cfg2)
+    cfg2.arg2.arg1.kwarg1 = 'another value'
+    self.assertNotEqual(cfg1, cfg2)
+    cfg1.arg2.arg1.kwarg1 = 'another value'
+    self.assertEqual(cfg1, cfg2)
+
+  def test_equality_fn_or_cls_mismatch(self):
+    cls_cfg = config.Config(TestClass, 'arg1')
+    fn_cfg = config.Config(basic_fn, 'arg1')
+    self.assertNotEqual(cls_cfg, fn_cfg)
+
+  def test_equality_buildable_type_mismatch(self):
+    cfg = config.Config(TestClass, 'arg1')
+
+    # Compare to something that isn't a `Buildable`.
+    self.assertNotEqual(cfg, 5)
+
+    # Compare to a `Partial`.
+    partial = config.Partial(cfg)
+    self.assertNotEqual(cfg, partial)
+
+    # Compare to a `Config` subclass.
+    class ConfigSubClass(config.Config):
+      pass
+
+    cfg_subclass = ConfigSubClass(cfg)
+    self.assertNotEqual(cfg, cfg_subclass)
+    # The logic governing how __eq__ is actually invoked from an == comparison
+    # actually takes subclassing relationships into account and always calls
+    # b.__eq__(a) if isinstance(b, a.__class__), so testing explicitly here.
+    self.assertFalse(cfg.__eq__(cfg_subclass))
+    self.assertFalse(cfg_subclass.__eq__(cfg))
 
   def test_unsetting_argument(self):
     fn_config = config.Config(basic_fn)
