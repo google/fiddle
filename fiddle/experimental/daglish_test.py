@@ -15,26 +15,295 @@
 
 """Tests for daglish."""
 
-from typing import List
+import collections
+import dataclasses
+import typing
+from typing import Any, List
 
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle.experimental import daglish
 
 
-class DaglishTest(absltest.TestCase):
+@dataclasses.dataclass
+class Foo:
+  bar: Any
+  baz: Any
+
+
+class TestNamedTuple(typing.NamedTuple):
+  fizz: Any
+  buzz: Any
+
+
+class PathElementTest(absltest.TestCase):
 
   def test_path_fragment(self):
     cfg = fdl.Config(lambda x: x)
     path: List[daglish.PathElement] = [
-        daglish.ListOrTupleItem([4], 1),
-        daglish.DictItem({}, "a"),
-        daglish.AttributeItem(object(), "foo"),
-        daglish.DictItem({}, 2),
-        daglish.AttributeItem(cfg, "bar"),
+        daglish.Index([4], 1),
+        daglish.Key({}, "a"),
+        daglish.Attr(object(), "foo"),
+        daglish.Key({}, 2),
+        daglish.Attr(cfg, "bar"),
     ]
     path_str = "".join(x.code for x in path)
     self.assertEqual(path_str, "[1]['a'].foo[2].bar")
+
+
+class TraverseWithPathTest(absltest.TestCase):
+
+  def test_is_namedtuple(self):
+    typing_namedtuple = TestNamedTuple(1, 2)
+    self.assertTrue(daglish.is_namedtuple(typing_namedtuple))
+    collections_namedtuple = collections.namedtuple(  # Dynamically create type.
+        "CollectionsNamedTuple", ["arg1", "arg2"])(1, 2)  # Instantiate.
+    self.assertTrue(daglish.is_namedtuple(collections_namedtuple))
+
+  def test_pretraversal_return_none(self):
+    config = fdl.Config(
+        Foo,
+        bar=[1, {
+            "key": (2,)
+        }],
+        baz=TestNamedTuple(
+            fizz=fdl.Config(Foo, bar=(1,), baz="boop"), buzz=None))
+
+    visited_values = {}
+
+    def traverse(path, value):
+      visited_values[daglish.path_str(path)] = value
+      return (yield)  # Continue traversal.
+
+    output = daglish.traverse_with_path(traverse, config)
+
+    expected = {
+        "": config,
+        ".bar": config.bar,
+        ".bar[0]": config.bar[0],
+        ".bar[1]": config.bar[1],
+        ".bar[1]['key']": config.bar[1]["key"],
+        ".bar[1]['key'][0]": config.bar[1]["key"][0],
+        ".baz": config.baz,
+        ".baz.fizz": config.baz.fizz,
+        ".baz.fizz.bar": config.baz.fizz.bar,
+        ".baz.fizz.bar[0]": config.baz.fizz.bar[0],
+        ".baz.fizz.baz": config.baz.fizz.baz,
+        ".baz.buzz": config.baz.buzz
+    }
+    self.assertEqual(expected.items(), visited_values.items())
+    self.assertIsNot(config, output)
+    self.assertEqual(config, output)
+
+  def test_pretraversal_return(self):
+    config = TestNamedTuple(fizz=[1, 2, 3], buzz=(4, 5, 6))
+
+    def traverse(path, value):
+      del value
+      if daglish.path_str(path) == ".fizz":
+        return "fizz!"
+      elif daglish.path_str(path) == ".buzz":
+        return "buzz!"
+      return (yield)
+
+    output = daglish.traverse_with_path(traverse, config)
+    expected = TestNamedTuple(fizz="fizz!", buzz="buzz!")
+    self.assertEqual(expected, output)
+
+  def test_posttraversal_return(self):
+    config = fdl.Config(
+        Foo,
+        bar=[1, {
+            "key": (2,)
+        }],
+        baz=TestNamedTuple(
+            fizz=fdl.Config(Foo, bar=(1,), baz="boop"), buzz=None))
+
+    def traverse(path, value):
+      new_value = yield
+      output = {daglish.path_str(path): value}
+      if daglish.is_traversable(value):
+        if isinstance(value, (list, tuple)):
+          elements = new_value
+        elif isinstance(value, dict):
+          elements = new_value.values()
+        elif isinstance(value, fdl.Buildable):
+          elements = new_value.__arguments__.values()
+        for element in elements:
+          output.update(element)
+      return output
+
+    output = daglish.traverse_with_path(traverse, config)
+
+    expected = {
+        "": config,
+        ".bar": config.bar,
+        ".bar[0]": config.bar[0],
+        ".bar[1]": config.bar[1],
+        ".bar[1]['key']": config.bar[1]["key"],
+        ".bar[1]['key'][0]": config.bar[1]["key"][0],
+        ".baz": config.baz,
+        ".baz.fizz": config.baz.fizz,
+        ".baz.fizz.bar": config.baz.fizz.bar,
+        ".baz.fizz.bar[0]": config.baz.fizz.bar[0],
+        ".baz.fizz.baz": config.baz.fizz.baz,
+        ".baz.buzz": config.baz.buzz
+    }
+    self.assertEqual(expected.items(), output.items())
+
+  def test_yield_non_none_error(self):
+    config = TestNamedTuple(fizz=[1, 2, 3], buzz=(4, 5, 6))
+
+    def traverse(unused_path, value):
+      yield value
+
+    msg = r"The traversal function yielded a non-None value\."
+    with self.assertRaisesRegex(RuntimeError, msg):
+      daglish.traverse_with_path(traverse, config)
+
+  def test_yield_twice_error(self):
+
+    def traverse(unused_path, unused_value):
+      yield
+      yield
+
+    msg = "Does the traversal function have two yields?"
+    with self.assertRaisesRegex(RuntimeError, msg):
+      daglish.traverse_with_path(traverse, [])
+
+  def test_doc_example(self):
+    structure = {
+        "a": [1, 2],
+        "b": (1, 2, 3),
+    }
+
+    def replace_twos_and_tuples(unused_path, value):
+      if value == 2:
+        return None
+      elif isinstance(value, tuple):
+        return "used to be a tuple..."
+
+      # Provides the post-traversal value! Here, any sub-nest value of 2 has
+      # already been mapped to None.
+      new_value = yield
+
+      if isinstance(new_value, list):
+        return ["used to be a two..." if x is None else x for x in new_value]
+      else:
+        return new_value
+
+    output = daglish.traverse_with_path(replace_twos_and_tuples, structure)
+
+    assert output == {
+        "a": [1, "used to be a two..."],
+        "b": "used to be a tuple...",
+    }
+
+
+class TraverseWithAllPathsTest(absltest.TestCase):
+
+  def test_collect_paths(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [1, 2]
+    config = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    path_to_all_paths = {}
+
+    def traverse(all_paths, current_path, unused_value):
+      path_to_all_paths[daglish.path_str(current_path)] = [
+          daglish.path_str(path) for path in all_paths
+      ]
+      yield
+
+    output = daglish.traverse_with_all_paths(traverse, config)
+
+    expected = {
+        "": [""],
+        ".bar": [".bar"],
+        ".bar[0]": [".bar[0]", ".baz[0]"],
+        ".bar[0][0]": [".bar[0][0]", ".baz[0][0]"],
+        ".bar[0][1]": [".bar[0][1]", ".baz[0][1]"],
+        ".bar[1]": [".bar[1]", ".baz[1]"],
+        ".bar[1].bar": [".bar[1].bar", ".baz[1].bar"],
+        ".bar[1].baz": [".bar[1].baz", ".baz[1].baz"],
+        ".baz": [".baz"],
+        ".baz[0]": [".bar[0]", ".baz[0]"],
+        ".baz[0][0]": [".bar[0][0]", ".baz[0][0]"],
+        ".baz[0][1]": [".bar[0][1]", ".baz[0][1]"],
+        ".baz[1]": [".bar[1]", ".baz[1]"],
+        ".baz[1].bar": [".bar[1].bar", ".baz[1].bar"],
+        ".baz[1].baz": [".bar[1].baz", ".baz[1].baz"],
+    }
+    self.assertEqual(expected.items(), path_to_all_paths.items())
+    self.assertIsNone(output)
+
+  def test_posttraversal_return_old_value(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [1, 2]
+    config = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    def traverse(unused_all_paths, unused_current_path, value):
+      yield
+      return value
+
+    output = daglish.traverse_with_all_paths(traverse, config)
+    self.assertIs(config.bar[0], output.bar[0])
+    self.assertIs(config.bar[1], output.bar[1])
+    self.assertIs(config.baz[0], output.baz[0])
+    self.assertIs(config.baz[1], output.baz[1])
+    self.assertIs(output.bar[0], output.baz[0])
+    self.assertIs(output.bar[1], output.baz[1])
+
+  def test_posttraversal_return_new_value(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [1, 2]
+    config = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    def traverse(unused_all_paths, unused_current_path, unused_value):
+      return (yield)
+
+    output = daglish.traverse_with_all_paths(traverse, config)
+    self.assertIsNot(config.bar[0], output.bar[0])
+    self.assertIsNot(config.bar[1], output.bar[1])
+    self.assertIsNot(config.baz[0], output.baz[0])
+    self.assertIsNot(config.baz[1], output.baz[1])
+    self.assertIsNot(output.bar[0], output.baz[0])
+    self.assertIsNot(output.bar[1], output.baz[1])
+
+
+class MemoizedTraverseTest(absltest.TestCase):
+
+  def test_memoizes_values(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [1, 2]
+    config = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    def traverse(unused_all_paths, unused_value):
+      return (yield)
+
+    output = daglish.memoized_traverse(traverse, config)
+    self.assertIsNot(config.bar[0], output.bar[0])
+    self.assertIsNot(config.bar[1], output.bar[1])
+    self.assertIsNot(config.baz[0], output.baz[0])
+    self.assertIsNot(config.baz[1], output.baz[1])
+    self.assertIs(output.bar[0], output.baz[0])
+    self.assertIs(output.bar[1], output.baz[1])
 
 
 if __name__ == "__main__":
