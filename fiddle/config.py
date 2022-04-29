@@ -226,11 +226,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     class being configured, and then checks for equality in the configured
     arguments.
 
-    Note that argument history is not compared (i.e., it doesn't matter how
-    the `Buildable`s being compared reached their current state). Additionally,
-    default argument values are not considered in this comparison: If one
+    Default argument values are considered in this comparison: If one
     `Buildable` has an argument explicitly set to its default value while
-    another does not, the two will not be considered equal.
+    another does not, the two will still be considered equal (motivated by the
+    fact that calls to the function or class being configured will be the same).
+
+    Argument history is not compared (i.e., it doesn't matter how the
+    `Buildable`s being compared reached their current state).
 
     Args:
       other: The other value to compare `self` to.
@@ -246,7 +248,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         'Internal invariant violated: has_var_keyword should be the same if '
         "__fn_or_cls__'s are the same.")
 
-    return self.__arguments__ == other.__arguments__
+    missing = object()
+    for key in set(self.__arguments__) | set(other.__arguments__):
+      v1 = getattr(self, key, missing)
+      v2 = getattr(other, key, missing)
+      if (v1 is not missing or v2 is not missing) and v1 != v2:
+        return False
+    return True
 
   def __getstate__(self):
     """Gets pickle serialization state, removing some fields.

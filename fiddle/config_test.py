@@ -520,6 +520,15 @@ class ConfigTest(absltest.TestCase):
     self.assertFalse(cfg.__eq__(cfg_subclass))
     self.assertFalse(cfg_subclass.__eq__(cfg))
 
+  def test_default_value_equality(self):
+    cfg1 = config.Config(TestClass, 1, 2)
+    cfg2 = config.Config(TestClass, 1, 2, None, kwarg2=None)
+    self.assertEqual(cfg1, cfg2)
+
+    cfg1 = config.Config(basic_fn, 1, 2)
+    cfg2 = config.Config(basic_fn, 1, 2, None, kwarg2=None)
+    self.assertEqual(cfg1, cfg2)
+
   def test_unsetting_argument(self):
     fn_config = config.Config(basic_fn)
     fn_config.arg1 = 3
