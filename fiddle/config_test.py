@@ -557,9 +557,9 @@ class ConfigTest(absltest.TestCase):
     pytype_extensions.assert_type(class_partial, config.Partial[TestClass])
     partial = building.build(class_partial)
     pytype_extensions.assert_type(partial, Callable[..., TestClass])
-    self.assertIsInstance(partial, functools.partial)
-
     instance = partial()
+    pytype_extensions.assert_type(instance, TestClass)
+    self.assertIsInstance(partial, functools.partial)
     self.assertIsInstance(instance, TestClass)
     self.assertEqual(instance.arg1, 'arg1')
     self.assertEqual(instance.arg2, 'arg2')
@@ -582,7 +582,9 @@ class ConfigTest(absltest.TestCase):
 
     partial = building.build(fn_partial)
     pytype_extensions.assert_type(partial, Callable[..., Dict[str, Any]])
-    self.assertEqual(partial(), {
+    value = partial()
+    pytype_extensions.assert_type(value, Dict[str, Any])
+    self.assertEqual(value, {
         'arg1': 'arg1',
         'arg2': 'arg2',
         'kwarg1': 'kwarg1',
