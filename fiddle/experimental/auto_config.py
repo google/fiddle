@@ -31,6 +31,7 @@ import types
 from typing import Any
 
 from fiddle import config
+from fiddle.experimental import daglish
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
 _BUILTINS = frozenset([
@@ -233,6 +234,22 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
   # pylint: enable=invalid-name
 
 
+def _contains_buildable(structure):
+  """Returns `True` if `structure` contains a `fdl.Buildable`."""
+  contains_buildable = False
+
+  def traverse(unused_path, value):
+    nonlocal contains_buildable
+    if isinstance(value, config.Buildable):
+      contains_buildable = True
+      return  # Stop traversal.
+    else:
+      yield  # Continue traversal.
+
+  daglish.traverse_with_path(traverse, structure)
+  return contains_buildable
+
+
 def auto_config(
     fn=None,
     experimental_allow_control_flow=False
@@ -369,16 +386,17 @@ def auto_config(
     auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
 
     # Finally we wrap the rewritten function to perform additional error
-    # checking and enforce that the output is a `fdl.Buildable`.
+    # checking and enforce that the output contains a `fdl.Buildable`.
     @functools.wraps(auto_config_fn)
     def as_buildable(*args, **kwargs):
       output = auto_config_fn(*args, **kwargs)  # pylint: disable=not-callable
-      if not isinstance(output, config.Buildable):
+      if not _contains_buildable(output):
         raise TypeError(
             f'The `auto_config` rewritten version of `{fn.__qualname__}` '
-            f'returned a `{type(output).__name__}`, which is not a '
-            '`fdl.Buildable`. Please ensure this function returns the result '
-            'of an `auto_config`-eligible call expression.')
+            f'returned a `{type(output).__name__}`, which is not (or did not '
+            'contain) a `fdl.Buildable`. Please ensure this function returns '
+            'the result of an `auto_config`-eligible call expression, or a '
+            'supported container (list, tuple, dict) containing one.')
       return output
 
     @functools.wraps(fn)

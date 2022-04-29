@@ -208,18 +208,34 @@ class AutoConfigTest(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, 'only compatible with functions'):
       auto_config.auto_config(3)
 
-  def test_require_buildable_return_type(self):
+  def test_return_structure(self):
+    expected_config = {
+        'test_key1': config.Config(TestClass, 1, arg2=2),
+        'test_key2': [config.Config(TestClass, 3, 4), 5],
+        'test_key3': (config.Partial(pass_through, 'arg'), 6),
+    }
 
     @auto_config.auto_config
     def test_config():
-      pass
+      return {
+          'test_key1': TestClass(1, 2),
+          'test_key2': [TestClass(3, 4), 5],
+          'test_key3': (functools.partial(pass_through, 'arg'), 6),
+      }
+
+    buildable = test_config.as_buildable()
+    self.assertEqual(expected_config, buildable)
+
+  def test_require_buildable_in_return_type(self):
+
+    @auto_config.auto_config
+    def test_config():
+      return {'no buildable': ['inside here']}
 
     with self.assertRaisesRegex(
         TypeError, r'The `auto_config` rewritten version of '
-        r'`AutoConfigTest\.\w+\.<locals>\.test_config` '
-        r'returned a `NoneType`, which is not a `fdl\.Buildable`\. Please '
-        r'ensure this function returns the result of an `auto_config`-eligible '
-        r'call expression\.'):
+        r'`AutoConfigTest\.\w+\.<locals>\.test_config` returned a `dict`, '
+        r'which is not \(or did not contain\) a `fdl\.Buildable`\.'):
       test_config.as_buildable()
 
   def test_control_flow_if(self):
