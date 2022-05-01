@@ -15,6 +15,7 @@
 
 """Tests for namespace_config."""
 
+import copy
 import types
 
 from absl.testing import absltest
@@ -60,6 +61,13 @@ class NamespaceConfigTest(absltest.TestCase):
     self.assertIsInstance(obj.nested[1]['other_dictconfig'],
                           types.SimpleNamespace)
     self.assertEqual('here', obj.nested[1]['other_dictconfig'].very_inside)
+
+  def test_copy(self):
+    cfg1 = namespace_config.NamespaceConfig()
+    cfg1.x = 1
+    cfg1.y = 'abc'
+    cfg2 = copy.copy(cfg1)
+    self.assertEqual(cfg1, cfg2)
 
 
 if __name__ == '__main__':

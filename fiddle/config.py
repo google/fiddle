@@ -199,7 +199,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       A shallow copy of this `Buildable`.
     """
-    return type(self)(self)  # pytype: disable=not-instantiable
+    return _clone_buildable_type(self, fn_or_cls=self)
 
   def __deepcopy__(self, memo):
     """Deeply copies this `Buildable` instance.
@@ -214,10 +214,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       A deep copy of this `Buildable`.
     """
-    config_copy = type(self)(self.__fn_or_cls__)  # pytype: disable=not-instantiable
+    deepcopy = _clone_buildable_type(self, fn_or_cls=self.__fn_or_cls__)
     deepcopied_arguments = copy.deepcopy(self.__arguments__, memo)
-    object.__setattr__(config_copy, '__arguments__', deepcopied_arguments)
-    return config_copy
+    object.__setattr__(deepcopy, '__arguments__', deepcopied_arguments)
+    return deepcopy
 
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.
@@ -283,6 +283,48 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if '__signature__' not in self.__dict__:
       object.__setattr__(self, '__signature__',
                          inspect.signature(self.__fn_or_cls__))
+
+
+def _clone_buildable_type(
+    buildable: Buildable,
+    fn_or_cls: Union[Buildable, TypeOrCallableProducingT],
+) -> Buildable:
+  """Clones `buildable`, returning a `Buildable` of the same specific type.
+
+  This function facilitates the default `__copy__` and `__deepcopy__` methods of
+  `Buildable`, allowing them to create a new instance of subclass types that may
+  have different initializer signatures.
+
+  The strategy adopted is to a create a new uninitialized instance of the same
+  type as `buildable`, using `Buildable.__new__(type(buildable))`. This instance
+  is then initialized using `Buildable.__init__`, which has a known signature.
+
+  There are two cases where not calling the subtype's initializer (i.e.,
+  `type(buildable).__init__`) can be problematic. First, if it adds any
+  attributes beyond the default ones inherited from `Buildable`, they won't be
+  added here. This case is detected and an `AssertionError`is raised indicating
+  `type(buildable)` must implement custom `__copy__` and `__deepcopy__` methods.
+  A second case is if the subtype's initializer has side effects (e.g., mutating
+  some global state). This case is not detected, but similarly would require
+  custom copy method implementations to mitigate.
+
+  Args:
+    buildable: The `Buildable` to create a new instance of.
+    fn_or_cls: The function or class (or `Buildable`) to pass as `fn_or_cls`
+      when calling `Buildable.__init__` on the resulting instance.
+
+  Returns:
+    A new instance of the same type as `buildable`.
+  """
+  clone = Buildable.__new__(type(buildable))
+  Buildable.__init__(clone, fn_or_cls)
+  assert buildable.__dict__.keys() == clone.__dict__.keys(), (
+      f'Error when cloning `Buildable` subclass of type {type(buildable)}; '
+      'clone had missing attributes compared to the original. Missing '
+      f'attributes: {buildable.__dict__.keys() - clone.__dict__.keys()}. This '
+      f'indicates that {type(buildable)} needs to implement custom `__copy__` '
+      'and `__deepcopy__` methods.')
+  return clone
 
 
 class Config(Generic[T], Buildable[T]):

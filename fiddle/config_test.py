@@ -435,6 +435,36 @@ class ConfigTest(absltest.TestCase):
     fn_config_copy.arg1.arg2 = 'mutated'
     self.assertEqual(fn_config.arg1.arg2, 'mutated')
 
+  def test_copy_buildable_subclass(self):
+
+    class TestClassConfig(config.Config):
+
+      def __init__(self, *args, **kwargs):
+        super().__init__(TestClass, *args, **kwargs)
+
+    test_class_cfg = TestClassConfig(1, 2)
+    test_class_cfg_copy = copy.copy(test_class_cfg)
+    self.assertEqual(test_class_cfg, test_class_cfg_copy)
+
+  def test_copy_buildable_subclass_error_on_modified_dict(self):
+
+    class TestClassConfig(config.Config):
+
+      def __init__(self, *args, **kwargs):
+        super().__init__(TestClass, *args, **kwargs)
+        object.__setattr__(self, '__custom_attr__', 3)
+
+    test_class_cfg = TestClassConfig(1, 2)
+
+    expected_msg = (
+        r'Error when cloning `Buildable` subclass of type <class '
+        r"'.*\.TestClassConfig'>; clone had missing attributes compared to the "
+        r"original\. Missing attributes: \{'__custom_attr__'\}\. This "
+        r"indicates that <class '.*\.TestClassConfig'> needs to implement "
+        r'custom `__copy__` and `__deepcopy__` methods\.')
+    with self.assertRaisesRegex(AssertionError, expected_msg):
+      copy.copy(test_class_cfg)
+
   def test_deep_copy(self):
     class_config = config.Config(TestClass, 'arg1', 'arg2')
     fn_config = config.Config(basic_fn, class_config, 'fn_arg2')
