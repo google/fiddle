@@ -267,7 +267,14 @@ class _GraphvizRenderer:
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
     table = self.tag('table', style=style)
     tr = self.tag('tr')
-    td = self.tag('td', port=port, bgcolor=self._color(config_id), style=style)
+    td = self.tag(
+        'td',
+        port=port,
+        bgcolor=self._color(config_id),
+        style=style,
+        fixedsize='TRUE',
+        height='8',
+        width='8')
     return table(tr(td('')))
 
   def _render_sequence(self, sequence: Union[List[Any], Tuple[Any]]) -> str:
