@@ -41,11 +41,11 @@ class PathElementTest(absltest.TestCase):
   def test_path_fragment(self):
     cfg = fdl.Config(lambda x: x)
     path: List[daglish.PathElement] = [
-        daglish.Index([4], 1),
-        daglish.Key({}, "a"),
-        daglish.Attr(object(), "foo"),
-        daglish.Key({}, 2),
-        daglish.Attr(cfg, "bar"),
+        daglish.Index(container=[4], index=1),
+        daglish.Key(container={}, key="a"),
+        daglish.Attr(container=object(), name="foo"),
+        daglish.Key(container={}, key=2),
+        daglish.Attr(container=cfg, name="bar"),
     ]
     path_str = "".join(x.code for x in path)
     self.assertEqual(path_str, "[1]['a'].foo[2].bar")

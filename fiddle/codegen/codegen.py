@@ -373,7 +373,7 @@ def _configure_shared_object(
     buildable_subclass_str = import_manager.add(child.__class__)
     nodes = [mini_ast.Assignment(name, f"{buildable_subclass_str}({relname})")]
     for key, value in child.__arguments__.items():
-      path = [daglish.BuildableAttr(child, key)]
+      path = [daglish.BuildableAttr(key, container=child)]
       nodes.append(shared_manager.assign(name, path, value))
     shared_manager.add(name, child, mini_ast.ImmediateAttrsBlock(nodes))
     return child
@@ -446,12 +446,12 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
       rest_path_elts = []
       for tree_lib_elt in rest:
         if isinstance(tree_lib_elt, int):
-          rest_path_elts.append(daglish.Index([], tree_lib_elt))
+          rest_path_elts.append(daglish.Index(tree_lib_elt, container=[]))
         else:
-          rest_path_elts.append(daglish.Key({}, tree_lib_elt))
+          rest_path_elts.append(daglish.Key(tree_lib_elt, container={}))
       full_path = [
           *path,
-          daglish.BuildableAttr(child, arg_dict_key), *rest_path_elts
+          daglish.BuildableAttr(arg_dict_key, container=child), *rest_path_elts
       ]
 
       if rest_path_elts and not _has_child_buildables(value):

@@ -20,14 +20,14 @@ import copy
 import dataclasses
 import inspect
 import typing
-from typing import Any, Callable, Dict, Generator, Iterable, List, Tuple, Union
+from typing import Any, Callable, Dict, Generator, Iterable, List, Tuple, Union, Optional
 
 from fiddle import config
 
 
 class PathElement(metaclass=abc.ABCMeta):
   """Element of a path."""
-  container: Any
+  container: Optional[Any] = None
 
   @abc.abstractproperty
   def code(self) -> str:
@@ -38,8 +38,8 @@ class PathElement(metaclass=abc.ABCMeta):
 @dataclasses.dataclass(frozen=True)
 class Index(PathElement):
   """An index into a sequence (list or tuple)."""
-  container: Union[List[Any], Tuple[Any, ...]]
   index: int
+  container: Optional[Union[List[Any], Tuple[Any, ...]]] = None
 
   @property
   def code(self) -> str:
@@ -49,8 +49,8 @@ class Index(PathElement):
 @dataclasses.dataclass(frozen=True)
 class Key(PathElement):
   """A key of a mapping (e.g., dict)."""
-  container: Dict[Any, Any]
   key: Any
+  container: Optional[Dict[Any, Any]] = None
 
   @property
   def code(self) -> str:
@@ -60,8 +60,8 @@ class Key(PathElement):
 @dataclasses.dataclass(frozen=True)
 class Attr(PathElement):
   """An attribute of an object."""
-  container: Any
   name: str
+  container: Optional[Any] = None
 
   @property
   def code(self) -> str:
@@ -224,16 +224,16 @@ def _yield_items(
   container = typing.cast(Any, container)
   if isinstance(container, Dict):
     for key, value in container.items():
-      yield Key(container, key), value
+      yield Key(key, container), value
   elif is_namedtuple(container):
     for name, value in container._asdict().items():
-      yield Attr(container, name), value
+      yield Attr(name, container), value
   elif isinstance(container, config.Buildable):
     for name, value in container.__arguments__.items():
-      yield Attr(container, name), value
+      yield Attr(name, container), value
   elif isinstance(container, (List, Tuple)):
     for index, value in enumerate(container):
-      yield Index(container, index), value
+      yield Index(index, container), value
   else:
     raise ValueError(f"Not a supported container type: {container}.")
 
