@@ -29,10 +29,15 @@ class PathElement(metaclass=abc.ABCMeta):
   """Element of a path."""
   container: Optional[Any] = None
 
-  @abc.abstractproperty
+  @property
+  @abc.abstractmethod
   def code(self) -> str:
     """Generates code for accessing this path."""
     raise NotImplementedError()
+
+  @abc.abstractmethod
+  def follow(self, container) -> Any:
+    """Returns the element of `container` specified by this path element."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -45,6 +50,9 @@ class Index(PathElement):
   def code(self) -> str:
     return f"[{self.index}]"
 
+  def follow(self, container) -> Any:
+    return container[self.index]
+
 
 @dataclasses.dataclass(frozen=True)
 class Key(PathElement):
@@ -56,6 +64,9 @@ class Key(PathElement):
   def code(self) -> str:
     return f"[{self.key!r}]"
 
+  def follow(self, container) -> Any:
+    return container[self.key]
+
 
 @dataclasses.dataclass(frozen=True)
 class Attr(PathElement):
@@ -66,6 +77,9 @@ class Attr(PathElement):
   @property
   def code(self) -> str:
     return f".{self.name}"
+
+  def follow(self, container) -> Any:
+    return getattr(container, self.name)
 
 
 class BuildableAttr(Attr):
@@ -96,6 +110,38 @@ _IMMUTABLE_NONCONTAINER_TYPES = (
 
 def path_str(path: Path) -> str:
   return "".join(x.code for x in path)
+
+
+def follow_path(root: Any, path: Path):
+  """Follows the path from a root item to a contained item, and returns it.
+
+  Equivalent to `functools.reduce(lambda v, p: p.follow(v), root, path)`,
+  but gives better error messages.
+
+  Args:
+    root: The starting point for the path.
+    path: A sequence of `PathElement`s, indicating how to get from `root` to the
+      contained item.
+
+  Returns:
+    The contained item identified by `path`.
+
+  Raises:
+    ValueError: If `path` is not compatible with `root`.
+  """
+  value = root
+  for i, path_elt in enumerate(path):
+    try:
+      value = path_elt.follow(value)
+    except (KeyError, IndexError, TypeError, AttributeError) as e:
+      raise ValueError(f"{path_elt} is not compatible with "
+                       f"root{path_str(path[:i])}={value!r}: {e}") from e
+  return value
+
+
+def strip_path_containers(path: Path):
+  """Returns a copy of `path` with all `container` fields set to `None`."""
+  return tuple(dataclasses.replace(p, container=None) for p in path)
 
 
 def _add_path_element(paths: Paths, elt: PathElement) -> Paths:
