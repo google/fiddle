@@ -379,5 +379,54 @@ class MemoizedTraverseTest(absltest.TestCase):
     self.assertIs(output.bar[1], output.baz[1])
 
 
+class CollectPathsByIdTest(absltest.TestCase):
+
+  def test_empty_structure(self):
+    for root in [[], {}, fdl.Config(Foo)]:
+      self.assertEqual(daglish.collect_paths_by_id(root), {id(root): [()]})
+
+  def test_collect_paths_by_id(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [1, 2]
+    config = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    expected = {
+        id(config): [()],
+        id(config.bar): [(daglish.Attr("bar", config),)],
+        id(config.baz): [(daglish.Attr("baz", config),)],
+        id(shared_list): [(
+            daglish.Attr("bar", config),
+            daglish.Index(0, config.bar),
+        ), (
+            daglish.Attr("baz", config),
+            daglish.Index(0, config.baz),
+        )],
+        id(shared_config): [(
+            daglish.Attr("bar", config),
+            daglish.Index(1, config.bar),
+        ), (
+            daglish.Attr("baz", config),
+            daglish.Index(1, config.baz),
+        )],
+    }
+    self.assertEqual(daglish.collect_paths_by_id(config), expected)
+
+    expected_with_stripped_containers = {
+        id(config): [()],
+        id(config.bar): [(daglish.Attr("bar"),)],
+        id(config.baz): [(daglish.Attr("baz"),)],
+        id(shared_list): [(daglish.Attr("bar"), daglish.Index(0)),
+                          (daglish.Attr("baz"), daglish.Index(0))],
+        id(shared_config): [(daglish.Attr("bar"), daglish.Index(1)),
+                            (daglish.Attr("baz"), daglish.Index(1))],
+    }
+    self.assertEqual(
+        daglish.collect_paths_by_id(config, True),
+        expected_with_stripped_containers)
+
 if __name__ == "__main__":
   absltest.main()

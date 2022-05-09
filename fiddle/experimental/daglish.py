@@ -404,6 +404,32 @@ def traverse_with_path(fn: TraverseWithPathFn, structure: Any) -> Any:
   return traverse_impl((), structure)
 
 
+def collect_paths_by_id(
+    structure: Any, strip_containers: bool = False) -> Dict[int, List[Path]]:
+  """Returns a dict mapping id(v)->paths for all `v` traversable from structure.
+
+  I.e., if `result = collect_paths_by_id(structure)`, then `result[id(v)]` is
+  the list of every path `p` such that `follow_path(structure, p) is v`.
+
+  This dict only includes values `v` for which `is_memoizable(v)` is true.
+
+  Args:
+    structure: The structure for which the id->paths mapping should be created.
+    strip_containers: If true, then call `strip_path_containers` on each path.
+  """
+  paths_memo = {}
+
+  def collect_paths(path: Path, value: Any):
+    if is_memoizable(value):
+      if strip_containers:
+        path = strip_path_containers(path)
+      paths_memo.setdefault(id(value), []).append(path)
+    yield
+
+  traverse_with_path(collect_paths, structure)
+  return paths_memo
+
+
 TraverseWithAllPathsFn = Callable[[Paths, Path, Any], Generator[None, Any, Any]]
 
 
@@ -430,14 +456,7 @@ def traverse_with_all_paths(fn: TraverseWithAllPathsFn, structure):
   if not inspect.isgeneratorfunction(fn):
     raise ValueError("`fn` should contain a yield statement.")
 
-  paths_memo = {}
-
-  def collect_paths(path: Path, value: Any):
-    if is_memoizable(value):
-      paths_memo.setdefault(id(value), []).append(path)
-    yield
-
-  traverse_with_path(collect_paths, structure)
+  paths_memo = collect_paths_by_id(structure)
 
   def wrap_with_paths(current_path: Path, value: Any):
     all_paths = ((),)
