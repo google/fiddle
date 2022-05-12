@@ -20,14 +20,13 @@ import copy
 import dataclasses
 import inspect
 import typing
-from typing import Any, Callable, Dict, Generator, Iterable, List, Tuple, Union, Optional
+from typing import Any, Callable, Dict, Generator, Iterable, List, Tuple, Union
 
 from fiddle import config
 
 
 class PathElement(metaclass=abc.ABCMeta):
   """Element of a path."""
-  container: Optional[Any] = None
 
   @property
   @abc.abstractmethod
@@ -44,13 +43,12 @@ class PathElement(metaclass=abc.ABCMeta):
 class Index(PathElement):
   """An index into a sequence (list or tuple)."""
   index: int
-  container: Optional[Union[List[Any], Tuple[Any, ...]]] = None
 
   @property
   def code(self) -> str:
     return f"[{self.index}]"
 
-  def follow(self, container) -> Any:
+  def follow(self, container: Union[List[Any], Tuple[Any, ...]]) -> Any:
     return container[self.index]
 
 
@@ -58,13 +56,12 @@ class Index(PathElement):
 class Key(PathElement):
   """A key of a mapping (e.g., dict)."""
   key: Any
-  container: Optional[Dict[Any, Any]] = None
 
   @property
   def code(self) -> str:
     return f"[{self.key!r}]"
 
-  def follow(self, container) -> Any:
+  def follow(self, container: Dict[Any, Any]) -> Any:
     return container[self.key]
 
 
@@ -72,13 +69,12 @@ class Key(PathElement):
 class Attr(PathElement):
   """An attribute of an object."""
   name: str
-  container: Optional[Any] = None
 
   @property
   def code(self) -> str:
     return f".{self.name}"
 
-  def follow(self, container) -> Any:
+  def follow(self, container: Any) -> Any:
     return getattr(container, self.name)
 
 
@@ -137,11 +133,6 @@ def follow_path(root: Any, path: Path):
       raise ValueError(f"{path_elt} is not compatible with "
                        f"root{path_str(path[:i])}={value!r}: {e}") from e
   return value
-
-
-def strip_path_containers(path: Path):
-  """Returns a copy of `path` with all `container` fields set to `None`."""
-  return tuple(dataclasses.replace(p, container=None) for p in path)
 
 
 def _add_path_element(paths: Paths, elt: PathElement) -> Paths:
@@ -270,16 +261,16 @@ def _yield_items(
   container = typing.cast(Any, container)
   if isinstance(container, Dict):
     for key, value in container.items():
-      yield Key(key, container), value
+      yield Key(key), value
   elif is_namedtuple(container):
     for name, value in container._asdict().items():
-      yield Attr(name, container), value
+      yield Attr(name), value
   elif isinstance(container, config.Buildable):
     for name, value in container.__arguments__.items():
-      yield Attr(name, container), value
+      yield Attr(name), value
   elif isinstance(container, (List, Tuple)):
     for index, value in enumerate(container):
-      yield Index(index, container), value
+      yield Index(index), value
   else:
     raise ValueError(f"Not a supported container type: {container}.")
 
@@ -404,8 +395,7 @@ def traverse_with_path(fn: TraverseWithPathFn, structure: Any) -> Any:
   return traverse_impl((), structure)
 
 
-def collect_paths_by_id(
-    structure: Any, strip_containers: bool = False) -> Dict[int, List[Path]]:
+def collect_paths_by_id(structure: Any) -> Dict[int, List[Path]]:
   """Returns a dict mapping id(v)->paths for all `v` traversable from structure.
 
   I.e., if `result = collect_paths_by_id(structure)`, then `result[id(v)]` is
@@ -415,14 +405,11 @@ def collect_paths_by_id(
 
   Args:
     structure: The structure for which the id->paths mapping should be created.
-    strip_containers: If true, then call `strip_path_containers` on each path.
   """
   paths_memo = {}
 
   def collect_paths(path: Path, value: Any):
     if is_memoizable(value):
-      if strip_containers:
-        path = strip_path_containers(path)
       paths_memo.setdefault(id(value), []).append(path)
     yield
 
@@ -465,8 +452,9 @@ def traverse_with_all_paths(fn: TraverseWithAllPathsFn, structure):
     elif current_path:
       # Non-memoizable values may have still have multiple paths via a shared
       # parent container. Here we augment all paths to the parent container.
-      all_paths = paths_memo[id(current_path[-1].container)]
-      all_paths = tuple(path + current_path[-1:] for path in all_paths)
+      parent = follow_path(structure, current_path[:-1])
+      parent_paths = paths_memo[id(parent)]
+      all_paths = tuple(path + current_path[-1:] for path in parent_paths)
     return (yield from fn(all_paths, current_path, value))
 
   return traverse_with_path(wrap_with_paths, structure)

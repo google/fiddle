@@ -39,13 +39,12 @@ class TestNamedTuple(typing.NamedTuple):
 class PathElementTest(absltest.TestCase):
 
   def test_path_fragment(self):
-    cfg = fdl.Config(lambda x: x)
     path: List[daglish.PathElement] = [
-        daglish.Index(container=[4], index=1),
-        daglish.Key(container={}, key="a"),
-        daglish.Attr(container=object(), name="foo"),
-        daglish.Key(container={}, key=2),
-        daglish.Attr(container=cfg, name="bar"),
+        daglish.Index(index=1),
+        daglish.Key(key="a"),
+        daglish.Attr(name="foo"),
+        daglish.Key(key=2),
+        daglish.Attr(name="bar"),
     ]
     path_str = "".join(x.code for x in path)
     self.assertEqual(path_str, "[1]['a'].foo[2].bar")
@@ -87,41 +86,21 @@ class PathElementTest(absltest.TestCase):
 
     bad_path_1 = (daglish.Key("a"), daglish.Key("b"))
     with self.assertRaisesRegex(
-        ValueError, r"Key\(key='a', container=None\) is not compatible "
+        ValueError, r"Key\(key='a'\) is not compatible "
         r"with root=.*"):
       daglish.follow_path(root, bad_path_1)
 
     bad_path_2 = (daglish.Index(2), daglish.Key("b"))
     with self.assertRaisesRegex(
-        ValueError, r"Key\(key='b', container=None\) is not compatible "
+        ValueError, r"Key\(key='b'\) is not compatible "
         r"with root\[2\]=\[3, 4, 5\]"):
       daglish.follow_path(root, bad_path_2)
 
     bad_path_3 = (daglish.Index(1), daglish.Key("a"), daglish.Attr("bam"))
     with self.assertRaisesRegex(
-        ValueError, r"Attr\(name='bam', container=None\) is not compatible "
+        ValueError, r"Attr\(name='bam'\) is not compatible "
         r"with root\[1\]\['a'\]=.*"):
       daglish.follow_path(root, bad_path_3)
-
-  def test_strip_path_containers(self):
-    cfg = fdl.Config(lambda x: x)
-    path: daglish.Path = (
-        daglish.Index(container=[4], index=1),
-        daglish.Key(container={}, key="a"),
-        daglish.Attr(container=object(), name="foo"),
-        daglish.Key(container={}, key=2),
-        daglish.Attr(container=cfg, name="bar"),
-    )
-    stripped = daglish.strip_path_containers(path)
-    self.assertEqual(stripped, (
-        daglish.Index(1),
-        daglish.Key("a"),
-        daglish.Attr("foo"),
-        daglish.Key(2),
-        daglish.Attr("bar"),
-    ))
-    self.assertEqual(daglish.path_str(path), daglish.path_str(stripped))
-    hash(stripped)  # Check that the stripped path is hashable.
 
 
 class TraverseWithPathTest(absltest.TestCase):
@@ -396,27 +375,6 @@ class CollectPathsByIdTest(absltest.TestCase):
 
     expected = {
         id(config): [()],
-        id(config.bar): [(daglish.Attr("bar", config),)],
-        id(config.baz): [(daglish.Attr("baz", config),)],
-        id(shared_list): [(
-            daglish.Attr("bar", config),
-            daglish.Index(0, config.bar),
-        ), (
-            daglish.Attr("baz", config),
-            daglish.Index(0, config.baz),
-        )],
-        id(shared_config): [(
-            daglish.Attr("bar", config),
-            daglish.Index(1, config.bar),
-        ), (
-            daglish.Attr("baz", config),
-            daglish.Index(1, config.baz),
-        )],
-    }
-    self.assertEqual(daglish.collect_paths_by_id(config), expected)
-
-    expected_with_stripped_containers = {
-        id(config): [()],
         id(config.bar): [(daglish.Attr("bar"),)],
         id(config.baz): [(daglish.Attr("baz"),)],
         id(shared_list): [(daglish.Attr("bar"), daglish.Index(0)),
@@ -424,9 +382,7 @@ class CollectPathsByIdTest(absltest.TestCase):
         id(shared_config): [(daglish.Attr("bar"), daglish.Index(1)),
                             (daglish.Attr("baz"), daglish.Index(1))],
     }
-    self.assertEqual(
-        daglish.collect_paths_by_id(config, True),
-        expected_with_stripped_containers)
+    self.assertEqual(daglish.collect_paths_by_id(config), expected)
 
 if __name__ == "__main__":
   absltest.main()
