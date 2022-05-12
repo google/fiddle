@@ -78,6 +78,7 @@ class Attr(PathElement):
     return getattr(container, self.name)
 
 
+@dataclasses.dataclass(frozen=True)
 class BuildableAttr(Attr):
   """An attribute of a Buildable."""
 
@@ -275,7 +276,7 @@ def _yield_items(
       yield Attr(name), value
   elif isinstance(container, config.Buildable):
     for name, value in container.__arguments__.items():
-      yield Attr(name), value
+      yield BuildableAttr(name), value
   elif isinstance(container, (List, Tuple)):
     for index, value in enumerate(container):
       yield Index(index), value

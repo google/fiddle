@@ -382,14 +382,15 @@ class CollectPathsByIdTest(absltest.TestCase):
 
     expected = {
         id(config): [()],
-        id(config.bar): [(daglish.Attr("bar"),)],
-        id(config.baz): [(daglish.Attr("baz"),)],
-        id(shared_list): [(daglish.Attr("bar"), daglish.Index(0)),
-                          (daglish.Attr("baz"), daglish.Index(0))],
-        id(shared_config): [(daglish.Attr("bar"), daglish.Index(1)),
-                            (daglish.Attr("baz"), daglish.Index(1))],
+        id(config.bar): [(daglish.BuildableAttr("bar"),)],
+        id(config.baz): [(daglish.BuildableAttr("baz"),)],
+        id(shared_list): [(daglish.BuildableAttr("bar"), daglish.Index(0)),
+                          (daglish.BuildableAttr("baz"), daglish.Index(0))],
+        id(shared_config): [(daglish.BuildableAttr("bar"), daglish.Index(1)),
+                            (daglish.BuildableAttr("baz"), daglish.Index(1))],
     }
     self.assertEqual(daglish.collect_paths_by_id(config), expected)
+
 
 if __name__ == "__main__":
   absltest.main()
