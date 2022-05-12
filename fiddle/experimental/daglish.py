@@ -82,6 +82,14 @@ class BuildableAttr(Attr):
   """An attribute of a Buildable."""
 
 
+@dataclasses.dataclass(frozen=True)
+class BuildableFnOrCls(Attr):
+  """The callable (__fn_or_cls__) for a fdl.Buildable."""
+
+  def __init__(self):
+    super().__init__("__fn_or_cls__")
+
+
 Path = Tuple[PathElement, ...]
 Paths = Tuple[Path, ...]
 

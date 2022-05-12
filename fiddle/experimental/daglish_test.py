@@ -45,9 +45,10 @@ class PathElementTest(absltest.TestCase):
         daglish.Attr(name="foo"),
         daglish.Key(key=2),
         daglish.Attr(name="bar"),
+        daglish.BuildableFnOrCls(),
     ]
     path_str = "".join(x.code for x in path)
-    self.assertEqual(path_str, "[1]['a'].foo[2].bar")
+    self.assertEqual(path_str, "[1]['a'].foo[2].bar.__fn_or_cls__")
 
   def test_follow(self):
     x = [[], {}, ()]
@@ -59,12 +60,15 @@ class PathElementTest(absltest.TestCase):
     z = Foo([], {})
     self.assertIs(daglish.Attr("bar").follow(z), z.bar)
 
+    cfg = fdl.Config(Foo)
+    self.assertIs(daglish.BuildableFnOrCls().follow(cfg), Foo)
+
   def test_follow_path(self):
     root = [
         1, {
             "a": Foo("bar", "baz"),
             "b": TestNamedTuple("fizz", "buzz")
-        }, [3, 4, 5]
+        }, [3, 4, fdl.Config(Foo)]
     ]
     path1 = (daglish.Index(1), daglish.Key("a"), daglish.Attr("bar"))
     self.assertEqual(daglish.follow_path(root, path1), "bar")
@@ -84,6 +88,9 @@ class PathElementTest(absltest.TestCase):
     path6 = (daglish.Index(1), daglish.Key("a"))
     self.assertIs(daglish.follow_path(root, path6), root[1]["a"])
 
+    path7 = (daglish.Index(2), daglish.Index(2), daglish.BuildableFnOrCls())
+    self.assertIs(daglish.follow_path(root, path7), root[2][2].__fn_or_cls__)
+
     bad_path_1 = (daglish.Key("a"), daglish.Key("b"))
     with self.assertRaisesRegex(
         ValueError, r"Key\(key='a'\) is not compatible "
@@ -93,7 +100,7 @@ class PathElementTest(absltest.TestCase):
     bad_path_2 = (daglish.Index(2), daglish.Key("b"))
     with self.assertRaisesRegex(
         ValueError, r"Key\(key='b'\) is not compatible "
-        r"with root\[2\]=\[3, 4, 5\]"):
+        r"with root\[2\]=\[3, 4, .*\]"):
       daglish.follow_path(root, bad_path_2)
 
     bad_path_3 = (daglish.Index(1), daglish.Key("a"), daglish.Attr("bam"))
