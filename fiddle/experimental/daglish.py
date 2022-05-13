@@ -143,10 +143,6 @@ def follow_path(root: Any, path: Path):
   return value
 
 
-def _add_path_element(paths: Paths, elt: PathElement) -> Paths:
-  return tuple(path + (elt,) for path in paths)
-
-
 def is_traversable(value: Any) -> bool:
   """Determines what container types can be traversed into."""
   return isinstance(value, _CONTAINER_TYPES)
