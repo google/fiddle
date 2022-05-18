@@ -113,6 +113,7 @@ This implementation has drawn inspiration from multiple sources, including
 
 import ast
 import dataclasses
+import importlib
 import inspect
 import re
 import sys
@@ -199,6 +200,42 @@ def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
   return result
 
 
+def _import_dotted_name(name: str) -> Any:
+  """Returns the Python object with the given dotted name.
+
+  Args:
+    name: The dotted name of a Python object, including the module name.
+
+  Returns:
+    The named value.
+
+  Raises:
+    ValueError: If `name` is not a dotted name.
+    ModuleNotFoundError: If no dotted prefix of `name` can be imported.
+    AttributeError: If the imported module does not contain a value with
+      the indicated name.
+  """
+  name_pieces = name.split('.')
+  if len(name_pieces) < 2:
+    raise ValueError('Expected a dotted name including the module name.')
+
+  # We don't know where the module ends and the name begins; so we need to
+  # try different split points.  Longer module names take precedence.
+  for i in range(len(name_pieces) - 1, 0, -1):
+    try:
+      value = importlib.import_module('.'.join(name_pieces[:i]))
+      for name_piece in name_pieces[i:]:
+        value = getattr(value, name_piece)  # Can raise AttributeError.
+      return value
+    except ModuleNotFoundError:
+      if i == 1:  # Final iteration through the loop.
+        raise
+
+  # The following line should be unreachable -- the "if i == 1: raise" above
+  # should have raised an exception before we exited the loop.
+  raise ModuleNotFoundError(f'No module named {name_pieces[0]!r}')
+
+
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
   for flag in _FDL_SET.value:
@@ -283,7 +320,7 @@ def set_tags(cfg: config.Buildable):
       raise ValueError(f'No tags with name {name!r} in config.{did_you_mean}')
     elif len(matching_tags) > 1:
       raise EnvironmentError(
-          f'There were multiple tags with name {name}; perhaps some module '
+          f'There were multiple tags with name {name!r}; perhaps some module '
           'reloading weirdness is going on? This should be very rare. Please '
           'make sure that you are not dynamically creating subclasses of '
           '`fdl.Tag` and using 2 instances with the same module and name '
@@ -292,28 +329,37 @@ def set_tags(cfg: config.Buildable):
         cfg, tag=matching_tags[0]).set(value=ast.literal_eval(value))
 
 
-def apply_fiddlers_to(cfg: config.Buildable, source_module: Any):
+def apply_fiddlers_to(cfg: config.Buildable,
+                      source_module: Any,
+                      allow_imports=False):
   """Applies fiddlers to `cfg`."""
-  # TODO: Consider allowing arbitrary imports using importlib.
   for fiddler_name in _FIDDLER.value:
-    if not hasattr(source_module, fiddler_name):
+    if hasattr(source_module, fiddler_name):
+      fiddler = getattr(source_module, fiddler_name)
+    elif allow_imports:
+      try:
+        fiddler = _import_dotted_name(fiddler_name)
+      except (ValueError, ModuleNotFoundError, AttributeError) as e:
+        raise ValueError(f'Could not load fiddler {fiddler_name!r}: {e}') from e
+    else:
       available_fiddlers = ', '.join(
           module_reflection.find_fiddler_like_things(source_module))
       raise ValueError(
-          f'No fiddler named {fiddler_name} found; available fiddlers: '
+          f'No fiddler named {fiddler_name!r} found; available fiddlers: '
           f'{available_fiddlers}.')
-    fiddler = getattr(source_module, fiddler_name)
     fiddler(cfg)
 
 
-def create_buildable_from_flags(module: Any) -> config.Buildable:
+def create_buildable_from_flags(module: Any,
+                                allow_imports=False) -> config.Buildable:
   """Returns a fdl.Buildable based on standardized flags.
 
   Args:
     module: A common namespace to use as the basis for finding configs and
       fiddlers.
+    allow_imports: If true, then fully qualified dotted names may be used to
+      specify configs or fiddlers that should be automatically imported.
   """
-  # TODO: Explore allowing arbitrary imports.
   base_name = _FDL_CONFIG.value
   if _FDL_HELP.value or base_name is None:
     print(
@@ -334,19 +380,32 @@ def create_buildable_from_flags(module: Any) -> config.Buildable:
       else:
         docstring = ''
       print(f'  {key}{docstring}', file=sys.stderr)
+    if allow_imports:
+      print(
+          'Base configs and fiddlers may also be specified using '
+          'fully-qualified dotted names.',
+          file=sys.stderr)
   print(file=sys.stderr)
   if base_name is None:
     raise app.UsageError('--fdl_config is required.')
-  if not hasattr(module, base_name):
+  if hasattr(module, base_name):
+    base_fn = getattr(module, base_name)
+  elif allow_imports:
+    try:
+      base_fn = _import_dotted_name(base_name)
+    except (ValueError, ModuleNotFoundError, AttributeError) as e:
+      raise ValueError(
+          f'Could not init a buildable from {base_name!r}: {e}') from e
+  else:
     available_names = module_reflection.find_base_config_like_things(module)
-    raise ValueError(f'Could not init a buildable from {base_name}; '
+    raise ValueError(f'Could not init a buildable from {base_name!r}; '
                      f'available names: {", ".join(available_names)}.')
-  base_fn = getattr(module, base_name)
   if hasattr(base_fn, 'as_buildable'):
     buildable = base_fn.as_buildable()
   else:
     buildable = base_fn()
-  apply_fiddlers_to(buildable, source_module=module)
+  apply_fiddlers_to(
+      buildable, source_module=module, allow_imports=allow_imports)
   set_tags(buildable)
   apply_overrides_to(buildable)
   if _FDL_HELP.value:
