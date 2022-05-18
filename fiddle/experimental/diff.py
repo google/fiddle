@@ -19,6 +19,10 @@ from typing import Any, Dict, Sequence, List, Tuple
 from fiddle.experimental import daglish
 
 
+class AlignmentError(ValueError):
+  """Indicates that two values cannot be aligned."""
+
+
 class DiffAlignment:
   """Alignment between two structures, named `old` and `new`.
 
@@ -128,7 +132,7 @@ class DiffAlignment:
       new_value: The value in `new` that should be aligned with `old_value.`
 
     Raises:
-      ValueError: If `old_value` and `new_value` can not be aligned.  For
+      AlignmentError: If `old_value` and `new_value` can not be aligned.  For
         example, this can happen if either value is already aligned, or if
         the values are incompatible.  See the docstring for `DiffAlignment`
         for a full list of restrictions.  Note: the `align` method is not
@@ -140,25 +144,26 @@ class DiffAlignment:
     self._new_to_old[id(new_value)] = old_value
 
   def _validate_alignment(self, old_value, new_value):
-    """Raises ValueError if `old_value` can not be aligned with `new_value`."""
+    """Raises AlignmentError if old_value can not be aligned with new_value."""
     if not daglish.is_memoizable(old_value):
-      raise ValueError(f'old_value={old_value!r} may not be aligned because '
-                       'it is not memoizable.')
+      raise AlignmentError(f'old_value={old_value!r} may not be aligned because'
+                           ' it is not memoizable.')
     if not daglish.is_memoizable(new_value):
-      raise ValueError(f'new_value={new_value!r} may not be aligned because '
-                       'it is not memoizable.')
+      raise AlignmentError(f'new_value={new_value!r} may not be aligned because'
+                           ' it is not memoizable.')
     if self.is_old_value_aligned(old_value):
-      raise ValueError('An alignment has already been added for ' +
-                       f'old value {old_value!r}')
+      raise AlignmentError('An alignment has already been added for ' +
+                           f'old value {old_value!r}')
     if self.is_new_value_aligned(new_value):
-      raise ValueError('An alignment has already been added for ' +
-                       f'new value {new_value!r}')
+      raise AlignmentError('An alignment has already been added for ' +
+                           f'new value {new_value!r}')
     if type(old_value) is not type(new_value):
-      raise ValueError(f'Aligning objects of different types is not currently '
-                       f'supported.  ({type(old_value)} vs {type(new_value)})')
+      raise AlignmentError(
+          f'Aligning objects of different types is not currently '
+          f'supported.  ({type(old_value)} vs {type(new_value)})')
     if isinstance(old_value, Sequence):
       if len(old_value) != len(new_value):
-        raise ValueError(
+        raise AlignmentError(
             f'Aligning sequences with different lengths is not '
             f'currently supported.  ({len(old_value)} vs {len(new_value)})')
 
@@ -167,8 +172,8 @@ class DiffAlignment:
             f'{self._new_name!r}: {len(self._old_to_new)} object(s) aligned>')
 
   def __str__(self):
-    id_to_old_path = daglish.collect_paths_by_id(self.old)
-    id_to_new_path = daglish.collect_paths_by_id(self.new)
+    id_to_old_path = daglish.collect_paths_by_id(self.old, memoizable_only=True)
+    id_to_new_path = daglish.collect_paths_by_id(self.new, memoizable_only=True)
     old_to_new_paths = [(id_to_old_path[old_id][0], id_to_new_path[new_id][0])
                         for (old_id, new_id) in self.aligned_value_ids()]
     lines = [
@@ -179,3 +184,90 @@ class DiffAlignment:
     if not lines:
       lines.append('    (no objects aligned)')
     return 'DiffAlignment:\n' + '\n'.join(lines)
+
+
+def align_by_id(old: Any, new: Any, old_name='old', new_name='new'):
+  """Aligns any memoizable object that is contained in both `old` and `new`.
+
+  Returns a `DiffAlignment` that aligns any memoizable object that can be
+  reached by traversing both `old` and `new`.  (It must be the same object,
+  as defined by `is`; not just an equal object.)
+
+  I.e., if `old_values` is the list of all memoizable objects reachable from
+  `old`, and `new_values` is the list of all memoizable objects reachable from
+  `new`, then this will call `alignment.align(v, v)` for any `v` that is in
+  both `old_values` and `new_values`.
+
+  Args:
+    old: The root object of the `old` structure.
+    new: The root object of the `new` structure.
+    old_name: A name for the `old` structure.
+    new_name: A name for the `new` structure.
+
+  Returns:
+    A `DiffAlignment`.
+  """
+  alignment = DiffAlignment(old, new, old_name, new_name)
+  old_by_id = daglish.collect_value_by_id(old, memoizable_only=True)
+  new_by_id = daglish.collect_value_by_id(new, memoizable_only=True)
+  for (value_id, value) in old_by_id.items():
+    if value_id in new_by_id:
+      alignment.align(value, value)
+  return alignment
+
+
+def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
+  """Returns an alignment between `old` and `new`, based on heuristics.
+
+  These heuristics may be changed or improved over time, and are not guaranteed
+  to stay the same for different versions of Fiddle.
+
+  The current implementation makes three passes over the structures:
+
+  * The first pass aligns any memoizable object that can be reached by
+    traversing both `old` and `new`.  (It must be the same object, as defined
+    by `is`; not just an equal object.)
+
+  * The second pass aligns any memoizable objects in `old` and `new` that can
+    be reached using the same path.
+
+  * The third pass aligns any memoizable objects in `old` and `new` that have
+    equal values.  Note: this takes `O(size(old) * size(new))` time.
+
+  Args:
+    old: The root object of the `old` structure.
+    new: The root object of the `new` structure.
+    old_name: A name for the `old` structure.
+    new_name: A name for the `new` structure.
+
+  Returns:
+    A `DiffAlignment`.
+  """
+  # First pass: align by id.
+  alignment = DiffAlignment(old, new, old_name, new_name)
+  old_by_id = daglish.collect_value_by_id(old, memoizable_only=True)
+  new_by_id = daglish.collect_value_by_id(new, memoizable_only=True)
+  for (value_id, value) in old_by_id.items():
+    if value_id in new_by_id:
+      alignment.align(value, value)
+
+  # Second pass: align any objects that are reachable by the same path.
+  path_to_old = daglish.collect_value_by_path(old, memoizable_only=True)
+  path_to_new = daglish.collect_value_by_path(new, memoizable_only=True)
+  for (path, old_value) in path_to_old.items():
+    if path in path_to_new:
+      try:
+        alignment.align(old_value, path_to_new[path])
+      except AlignmentError:
+        pass  # Alignment conflicts with previous alignment or is invalid.
+
+  # Third pass: align any objects that are equal (__eq__).
+  for old_value in old_by_id.values():
+    for new_value in new_by_id.values():
+      if type(old_value) is type(new_value) and old_value == new_value:
+        try:
+          alignment.align(old_value, new_value)
+        except AlignmentError:
+          pass  # Alignment is invalid.
+
+  return alignment

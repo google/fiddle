@@ -28,6 +28,10 @@ def make_pair(first, second):
   return (first, second)
 
 
+def make_triple(first, second, third):
+  return (first, second, third)
+
+
 def basic_fn(arg1, arg2, kwarg1=0, kwarg2=None):
   return {'a': arg1 + arg2, 'b': arg2 + kwarg1, 'c': kwarg2}
 
@@ -114,34 +118,77 @@ class DiffAlignmentTest(absltest.TestCase):
     alignment.align(old.first.x, new.first.arg1)
 
     with self.subTest('type(old_value) != type(new_value)'):
-      with self.assertRaisesRegex(ValueError, '.* different types .*'):
+      with self.assertRaisesRegex(diff.AlignmentError, '.* different types .*'):
         alignment.align(old.second, new.second)
 
     with self.subTest('old_value already aligned'):
       with self.assertRaisesRegex(
-          ValueError, 'An alignment has already been added for old value .*'):
+          diff.AlignmentError,
+          'An alignment has already been added for old value .*'):
         alignment.align(old.first.x, new.first.arg2)
 
     with self.subTest('new_value already aligned'):
       with self.assertRaisesRegex(
-          ValueError, 'An alignment has already been added for new value .*'):
+          diff.AlignmentError,
+          'An alignment has already been added for new value .*'):
         alignment.align(old.first.y, new.first.arg1)
 
     with self.subTest('len(old_value) != len(new_value)'):
-      with self.assertRaisesRegex(ValueError, '.* different lengths .*'):
+      with self.assertRaisesRegex(diff.AlignmentError,
+                                  '.* different lengths .*'):
         alignment.align(old.first.z, new.second.z)
 
     with self.subTest('non-memoizable old_value'):
       with self.assertRaisesRegex(
-          ValueError, 'old_value=4 may not be aligned because it is not '
+          diff.AlignmentError,
+          'old_value=4 may not be aligned because it is not '
           'memoizable'):
         alignment.align(old.second.arg1, new.second.z)
 
     with self.subTest('non-memoizable new_value'):
       with self.assertRaisesRegex(
-          ValueError, 'new_value=3 may not be aligned because it is not '
+          diff.AlignmentError,
+          'new_value=3 may not be aligned because it is not '
           'memoizable'):
         alignment.align(old.first.z, new.first.kwarg1)
+
+  def test_align_by_id(self):
+    old = fdl.Config(make_pair, fdl.Config(SimpleClass, 1, 2, [3, 4]),
+                     fdl.Config(basic_fn, 5, 6, 7))
+    new = fdl.Config(make_pair, old.first,
+                     fdl.Partial(SimpleClass, z=old.first.z))
+    alignment = diff.align_by_id(old, new)
+    self.assertCountEqual(alignment.aligned_values(), [
+        (old.first.z, new.second.z),
+        (old.first, new.first),
+    ])
+
+  def test_align_heuristically(self):
+    c = fdl.Config(SimpleClass)  # Shared object (same id) in `old` and `new`
+    d = fdl.Config(SimpleClass, x='bop')
+    old = fdl.Config(
+        make_triple,
+        first=fdl.Config(SimpleClass, x=1, y=2, z=[3, 4]),
+        second=fdl.Config(basic_fn, arg1=[5], arg2=5, kwarg1=c),
+        third=[[1], 2])
+    new = fdl.Config(
+        make_triple,
+        first=fdl.Config(basic_fn, arg1=1, arg2=c, kwarg1=3, kwarg2=4),
+        second=fdl.Partial(basic_fn, arg1=[8], arg2=[3, 4], kwarg1=d),
+        third=[[1, 2], 2, [3, 4]])
+    alignment = diff.align_heuristically(old, new)
+    self.assertCountEqual(
+        alignment.aligned_values(),
+        [
+            # Values aligned by id:
+            (old.second.kwarg1, new.first.arg2),
+            # Values aligned by path:
+            (old, new),
+            (old.first, new.first),
+            (old.second.arg1, new.second.arg1),
+            # Values aligned by equality:
+            (old.first.z, new.second.arg2),
+        ])
 
 
 if __name__ == '__main__':

@@ -369,7 +369,10 @@ class CollectPathsByIdTest(absltest.TestCase):
 
   def test_empty_structure(self):
     for root in [[], {}, fdl.Config(Foo)]:
-      self.assertEqual(daglish.collect_paths_by_id(root), {id(root): [()]})
+      self.assertEqual(
+          daglish.collect_paths_by_id(root, True), {id(root): [()]})
+    # Emtpy tuple is not memoizable:
+    self.assertEqual(daglish.collect_paths_by_id((), True), {})
 
   def test_collect_paths_by_id(self):
     shared_config = fdl.Config(Foo, bar=1, baz=2)
@@ -380,6 +383,7 @@ class CollectPathsByIdTest(absltest.TestCase):
         baz=[shared_list, shared_config],
     )
 
+    paths_by_id = daglish.collect_paths_by_id(config, memoizable_only=True)
     expected = {
         id(config): [()],
         id(config.bar): [(daglish.Attr("bar"),)],
@@ -389,7 +393,120 @@ class CollectPathsByIdTest(absltest.TestCase):
         id(shared_config): [(daglish.Attr("bar"), daglish.Index(1)),
                             (daglish.Attr("baz"), daglish.Index(1))],
     }
-    self.assertEqual(daglish.collect_paths_by_id(config), expected)
+    self.assertEqual(paths_by_id, expected)
+
+    with self.assertRaises(ValueError):
+      paths_by_id = daglish.collect_paths_by_id(config, memoizable_only=False)
+
+
+class CollectObjectsByIdTest(absltest.TestCase):
+
+  def test_empty_structure(self):
+    for root in [[], {}, fdl.Config(Foo)]:
+      self.assertEqual(
+          daglish.collect_value_by_id(root, False), {id(root): root})
+      self.assertEqual(
+          daglish.collect_value_by_id(root, True), {id(root): root})
+    # Empty tuple is not memoizable:
+    self.assertEqual(daglish.collect_value_by_id((), True), {})
+    self.assertEqual(daglish.collect_value_by_id((), False), {id(()): ()})
+
+  def test_collect_value_by_id(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [[], ()]
+    cfg = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    id_to_value = daglish.collect_value_by_id(cfg, memoizable_only=True)
+    expected = [
+        cfg,
+        cfg.bar,
+        cfg.baz,
+        shared_list,
+        shared_config,
+        shared_list[0],
+    ]
+    self.assertCountEqual(id_to_value.keys(), [id(value) for value in expected])
+    for value in expected:
+      self.assertIs(id_to_value[id(value)], value)
+
+    id_to_value = daglish.collect_value_by_id(cfg, memoizable_only=False)
+    expected.extend([
+        shared_list[1],
+        shared_config.bar,
+        shared_config.baz,
+    ])
+    self.assertCountEqual(id_to_value.keys(), [id(value) for value in expected])
+    for value in expected:
+      self.assertIs(id_to_value[id(value)], value)
+
+
+class CollectValueByPathTest(absltest.TestCase):
+
+  def test_empty_structure(self):
+    for root in [[], {}, fdl.Config(Foo)]:
+      self.assertEqual(daglish.collect_value_by_path(root, False), {(): root})
+      self.assertEqual(daglish.collect_value_by_path(root, True), {(): root})
+    # Empty tuple is not memoizable:
+    self.assertEqual(daglish.collect_value_by_path((), True), {})
+    self.assertEqual(daglish.collect_value_by_path((), False), {(): ()})
+
+  def test_collect_value_by_path(self):
+    shared_config = fdl.Config(Foo, bar=1, baz=2)
+    shared_list = [[], ()]
+    cfg = fdl.Config(
+        Foo,
+        bar=(shared_list, shared_config),
+        baz=[shared_list, shared_config],
+    )
+
+    value_by_path = daglish.collect_value_by_path(cfg, memoizable_only=True)
+    expected = {
+        ():
+            cfg,
+        (daglish.Attr("bar"),):
+            cfg.bar,
+        (daglish.Attr("bar"), daglish.Index(0)):
+            cfg.bar[0],
+        (daglish.Attr("bar"), daglish.Index(0), daglish.Index(0)):
+            cfg.bar[0][0],
+        (daglish.Attr("bar"), daglish.Index(1)):
+            cfg.bar[1],
+        (daglish.Attr("baz"),):
+            cfg.baz,
+        (daglish.Attr("baz"), daglish.Index(0)):
+            cfg.baz[0],
+        (daglish.Attr("baz"), daglish.Index(0), daglish.Index(0)):
+            cfg.baz[0][0],
+        (daglish.Attr("baz"), daglish.Index(1)):
+            cfg.baz[1],
+    }
+    self.assertEqual(value_by_path, expected)
+    for path in value_by_path:
+      self.assertIs(value_by_path[path], expected[path])
+
+    value_by_path = daglish.collect_value_by_path(cfg, memoizable_only=False)
+    expected.update({
+        (daglish.Attr("bar"), daglish.Index(0), daglish.Index(1)):
+            cfg.bar[0][1],
+        (daglish.Attr("bar"), daglish.Index(1), daglish.Attr("bar")):
+            cfg.bar[1].bar,
+        (daglish.Attr("bar"), daglish.Index(1), daglish.Attr("baz")):
+            cfg.bar[1].baz,
+        (daglish.Attr("baz"), daglish.Index(0), daglish.Index(1)):
+            cfg.baz[0][1],
+        (daglish.Attr("baz"), daglish.Index(1), daglish.Attr("bar")):
+            cfg.baz[1].bar,
+        (daglish.Attr("baz"), daglish.Index(1), daglish.Attr("baz")):
+            cfg.baz[1].baz,
+    })
+    self.assertEqual(value_by_path, expected)
+    for path in value_by_path:
+      self.assertIs(value_by_path[path], expected[path])
+
 
 if __name__ == "__main__":
   absltest.main()

@@ -403,7 +403,8 @@ def traverse_with_path(fn: TraverseWithPathFn, structure: Any) -> Any:
   return traverse_impl((), structure)
 
 
-def collect_paths_by_id(structure: Any) -> Dict[int, List[Path]]:
+def collect_paths_by_id(structure: Any,
+                        memoizable_only: bool) -> Dict[int, List[Path]]:
   """Returns a dict mapping id(v)->paths for all `v` traversable from structure.
 
   I.e., if `result = collect_paths_by_id(structure)`, then `result[id(v)]` is
@@ -413,16 +414,66 @@ def collect_paths_by_id(structure: Any) -> Dict[int, List[Path]]:
 
   Args:
     structure: The structure for which the id->paths mapping should be created.
+    memoizable_only: If true, then only include values `v` for which
+      `is_memoizable(v)` is true.  Currently required to be True, to avoid bugs
+      that can result from Python's interning optimizations.
   """
-  paths_memo = {}
+  if not memoizable_only:
+    raise ValueError(
+        "Including non-memoizable objects when collecting paths by id may "
+        "cause problems, because of Python's interning optimizations.  If you "
+        "are sure this is what you need, contact the Fiddle team, and we can "
+        "look into enabling this flag.")
+  paths_by_id = {}
 
   def collect_paths(path: Path, value: Any):
-    if is_memoizable(value):
-      paths_memo.setdefault(id(value), []).append(path)
+    if not memoizable_only or is_memoizable(value):
+      paths_by_id.setdefault(id(value), []).append(path)
     yield
 
   traverse_with_path(collect_paths, structure)
-  return paths_memo
+  return paths_by_id
+
+
+def collect_value_by_id(structure: Any,
+                        memoizable_only: bool) -> Dict[int, Any]:
+  """Returns a dict mapping id(v)->v for all `v` traversable from `structure`.
+
+  Args:
+    structure: The structure for which the id->paths mapping should be created.
+    memoizable_only: If true, then only include values `v` for which
+      `is_memoizable(v)` is true.
+  """
+  value_by_id = {}
+
+  def collect_value(path: Path, value: Any):
+    del path  # Unused.
+    if not memoizable_only or is_memoizable(value):
+      value_by_id[id(value)] = value
+    yield
+
+  traverse_with_path(collect_value, structure)
+  return value_by_id
+
+
+def collect_value_by_path(structure: Any,
+                          memoizable_only: bool) -> Dict[Path, Any]:
+  """Returns a dict mapping `path->v` for all `v` traversable from `structure`.
+
+  Args:
+    structure: The structure for which the `path->value` map should be created.
+    memoizable_only: If true, then only include values `v` for which
+      `is_memoizable(v)` is true.
+  """
+  value_by_path = {}
+
+  def collect_value(path: Path, value: Any):
+    if not memoizable_only or is_memoizable(value):
+      value_by_path[path] = value
+    yield
+
+  traverse_with_path(collect_value, structure)
+  return value_by_path
 
 
 TraverseWithAllPathsFn = Callable[[Paths, Path, Any], Generator[None, Any, Any]]
@@ -451,7 +502,7 @@ def traverse_with_all_paths(fn: TraverseWithAllPathsFn, structure):
   if not inspect.isgeneratorfunction(fn):
     raise ValueError("`fn` should contain a yield statement.")
 
-  paths_memo = collect_paths_by_id(structure)
+  paths_memo = collect_paths_by_id(structure, memoizable_only=True)
 
   def wrap_with_paths(current_path: Path, value: Any):
     all_paths = ((),)
