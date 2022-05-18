@@ -18,6 +18,7 @@
 import abc
 import copy
 import dataclasses
+import functools
 import inspect
 import typing
 from typing import Any, Callable, Dict, Generator, Iterable, List, Tuple, Union
@@ -283,6 +284,15 @@ def _yield_items(
     raise ValueError(f"Not a supported container type: {container}.")
 
 
+def _validate_traversal_fn(fn):
+  """Raises an exception if fn is not a valid traversal function."""
+  if not (inspect.isgeneratorfunction(fn) or
+          (isinstance(fn, functools.partial) and
+           inspect.isgeneratorfunction(fn.func)) or
+          inspect.isgeneratorfunction(getattr(fn, "__call__", None))):
+    raise ValueError("`fn` should contain a yield statement.")
+
+
 TraverseWithPathFn = Callable[[Path, Any], Generator[None, Any, Any]]
 
 
@@ -373,8 +383,7 @@ def traverse_with_path(fn: TraverseWithPathFn, structure: Any) -> Any:
   Returns:
     The structured output from the traversal.
   """
-  if not inspect.isgeneratorfunction(fn):
-    raise ValueError("`fn` should contain a yield statement.")
+  _validate_traversal_fn(fn)
 
   def traverse_impl(path: Path, structure: Any) -> Any:
     """Recursive traversal implementation."""
@@ -499,8 +508,7 @@ def traverse_with_all_paths(fn: TraverseWithAllPathsFn, structure):
   Returns:
     The structured output from the traversal.
   """
-  if not inspect.isgeneratorfunction(fn):
-    raise ValueError("`fn` should contain a yield statement.")
+  _validate_traversal_fn(fn)
 
   paths_memo = collect_paths_by_id(structure, memoizable_only=True)
 
@@ -556,8 +564,7 @@ def memoized_traverse(fn: MemoizedTraverseFn, structure):
   Returns:
     The structured output from the traversal.
   """
-  if not inspect.isgeneratorfunction(fn):
-    raise TypeError("`fn` should contain a yield statement.")
+  _validate_traversal_fn(fn)
 
   memo = {}
 

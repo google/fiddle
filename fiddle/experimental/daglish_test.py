@@ -17,6 +17,7 @@
 
 import collections
 import dataclasses
+import functools
 import typing
 from typing import Any, List
 
@@ -230,6 +231,18 @@ class TraverseWithPathTest(absltest.TestCase):
     with self.assertRaisesRegex(RuntimeError, msg):
       daglish.traverse_with_path(traverse, [])
 
+  def test_traverse_not_generator_function_error(self):
+    visit = lambda path, value: value
+    msg = "`fn` should contain a yield statement."
+    with self.assertRaisesRegex(ValueError, msg):
+      daglish.traverse_with_path(visit, [1, 2, {3: 4}])
+
+  def test_traverse_not_function_error(self):
+    msg = "`fn` should contain a yield statement."
+    x: Any = None
+    with self.assertRaisesRegex(ValueError, msg):
+      daglish.traverse_with_path(x, [1, 2, {3: 4}])
+
   def test_doc_example(self):
     structure = {
         "a": [1, 2],
@@ -257,6 +270,56 @@ class TraverseWithPathTest(absltest.TestCase):
         "a": [1, "used to be a two..."],
         "b": "used to be a tuple...",
     }
+
+  def test_traverse_with_partial_generator_method(self):
+
+    class TestClass:
+
+      def visit(self, path, value, extra):
+        del path  # Unused.
+        return value + extra if isinstance(value, int) else (yield)
+
+      def visit_all_paths(self, all_paths, path, value, extra):
+        del all_paths, path  # Unused.
+        return value + extra if isinstance(value, int) else (yield)
+
+      def test_traverse_with_path(self, structure):
+        partial_generator_method = functools.partial(self.visit, extra=10)
+        return daglish.traverse_with_path(partial_generator_method, structure)
+
+      def test_traverse_with_all_paths(self, structure):
+        partial_generator_method = functools.partial(
+            self.visit_all_paths, extra=10)
+        return daglish.traverse_with_all_paths(partial_generator_method,
+                                               structure)
+
+      def test_memoized_traverse(self, structure):
+        partial_generator_method = functools.partial(self.visit, extra=10)
+        return daglish.memoized_traverse(partial_generator_method, structure)
+
+    output = TestClass().test_traverse_with_path([1, {2: 3, 4: 5}])
+    self.assertEqual(output, [11, {2: 13, 4: 15}])
+
+    output = TestClass().test_memoized_traverse([1, {2: 3, 4: 5}])
+    self.assertEqual(output, [11, {2: 13, 4: 15}])
+
+  def test_traverse_with_functor(self):
+
+    @dataclasses.dataclass
+    class Functor:
+      delta: int
+
+      def __call__(self, path, value):
+        del path  # Unused.
+        return value + self.delta if isinstance(value, int) else (yield)
+
+    structure = [1, {2: 3, 4: 5}]
+    output = daglish.traverse_with_path(Functor(10), structure)
+    self.assertEqual(output, [11, {2: 13, 4: 15}])
+
+    structure = [1, {2: 3, 4: 5}]
+    output = daglish.memoized_traverse(Functor(10), structure)
+    self.assertEqual(output, [11, {2: 13, 4: 15}])
 
 
 class TraverseWithAllPathsTest(absltest.TestCase):
