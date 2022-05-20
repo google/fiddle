@@ -239,6 +239,7 @@ def list_tags(
     def map_fn(leaf):
       if isinstance(leaf, config.Buildable):
         _inner(leaf)
+      return leaf
 
     # TODO: Use something other than map for efficiency.
     tree.map_structure(map_fn, node.__arguments__)
