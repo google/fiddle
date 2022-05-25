@@ -79,11 +79,8 @@ def parse_path(s: str) -> daglish.Path:
 
 
 # Helper function to make expected References easier to write (and read).
-def parse_reference(s: str) -> diff.Reference:
+def parse_reference(root: str, path: str) -> diff.Reference:
   """Build a diff.Reference from a string."""
-  match = re.match(r'([^\.\[]*)(.*)', s)
-  assert match is not None
-  root, path = match.groups()
   return diff.Reference(root, parse_path(path))
 
 
@@ -261,15 +258,16 @@ class DiffTest(absltest.TestCase):
             parse_path('.foo[1]'):
                 diff.ModifyValue(2),
             parse_path('.foo[2]'):
-                diff.SetValue(parse_reference('old.bar')),
+                diff.SetValue(parse_reference('old', '.bar')),
             parse_path('.bar.x'):
                 diff.DeleteValue(),
             parse_path('.bar.y'):
-                diff.ModifyValue(parse_reference('new_shared_value[0]')),
+                diff.ModifyValue(parse_reference('new_shared_values', '[0]')),
             parse_path('.bar.z'):
-                diff.SetValue({'a': parse_reference('new_shared_value[0]')}),
+                diff.SetValue(
+                    {'a': parse_reference('new_shared_values', '[0]')}),
         },
-        new_shared_values=([1, 2, parse_reference('old.bar')],))
+        new_shared_values=([1, 2, parse_reference('old', '.bar')],))
     expected_str = (
         'Diff(changes=[\n'
         '          .foo[1]: ModifyValue(new_value=2)\n'
@@ -277,9 +275,9 @@ class DiffTest(absltest.TestCase):
         '          .bar.x: DeleteValue()\n'
         '          .bar.y: ModifyValue(new_value='
         '<Reference: '
-        'new_shared_value[0]>)\n'
+        'new_shared_values[0]>)\n'
         '          .bar.z: SetValue(new_value='
-        "{'a': <Reference: new_shared_value[0]>})\n"
+        "{'a': <Reference: new_shared_values[0]>})\n"
         '      ],\n'
         '      new_shared_values=[\n'
         '          [1, 2, <Reference: old.bar>]\n'
@@ -438,22 +436,23 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
         [3, 4],
         [
             1, 2,
-            parse_reference('new_shared_value[0]'),
-            parse_reference('old.y.z')
+            parse_reference('new_shared_values', '[0]'),
+            parse_reference('old', '.y.z')
         ],
         [99],
     )
     expected_changes = {
         '.x':
-            diff.ModifyValue(parse_reference('new_shared_value[1]')),
+            diff.ModifyValue(parse_reference('new_shared_values', '[1]')),
         '.y.x':
-            diff.ModifyValue(parse_reference('new_shared_value[1]')),
+            diff.ModifyValue(parse_reference('new_shared_values', '[1]')),
         '.y.y':
-            diff.ModifyValue(parse_reference('new_shared_value[2]')),
+            diff.ModifyValue(parse_reference('new_shared_values', '[2]')),
         '.z.y':
             diff.SetValue(
-                fdl.Config(SimpleClass, parse_reference('new_shared_value[0]'),
-                           parse_reference('new_shared_value[2]'))),
+                fdl.Config(SimpleClass,
+                           parse_reference('new_shared_values', '[0]'),
+                           parse_reference('new_shared_values', '[2]'))),
     }
     self.check_diff(old, new, expected_changes, expected_new_shared_values)
 
@@ -465,12 +464,12 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
         '.first.y': diff.DeleteValue(),
         '.first.z': diff.DeleteValue(),
         '.first.arg1': diff.SetValue(1),
-        '.first.arg2': diff.SetValue(parse_reference('old.second.kwarg1')),
+        '.first.arg2': diff.SetValue(parse_reference('old', '.second.kwarg1')),
         '.first.kwarg1': diff.SetValue(3),
         '.first.kwarg2': diff.SetValue(4.0),
         '.second': diff.ModifyValue(
-            fdl.Partial(basic_fn, parse_reference('old.second.arg1'),
-                        9, parse_reference('old.first.z'))),
+            fdl.Partial(basic_fn, parse_reference('old', '.second.arg1'),
+                        9, parse_reference('old', '.first.z'))),
         '.second.arg1[0]': diff.ModifyValue(8)
     }  # pyformat: disable
     self.assertEqual(
@@ -524,6 +523,119 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
     self.assertFalse(diff_builder.aligned_or_equal(old.second, new.second))
     self.assertFalse(
         diff_builder.aligned_or_equal(old.first.z[1], new.first.kwarg2))
+
+
+class ResolveDiffReferencesTest(absltest.TestCase):
+
+  def test_resolve_ref_from_change_to_old(self):
+    old = fdl.Config(SimpleClass, x=[1])
+    cfg_diff = diff.Diff(
+        changes={parse_path('.z'): diff.SetValue(parse_reference('old', '.x'))})
+    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    diff_z = resolved_diff.changes[parse_path('.z')]
+    self.assertIsInstance(diff_z, diff.SetValue)
+    self.assertIs(diff_z.new_value, old.x)
+
+  def test_resolve_ref_from_change_to_new_shared_value(self):
+    old = fdl.Config(SimpleClass, x=[1])
+    changes = {
+        parse_path('.z'):
+            diff.SetValue(parse_reference('new_shared_values', '[0]'))
+    }
+    new_shared_values = ([1],)
+    cfg_diff = diff.Diff(changes, new_shared_values)
+    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    diff_z = resolved_diff.changes[parse_path('.z')]
+    self.assertIsInstance(diff_z, diff.SetValue)
+    self.assertIs(diff_z.new_value, resolved_diff.new_shared_values[0])
+
+  def test_resolve_ref_from_new_shared_value_to_old(self):
+    old = fdl.Config(SimpleClass, x=[1])
+    changes = {
+        parse_path('.z'):
+            diff.SetValue(parse_reference('new_shared_values', '[0]')),
+    }
+    new_shared_values = ([parse_reference('old', '.x')],)
+    cfg_diff = diff.Diff(changes, new_shared_values)
+    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    diff_z = resolved_diff.changes[parse_path('.z')]
+    self.assertIsInstance(diff_z, diff.SetValue)
+    self.assertIs(diff_z.new_value, resolved_diff.new_shared_values[0])
+    self.assertIs(resolved_diff.new_shared_values[0][0], old.x)
+
+  def test_resolve_ref_from_new_shared_value_to_new_shared_value(self):
+    old = fdl.Config(SimpleClass, x=[1])
+    changes = {
+        parse_path('.z'):
+            diff.SetValue([
+                parse_reference('new_shared_values', '[0]'),
+                parse_reference('new_shared_values', '[1]')
+            ])
+    }
+    new_shared_values = ([1], [parse_reference('new_shared_values', '[0]')])
+    cfg_diff = diff.Diff(changes, new_shared_values)
+    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    diff_z = resolved_diff.changes[parse_path('.z')]
+    self.assertIsInstance(diff_z, diff.SetValue)
+    self.assertIs(diff_z.new_value[0], resolved_diff.new_shared_values[0])
+    self.assertIs(diff_z.new_value[1], resolved_diff.new_shared_values[1])
+    self.assertIs(resolved_diff.new_shared_values[1][0],
+                  resolved_diff.new_shared_values[0])
+
+  def test_resolve_diff_multiple_references(self):
+    old = [[1], {'x': [2], 'y': [3]}, fdl.Config(SimpleClass, z=4), [5]]
+    cfg_diff = diff.Diff(
+        changes={
+            parse_path("[1]['x']"):
+                diff.ModifyValue(parse_reference('old', "[1]['y']")),
+            parse_path("[1]['y']"):
+                diff.ModifyValue(parse_reference('old', "[1]['x']")),
+            parse_path("[1]['z']"):
+                diff.SetValue(parse_reference('old', '[2]')),
+            parse_path('[2].x'):
+                diff.SetValue(parse_reference('new_shared_values', '[0]')),
+            parse_path('[2].y'):
+                diff.SetValue(parse_reference('new_shared_values', '[0]')),
+            parse_path('[2].z'):
+                diff.ModifyValue(parse_reference('new_shared_values', '[1]')),
+        },
+        new_shared_values=([parse_reference('old', '[3]')], [
+            parse_reference('old', '[0]'),
+            parse_reference('new_shared_values', '[0]')
+        ]),
+    )
+    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+
+    diff_1_x = resolved_diff.changes[parse_path("[1]['x']")]
+    self.assertIsInstance(diff_1_x, diff.ModifyValue)
+    self.assertIs(diff_1_x.new_value, old[1]['y'])
+
+    diff_1_y = resolved_diff.changes[parse_path("[1]['y']")]
+    self.assertIsInstance(diff_1_y, diff.ModifyValue)
+    self.assertIs(diff_1_y.new_value, old[1]['x'])
+
+    diff_1_z = resolved_diff.changes[parse_path("[1]['z']")]
+    self.assertIsInstance(diff_1_z, diff.SetValue)
+    self.assertIs(diff_1_z.new_value, old[2])
+
+    diff_2_x = resolved_diff.changes[parse_path('[2].x')]
+    self.assertIsInstance(diff_2_x, diff.SetValue)
+    self.assertIs(diff_2_x.new_value, resolved_diff.new_shared_values[0])
+
+    diff_2_y = resolved_diff.changes[parse_path('[2].y')]
+    self.assertIsInstance(diff_2_y, diff.SetValue)
+    self.assertIs(diff_2_y.new_value, resolved_diff.new_shared_values[0])
+
+    diff_2_z = resolved_diff.changes[parse_path('[2].z')]
+    self.assertIsInstance(diff_2_z, diff.ModifyValue)
+    self.assertIs(diff_2_z.new_value, resolved_diff.new_shared_values[1])
+
+  def test_error_unexpected_reference_root(self):
+    old = fdl.Config(SimpleClass, x=[1])
+    cfg_diff = diff.Diff(
+        changes={parse_path('.z'): diff.SetValue(parse_reference('foo', '.x'))})
+    with self.assertRaisesRegex(ValueError, 'Unexpected Reference.root'):
+      diff._resolve_diff_references(cfg_diff, old)
 
 
 if __name__ == '__main__':

@@ -433,7 +433,7 @@ class _DiffFromAlignmentBuilder:
         index = len(self.new_shared_values)
         self.new_shared_values.append(diff_value)
         return Reference(
-            root='new_shared_value', target=(daglish.Index(index),))
+            root='new_shared_values', target=(daglish.Index(index),))
     else:
       # Old object: check for modifications.  (Note: only memoizable values
       # may be aligned, so old_value must be memoizable here.)
@@ -531,3 +531,78 @@ def build_diff_from_alignment(alignment: DiffAlignment) -> Diff:
     in `new` that are not aligned are added by the diff as new values.
   """
   return _DiffFromAlignmentBuilder(alignment).build_diff()
+
+
+def _resolve_diff_references(diff, old_root):
+  """Returns a copy of `diff` with references resolved.
+
+  I.e., each `Reference` in `diff` is replaced with the object it points to.
+
+  * References with root `"old"` will be replaced with objects in `old_root`.
+  * References with root `"new_shared_values"` will be replaced with objects
+    in `result.new_shared_values` (i.e., in the copy of the diff that is
+    returned -- *not* in the original diff).
+
+  Args:
+    diff: The `Diff` that should be copied with references resolved.
+    old_root: The root of the structure used to replace any references where
+      `Reference.target == "old"`.
+
+  Raises:
+    ValueError: If any reference in `diff` can not be resolved (e.g., if
+      a reference whose root is `"old"` has a path that does not exist in
+      `old_root`).
+  """
+  # Dict mapping id(original_diff_value) -> transformed_diff_value
+  original_to_transformed_diff_value: Dict[int, Any] = {}
+
+  def replace_references(path, original_diff_value):
+    del path  # Unused.
+
+    if not daglish.is_memoizable(original_diff_value):
+      return original_diff_value
+
+    elif id(original_diff_value) in original_to_transformed_diff_value:
+      # We've already visited this diff value; use memoized result.
+      return original_to_transformed_diff_value[id(original_diff_value)]
+
+    elif not isinstance(original_diff_value, Reference):
+      transformed_diff_value = yield
+
+    elif original_diff_value.root == 'old':
+      transformed_diff_value = daglish.follow_path(old_root,
+                                                   original_diff_value.target)
+
+    elif original_diff_value.root == 'new_shared_values':
+      # Reference to `new_shared_values` value; replace with the target.
+      # Note that we need to get the transformed_diff_value for the target
+      # (not the original diff_value).
+      original_target = daglish.follow_path(diff.new_shared_values,
+                                            original_diff_value.target)
+      transformed_diff_value = daglish.traverse_with_path(
+          replace_references, original_target)
+
+    else:
+      raise ValueError(
+          f'Unexpected Reference.root {original_diff_value.root!r}')
+
+    # Memoize and return the transformed_diff_value.
+    original_to_transformed_diff_value[id(
+        original_diff_value)] = transformed_diff_value
+    return transformed_diff_value
+
+  # Replace all references in `diff.new_shared_values`.
+  new_shared_values = daglish.traverse_with_path(replace_references,
+                                                 diff.new_shared_values)
+
+  # Replace references in each change in `diff.changes`.
+  changes = {}
+  for target, change in diff.changes.items():
+    if isinstance(change, (ModifyValue, SetValue)):
+      new_value = daglish.traverse_with_path(replace_references,
+                                             change.new_value)
+      changes[target] = dataclasses.replace(change, new_value=new_value)
+    else:
+      changes[target] = change
+
+  return Diff(changes, new_shared_values)
