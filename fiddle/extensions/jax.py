@@ -18,8 +18,10 @@
 Currently this just affects codegen, graphviz, and other debugging functions.
 """
 
+import ast
 from fiddle.codegen import codegen
 from fiddle.codegen import mini_ast
+from fiddle.codegen import py_val_to_ast_converter
 from fiddle.codegen import special_value_codegen
 import jax
 from jax import numpy as jnp
@@ -81,6 +83,23 @@ _nn_type_importables = (
 )
 
 
+def is_jnp_device_array(value):
+  """Returns true if `value` is a JAX numpy `DeviceArray`."""
+  return isinstance(value, jnp.DeviceArray)
+
+
+def convert_jnp_device_array_to_ast(value, convert_child):
+  return ast.Call(
+      func=ast.Attribute(value=convert_child(jnp), attr="array"),
+      args=[convert_child(value.tolist())],
+      keywords=[
+          # Explicitly specify dtype (can't always be inferred from elts).
+          ast.keyword(arg="dtype", value=convert_child(value.dtype.name)),
+          # Explicitly specify rank (in case value.size==0).
+          ast.keyword(arg="ndmin", value=convert_child(value.ndim)),
+      ])
+
+
 def enable():
   """Registers JAX fiddle extensions.
 
@@ -94,3 +113,8 @@ def enable():
 
   for module_str, import_stmt in _import_aliases:
     codegen.register_import_alias(module_str, import_stmt)
+
+  # The odd calling syntax here ("register(type)(handler)") comes from the fact
+  # that register_converter is usually a decorator, but we call it directly.
+  py_val_to_ast_converter.register_py_val_to_ast_converter(is_jnp_device_array)(
+      convert_jnp_device_array_to_ast)
