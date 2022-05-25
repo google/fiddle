@@ -21,7 +21,7 @@ having a few helper functions for trimming them for interactive demos and such
 can be valuable.
 """
 import copy
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from fiddle import config
 from fiddle import graphviz
@@ -35,12 +35,21 @@ def _raise_error():
 
 
 class Trimmed(config.Config[type(None)], graphviz.CustomGraphvizBuildable):
+  """Represents a configuration that has been trimmed."""
 
   def __init__(self):
     super().__init__(_raise_error)
 
   def __render_value__(self, api: graphviz.GraphvizRendererApi) -> Any:
     return api.tag('i')('(trimmed...)')
+
+  @classmethod
+  def __unflatten__(
+      cls,
+      values: Iterable[Any],
+      metadata: config.BuildableTraverserMetadata,
+  ):
+    return cls()
 
 
 def trimmed(cfg: config.Buildable,

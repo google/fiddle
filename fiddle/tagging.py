@@ -61,7 +61,7 @@ from __future__ import annotations
 
 import copy
 import inspect
-from typing import Any, Collection, FrozenSet, Generic, Set, TypeVar, Union
+from typing import Any, Collection, FrozenSet, Generic, Iterable, Set, TypeVar, Union
 
 from fiddle import config
 import tree
@@ -192,6 +192,15 @@ class TaggedValue(Generic[T], config.Config[T]):
   def __deepcopy__(self, memo) -> config.Buildable[T]:
     """Implements the deepcopy API."""
     return TaggedValue(tags=self.tags, default=copy.deepcopy(self.value, memo))
+
+  @classmethod
+  def __unflatten__(
+      cls,
+      values: Iterable[Any],
+      metadata: config.BuildableTraverserMetadata,
+  ) -> TaggedValue:
+    tags, default = values
+    return cls(tags, default)
 
 
 # TODO: Migrate users of this API to a `select`-based API.

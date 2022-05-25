@@ -21,9 +21,10 @@ import collections
 import copy
 import functools
 import inspect
-from typing import Any, Callable, Collection, Dict, Generic, List, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, Generic, Iterable, List, NamedTuple, Tuple, Type, TypeVar, Union
 
 from fiddle import history
+from fiddle.experimental import daglish
 
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
@@ -32,6 +33,15 @@ TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
 # be used to differentiate between unset values and user-set values that are
 # None or other commonly-used sentinel.
 _UNSET_SENTINEL = object()
+
+
+class BuildableTraverserMetadata(NamedTuple):
+  fn_or_cls: Callable[..., Any]
+  argument_names: Tuple[str, ...]
+
+  def arguments(self, values: Iterable[Any]) -> Dict[str, Any]:
+    """Returns a dictionary combining `self.argument_names` with `values`."""
+    return dict(zip(self.argument_names, values))
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
@@ -96,10 +106,33 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     for name, value in arguments.items():
       setattr(self, name, value)
 
+  def __init_subclass__(cls):
+    daglish.register_node_traverser(
+        cls,
+        flatten_fn=lambda x: x.__flatten__(),
+        unflatten_fn=cls.__unflatten__,
+        path_elements_fn=lambda x: x.__path_elements__(),
+    )
+
   @abc.abstractmethod
   def __build__(self, *args, **kwargs):
     """Builds output for this instance; see subclasses for details."""
     raise NotImplementedError()
+
+  def __flatten__(self) -> Tuple[Tuple[Any, ...], BuildableTraverserMetadata]:
+    keys = tuple(self.__arguments__.keys())
+    values = tuple(self.__arguments__.values())
+    metadata = BuildableTraverserMetadata(
+        fn_or_cls=self.__fn_or_cls__, argument_names=keys)
+    return values, metadata
+
+  @classmethod
+  def __unflatten__(cls, values: Iterable[Any],
+                    metadata: BuildableTraverserMetadata):
+    return cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
+
+  def __path_elements__(self):
+    return tuple(daglish.Attr(name) for name in self.__arguments__.keys())
 
   def __getattr__(self, name: str):
     """Get parameter with given `name`."""
@@ -199,7 +232,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       A shallow copy of this `Buildable`.
     """
-    return type(self)(self)  # pytype: disable=not-instantiable
+    # TODO: Preserve argument history...
+    return self.__unflatten__(*self.__flatten__())
 
   def __deepcopy__(self, memo):
     """Deeply copies this `Buildable` instance.
@@ -214,10 +248,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       A deep copy of this `Buildable`.
     """
-    config_copy = type(self)(self.__fn_or_cls__)  # pytype: disable=not-instantiable
-    deepcopied_arguments = copy.deepcopy(self.__arguments__, memo)
-    object.__setattr__(config_copy, '__arguments__', deepcopied_arguments)
-    return config_copy
+    values, metadata = self.__flatten__()
+    deepcopied_values = copy.deepcopy(values, memo)
+    deepcopied_metadata = copy.deepcopy(metadata, memo)
+    return self.__unflatten__(deepcopied_values, deepcopied_metadata)
 
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.

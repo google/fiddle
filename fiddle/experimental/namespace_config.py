@@ -16,7 +16,7 @@
 """A Config that builds a `types.SimpleNamespace` from any argument."""
 
 import types
-from typing import Any
+from typing import Any, Iterable
 
 from fiddle import config
 
@@ -30,3 +30,11 @@ class NamespaceConfig(config.Config):
 
   def __init__(self, *args, **kwargs):
     super().__init__(_kwargs_to_namespace, *args, **kwargs)
+
+  @classmethod
+  def __unflatten__(
+      cls,
+      values: Iterable[Any],
+      metadata: config.BuildableTraverserMetadata,
+  ):
+    return cls(**metadata.arguments(values))

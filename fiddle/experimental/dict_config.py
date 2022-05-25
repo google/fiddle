@@ -15,6 +15,8 @@
 
 """A Config that builds a `dict` and accepts any parameters."""
 
+from typing import Any, Iterable
+
 from fiddle import config
 
 
@@ -27,3 +29,11 @@ class DictConfig(config.Config):
 
   def __init__(self, *args, **kwargs):
     super().__init__(_kwargs_to_dict, *args, **kwargs)
+
+  @classmethod
+  def __unflatten__(
+      cls,
+      values: Iterable[Any],
+      metadata: config.BuildableTraverserMetadata,
+  ):
+    return cls(**metadata.arguments(values))

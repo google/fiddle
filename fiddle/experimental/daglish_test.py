@@ -17,8 +17,7 @@
 
 import collections
 import dataclasses
-import typing
-from typing import Any, List
+from typing import Any, List, NamedTuple
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -31,9 +30,13 @@ class Foo:
   baz: Any
 
 
-class TestNamedTuple(typing.NamedTuple):
+class TestNamedTuple(NamedTuple):
   fizz: Any
   buzz: Any
+
+
+class TestTag(fdl.Tag):
+  """`fdl.Tag` to use for testing."""
 
 
 class PathElementTest(absltest.TestCase):
@@ -113,11 +116,15 @@ class PathElementTest(absltest.TestCase):
 class TraverseWithPathTest(absltest.TestCase):
 
   def test_is_namedtuple(self):
+    self.assertTrue(daglish.is_namedtuple_subclass(TestNamedTuple))
     typing_namedtuple = TestNamedTuple(1, 2)
-    self.assertTrue(daglish.is_namedtuple(typing_namedtuple))
-    collections_namedtuple = collections.namedtuple(  # Dynamically create type.
-        "CollectionsNamedTuple", ["arg1", "arg2"])(1, 2)  # Instantiate.
-    self.assertTrue(daglish.is_namedtuple(collections_namedtuple))
+    self.assertTrue(daglish.is_namedtuple_instance(typing_namedtuple))
+    collections_namedtuple_type = collections.namedtuple(
+        "CollectionsNamedTuple", ["arg1", "arg2"])
+    self.assertTrue(daglish.is_namedtuple_subclass(collections_namedtuple_type))
+    collections_namedtuple_instance = collections_namedtuple_type(1, 2)
+    self.assertTrue(
+        daglish.is_namedtuple_instance(collections_namedtuple_instance))
 
   def test_pretraversal_return_none(self):
     config = fdl.Config(
@@ -181,13 +188,9 @@ class TraverseWithPathTest(absltest.TestCase):
     def traverse(path, value):
       new_value = yield
       output = {daglish.path_str(path): value}
-      if daglish.is_traversable(value):
-        if isinstance(value, (list, tuple)):
-          elements = new_value
-        elif isinstance(value, dict):
-          elements = new_value.values()
-        elif isinstance(value, fdl.Buildable):
-          elements = new_value.__arguments__.values()
+      traverser = daglish.find_node_traverser(type(value))
+      if traverser:
+        elements, _ = traverser.flatten(new_value)
         for element in elements:
           output.update(element)
       return output
@@ -257,6 +260,32 @@ class TraverseWithPathTest(absltest.TestCase):
         "a": [1, "used to be a two..."],
         "b": "used to be a tuple...",
     }
+
+  def test_defaultdict(self):
+    defaultdict = collections.defaultdict(list)
+    defaultdict["a"].append(1)
+    defaultdict["b"].extend([1, 2])
+
+    identity_traverse = lambda path, value: (yield)
+    output = daglish.traverse_with_path(identity_traverse, defaultdict)
+    self.assertIsInstance(output, collections.defaultdict)
+    self.assertIs(output.default_factory, list)
+    self.assertEqual(defaultdict, output)
+
+    value_by_path = daglish.collect_value_by_path(
+        defaultdict, memoizable_only=False)
+    value_by_path_str = {
+        daglish.path_str(path): value for path, value in value_by_path.items()
+    }
+    expected = {
+        "['a']": [1],
+        "['a'][0]": 1,
+        "['b']": [1, 2],
+        "['b'][0]": 1,
+        "['b'][1]": 2,
+        "": defaultdict
+    }
+    self.assertEqual(expected, value_by_path_str)
 
 
 class TraverseWithAllPathsTest(absltest.TestCase):
@@ -374,6 +403,15 @@ class CollectPathsByIdTest(absltest.TestCase):
     # Emtpy tuple is not memoizable:
     self.assertEqual(daglish.collect_paths_by_id((), True), {})
 
+  def test_tagged_value(self):
+    tagged_value = TestTag.new(1)
+    expected = {
+        id(tagged_value): [()],
+        id(tagged_value.tags): [(daglish.Attr("tags"),)]
+    }
+    paths_by_id = daglish.collect_paths_by_id(tagged_value, True)
+    self.assertEqual(paths_by_id, expected)
+
   def test_collect_paths_by_id(self):
     shared_config = fdl.Config(Foo, bar=1, baz=2)
     shared_list = [1, 2]
@@ -399,7 +437,7 @@ class CollectPathsByIdTest(absltest.TestCase):
       paths_by_id = daglish.collect_paths_by_id(config, memoizable_only=False)
 
 
-class CollectObjectsByIdTest(absltest.TestCase):
+class CollectValueByIdTest(absltest.TestCase):
 
   def test_empty_structure(self):
     for root in [[], {}, fdl.Config(Foo)]:
@@ -410,6 +448,16 @@ class CollectObjectsByIdTest(absltest.TestCase):
     # Empty tuple is not memoizable:
     self.assertEqual(daglish.collect_value_by_id((), True), {})
     self.assertEqual(daglish.collect_value_by_id((), False), {id(()): ()})
+
+  def test_tagged_value(self):
+    tagged_value = TestTag.new(1)
+    expected = {
+        id(tagged_value): tagged_value,
+        id(tagged_value.tags): {TestTag},
+        id(tagged_value.value): 1
+    }
+    value_by_id = daglish.collect_value_by_id(tagged_value, False)
+    self.assertEqual(value_by_id, expected)
 
   def test_collect_value_by_id(self):
     shared_config = fdl.Config(Foo, bar=1, baz=2)
@@ -453,6 +501,16 @@ class CollectValueByPathTest(absltest.TestCase):
     # Empty tuple is not memoizable:
     self.assertEqual(daglish.collect_value_by_path((), True), {})
     self.assertEqual(daglish.collect_value_by_path((), False), {(): ()})
+
+  def test_tagged_value(self):
+    tagged_value = TestTag.new(1)
+    expected = {
+        (): tagged_value,
+        (daglish.Attr("tags"),): {TestTag},
+        (daglish.Attr("value"),): 1
+    }
+    value_by_path = daglish.collect_value_by_path(tagged_value, False)
+    self.assertEqual(value_by_path, expected)
 
   def test_collect_value_by_path(self):
     shared_config = fdl.Config(Foo, bar=1, baz=2)
@@ -506,6 +564,39 @@ class CollectValueByPathTest(absltest.TestCase):
     self.assertEqual(value_by_path, expected)
     for path in value_by_path:
       self.assertIs(value_by_path[path], expected[path])
+
+
+class TraverserRegistryTest(absltest.TestCase):
+
+  def test_unknown_node_type(self):
+    self.assertIsNone(daglish.find_node_traverser(Foo))
+
+  def test_custom_traverser_registries(self):
+    registry = daglish.NodeTraverserRegistry()
+    self.assertIsNone(registry.find_node_traverser(Foo))
+    registry.register_node_traverser(
+        Foo,
+        flatten_fn=lambda x: ((x.bar, x.baz), None),
+        unflatten_fn=lambda values, _: Foo(*values),
+        path_elements_fn=lambda _: (daglish.Attr("bar"), daglish.Attr("baz")))
+    self.assertIsNone(daglish.find_node_traverser(Foo))
+    foo_traverser = registry.find_node_traverser(Foo)
+    self.assertIsNotNone(foo_traverser)
+    self.assertEqual(((1, 2), None), foo_traverser.flatten(Foo(1, 2)))
+
+  def test_namedtuple_special_casing(self):
+    namedtuple_traverser = daglish.find_node_traverser(daglish.NamedTupleType)
+    self.assertIsNotNone(namedtuple_traverser)
+    self.assertIs(namedtuple_traverser,
+                  daglish.find_node_traverser(TestNamedTuple))
+
+  def test_reregistration_error(self):
+    with self.assertRaises(ValueError):
+      daglish.register_node_traverser(
+          list,
+          flatten_fn=lambda x: (tuple(x), None),
+          unflatten_fn=lambda x, _: list(x),
+          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
 
 
 if __name__ == "__main__":

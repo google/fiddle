@@ -16,13 +16,10 @@
 """Library for manipulating DAGs."""
 
 import abc
-import copy
+import collections
 import dataclasses
 import inspect
-import typing
-from typing import Any, Callable, Dict, Generator, Iterable, List, Tuple, Union
-
-from fiddle import config
+from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple, Type, Union
 
 
 class PathElement(metaclass=abc.ABCMeta):
@@ -93,9 +90,6 @@ class BuildableFnOrCls(Attr):
 Path = Tuple[PathElement, ...]
 Paths = Tuple[Path, ...]
 
-_CONTAINER_TYPES = (List, Tuple, Dict, config.Buildable)
-TraversableContainer = Union[_CONTAINER_TYPES]
-
 # The following types are assembled based on the standard builtin types listed
 # at https://docs.python.org/3/library/stdtypes.html, and the builtin constants
 # listed at https://docs.python.org/3/library/constants.html.
@@ -110,6 +104,131 @@ _IMMUTABLE_NONCONTAINER_TYPES = (
     type(NotImplemented),
     type(Ellipsis),
 )
+
+
+class NamedTupleType:
+  pass
+
+
+PathElementsFn = Callable[[Any], Tuple[PathElement]]
+FlattenFn = Callable[[Any], Tuple[Tuple[Any, ...], Any]]
+UnflattenFn = Callable[[Iterable[Any], Any], Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class NodeTraverser:
+  """Contains information required to traverse a given node type."""
+  flatten: FlattenFn
+  unflatten: UnflattenFn
+  path_elements: PathElementsFn
+
+
+class NodeTraverserRegistry:
+  """A registry of `NodeTraverser`s."""
+
+  def __init__(self):
+    self._node_traversers: Dict[Type[Any], NodeTraverser] = {}
+
+  def register_node_traverser(
+      self,
+      node_type: Type[Any],
+      flatten_fn: FlattenFn,
+      unflatten_fn: UnflattenFn,
+      path_elements_fn: PathElementsFn,
+  ) -> None:
+    """Registers a node traverser for `node_type` in the default registry.
+
+    Args:
+      node_type: The node type to regiser a traverser for. The traverser will be
+        used *only* for nodes of this type, not subclasses (with the exception
+        of the special-cased `daglish.NamedTupleType`).
+      flatten_fn: A function that flattens values for traversal. This should
+        accept an instance of `node_type`, and return a tuple of `(values,
+        metadata)`, where `values` is a sequence of values and `metadata` is
+        arbitrary traverser-specific data.
+      unflatten_fn: A function that unflattens values, which should accept
+        `values` and `metadata` and return a new instance of `node_type`.
+      path_elements_fn: A function that returns `PathElement` instances for the
+        flattened values returned by `flatten_fn`. This should accept an
+        instance of `node_type`, and return a sequence of `PathElement`s aligned
+        with the values returned by `flatten_fn`.
+    """
+    if node_type in self._node_traversers:
+      raise ValueError(
+          f"A node traverser for {node_type} has already been registered.")
+    self._node_traversers[node_type] = NodeTraverser(
+        flatten=flatten_fn,
+        unflatten=unflatten_fn,
+        path_elements=path_elements_fn,
+    )
+
+  def find_node_traverser(
+      self,
+      node_type: Type[Any],
+  ) -> Optional[NodeTraverser]:
+    """Finds a `NodeTraverser` for the given `node_type`.
+
+    This simply looks up `node_type`, with one special case: if `node_type` is a
+    `NamedTuple` (as determined by the `is_namedtuple_subclass` function), then
+    `daglish.NamedTupleType` is looked up in `registry` instead.
+
+    Args:
+      node_type: The node type to find a traverser for.
+
+    Returns:
+      A `NodeTraverser` instance for `node_type`, if it exists, else `None`.
+    """
+    if is_namedtuple_subclass(node_type):
+      node_type = NamedTupleType
+    return self._node_traversers.get(node_type)
+
+
+# The default registry of node traversers.
+_default_traverser_registry = NodeTraverserRegistry()
+
+# Forward functions from the module level to the default registry.
+register_node_traverser = _default_traverser_registry.register_node_traverser
+find_node_traverser = _default_traverser_registry.find_node_traverser
+
+register_node_traverser(
+    dict,
+    flatten_fn=lambda x: (tuple(x.values()), tuple(x.keys())),
+    unflatten_fn=lambda values, keys: dict(zip(keys, values)),
+    path_elements_fn=lambda x: [Key(key) for key in x.keys()])
+
+
+def flatten_defaultdict(node):
+  return tuple(node.values()), (node.default_factory, tuple(node.keys()))
+
+
+def unflatten_defaultdict(values, metadata):
+  default_factory, keys = metadata
+  return collections.defaultdict(default_factory, zip(keys, values))
+
+
+register_node_traverser(
+    collections.defaultdict,
+    flatten_fn=flatten_defaultdict,
+    unflatten_fn=unflatten_defaultdict,
+    path_elements_fn=lambda x: tuple(Key(key) for key in x.keys()))
+
+register_node_traverser(
+    tuple,
+    flatten_fn=lambda x: (x, None),
+    unflatten_fn=lambda x, _: tuple(x),
+    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))))
+
+register_node_traverser(
+    NamedTupleType,
+    flatten_fn=lambda x: (tuple(x), type(x)),
+    unflatten_fn=lambda values, node_type: node_type(*values),
+    path_elements_fn=lambda x: tuple(Attr(name) for name in x._asdict().keys()))
+
+register_node_traverser(
+    list,
+    flatten_fn=lambda x: (tuple(x), None),
+    unflatten_fn=lambda x, _: list(x),
+    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))))
 
 
 def path_str(path: Path) -> str:
@@ -143,13 +262,8 @@ def follow_path(root: Any, path: Path):
   return value
 
 
-def _add_path_element(paths: Paths, elt: PathElement) -> Paths:
-  return tuple(path + (elt,) for path in paths)
-
-
-def is_traversable(value: Any) -> bool:
-  """Determines what container types can be traversed into."""
-  return isinstance(value, _CONTAINER_TYPES)
+def add_path_element(paths: Iterable[Path], element: PathElement) -> Paths:
+  return tuple(path + (element,) for path in paths)
 
 
 def is_memoizable(value: Any) -> bool:
@@ -174,113 +288,17 @@ def is_memoizable(value: Any) -> bool:
   )  # pyformat: disable
 
 
-def is_leaf(value: Any) -> bool:
-  return not is_traversable(value)
-
-
-def is_namedtuple(value: Any) -> bool:
+def is_namedtuple_subclass(type_: Type[Any]) -> bool:
   return (
-      isinstance(value, tuple) and
-      hasattr(value, "_asdict") and
-      hasattr(value, "_fields") and
-      all(isinstance(f, str) for f in value._fields)
+      issubclass(type_, tuple) and
+      hasattr(type_, "_asdict") and
+      hasattr(type_, "_fields") and
+      all(isinstance(f, str) for f in type_._fields)
   )  # pyformat: disable
 
 
-def _container_like(container: TraversableContainer,
-                    iterable: Iterable[Any]) -> TraversableContainer:
-  """Returns a container like `container` but with values from `iterable`.
-
-  If `container` is a `Dict`, a new `Dict` will be created, with keys from
-  `container` and values from `iterable`. A best effort will be made to
-  construct a new container of the same specific type as `container`, however
-  the constructor is assumed to take a sequence of `(key, value)` pairs.
-
-  If `container` is a `NamedTuple`, a new instance of the same `NamedTuple` type
-  will be created, with field names from `container` and values from `iterable`.
-  Note that this function is not compatible with `NamedTuple`s that have custom
-  `__new__` methods with a different signature from the default `__new__`.
-
-  If `container` is a `Buildable`, a new `Buildable` (of the same specific type
-  as `container`) will be created, with arguments set based on argument names
-  from `container.__arguments__` and values from `iterable`.
-
-  Otherwise, if `container` is a list or tuple, a list or tuple will be
-  constructed directly from `iterable`.
-
-  Args:
-    container: The container to replicate (but with values from `iterable`).
-    iterable: An iterable that yields the new values to wrap in a container of
-      the same type as `container`.
-
-  Raises:
-    ValueError: If `container` is an unsupported type.
-
-  Returns:
-    A new container of the same type as `container`, but with values taken
-    from `iterable`.
-  """
-  # The rest of this function confuses pytype due to incorrect type narrowing...
-  # disable type checking for `container` here by casting to Any.
-  container = typing.cast(Any, container)
-  # TODO: Extend to support a broader range of container types,
-  # including at least defaultdict and maybe more general Mappings.
-  if isinstance(container, Dict):
-    return type(container)(zip(container, iterable))
-  elif is_namedtuple(container):
-    # If this namedtuple has a custom __new__ method that changes the signature
-    # to have different numbers/types of arguments than the underlying
-    # namedtuple fields, then the construction below will fail...
-    return type(container)(*iterable)
-  elif isinstance(container, config.Buildable):
-    # TODO: Make sure argument history is handled gracefully.
-    buildable = copy.copy(container)
-    for name, value in zip(container.__arguments__, iterable):
-      setattr(buildable, name, value)
-    return buildable
-  elif isinstance(container, (List, Tuple)):
-    return type(container)(iterable)
-  else:
-    raise ValueError(f"Not a supported container type: {container}.")
-
-
-def _yield_items(
-    container: TraversableContainer) -> Iterable[Tuple[PathElement, Any]]:
-  """Yields (key, value) pairs from `container`.
-
-  The value component of the output of this function is intended to be
-  compatible with `_container_like` above, in other words:
-
-      values = [value for path_element, value in _yield_items(container)]
-      container == _container_like(container, values)
-
-  Args:
-    container: A compatible Python container (List, Tuple, NamedTuple, Dict), or
-      a `fdl.Buildable` instance.
-
-  Raises:
-    ValueError: If `container` is an unsupported type.
-
-  Yields:
-    The container's (key, value) pairs.
-  """
-  # The rest of this function confuses pytype due to incorrect type narrowing...
-  # disable type checking for `container` here by casting to Any.
-  container = typing.cast(Any, container)
-  if isinstance(container, Dict):
-    for key, value in container.items():
-      yield Key(key), value
-  elif is_namedtuple(container):
-    for name, value in container._asdict().items():
-      yield Attr(name), value
-  elif isinstance(container, config.Buildable):
-    for name, value in container.__arguments__.items():
-      yield Attr(name), value
-  elif isinstance(container, (List, Tuple)):
-    for index, value in enumerate(container):
-      yield Index(index), value
-  else:
-    raise ValueError(f"Not a supported container type: {container}.")
+def is_namedtuple_instance(value: Any):
+  return is_namedtuple_subclass(type(value))
 
 
 TraverseWithPathFn = Callable[[Path, Any], Generator[None, Any, Any]]
@@ -376,31 +394,31 @@ def traverse_with_path(fn: TraverseWithPathFn, structure: Any) -> Any:
   if not inspect.isgeneratorfunction(fn):
     raise ValueError("`fn` should contain a yield statement.")
 
-  def traverse_impl(path: Path, structure: Any) -> Any:
+  def traverse(path: Path, structure: Any) -> Any:
     """Recursive traversal implementation."""
-
-    def subtree_fn(item: Tuple[Path, Any]):
-      subtree_path, subtree = item
-      return traverse_impl(path + (subtree_path,), subtree)
-
-    def traverse_subtrees() -> Any:
-      if is_traversable(structure):
-        items = _yield_items(structure)
-        return _container_like(structure, map(subtree_fn, items))
-      else:
-        return structure
 
     generator = fn(path, structure)
     try:
       if next(generator) is not None:
         raise RuntimeError("The traversal function yielded a non-None value.")
-      generator.send(traverse_subtrees())
+      traverser = find_node_traverser(type(structure))
+      if traverser:
+        path_elements = traverser.path_elements(structure)
+        values, metadata = traverser.flatten(structure)
+        new_values = (
+            traverse(path + (path_element,), subtree)
+            for path_element, subtree in zip(path_elements, values)
+        )  # pyformat: disable
+        new_structure = traverser.unflatten(new_values, metadata)
+      else:
+        new_structure = structure
+      generator.send(new_structure)
     except StopIteration as e:
       return e.value  # pytype: disable=attribute-error
     else:
       raise RuntimeError("Does the traversal function have two yields?")
 
-  return traverse_impl((), structure)
+  return traverse((), structure)
 
 
 def collect_paths_by_id(structure: Any,
@@ -429,7 +447,7 @@ def collect_paths_by_id(structure: Any,
   def collect_paths(path: Path, value: Any):
     if not memoizable_only or is_memoizable(value):
       paths_by_id.setdefault(id(value), []).append(path)
-    yield
+    return (yield)
 
   traverse_with_path(collect_paths, structure)
   return paths_by_id
@@ -450,7 +468,7 @@ def collect_value_by_id(structure: Any,
     del path  # Unused.
     if not memoizable_only or is_memoizable(value):
       value_by_id[id(value)] = value
-    yield
+    return (yield)
 
   traverse_with_path(collect_value, structure)
   return value_by_id
@@ -470,7 +488,7 @@ def collect_value_by_path(structure: Any,
   def collect_value(path: Path, value: Any):
     if not memoizable_only or is_memoizable(value):
       value_by_path[path] = value
-    yield
+    return (yield)
 
   traverse_with_path(collect_value, structure)
   return value_by_path
@@ -513,7 +531,7 @@ def traverse_with_all_paths(fn: TraverseWithAllPathsFn, structure):
       # parent container. Here we augment all paths to the parent container.
       parent = follow_path(structure, current_path[:-1])
       parent_paths = paths_memo[id(parent)]
-      all_paths = tuple(path + current_path[-1:] for path in parent_paths)
+      all_paths = add_path_element(parent_paths, current_path[-1])
     return (yield from fn(all_paths, current_path, value))
 
   return traverse_with_path(wrap_with_paths, structure)

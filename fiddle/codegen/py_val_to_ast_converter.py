@@ -249,7 +249,7 @@ def _convert_set(value: Any, conversion_fn: PyValToAstFunc) -> ast.AST:
   return ast.Set(elts=[conversion_fn(v) for v in value])
 
 
-@register_py_val_to_ast_converter(daglish.is_namedtuple)
+@register_py_val_to_ast_converter(daglish.is_namedtuple_instance)
 def _convert_namedtuple(value: Any, conversion_fn: PyValToAstFunc) -> ast.AST:
   """Converts an instance of a named tuple to AST."""
   return ast.Call(

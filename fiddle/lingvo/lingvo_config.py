@@ -51,10 +51,9 @@ def main():
 You can nest fdl.Config's and fdl.lingvo.LingvoConfig's arbitrarily.
 """
 
-import copy
 import inspect
 import typing
-from typing import Any, Union
+from typing import Any, Iterable, Union
 
 from fiddle import config
 from lingvo.core import hyperparams
@@ -132,11 +131,8 @@ class LingvoConfig(config.Config):
   def __init__(self, params_or_cls: Union["LingvoConfig", LingvoParamsAdapter,
                                           ParamInitable, hyperparams.Params],
                *args, **kwargs):
-    if isinstance(params_or_cls, LingvoParamsAdapter):
-      # config.Buildable's __deepcopy__ calls `type(self)(self.__fn_or_cls__)`.
-      params_or_cls = copy.deepcopy(params_or_cls)
-    elif isinstance(params_or_cls, LingvoConfig):
-      # config.Buildable's __copy__ calls `type(self)(self)`, and
+    if (isinstance(params_or_cls, LingvoParamsAdapter) or
+        isinstance(params_or_cls, LingvoConfig)):
       # `super().__init__` does the right thing.
       pass
     else:
@@ -153,6 +149,15 @@ class LingvoConfig(config.Config):
       value = LingvoConfig(value)
     # TODO: what about params hidden inside containers?
     super().__setattr__(name, value)
+
+  @classmethod
+  def __unflatten__(
+      cls,
+      values: Iterable[Any],
+      metadata: config.BuildableTraverserMetadata,
+  ) -> "LingvoConfig":
+    params_adapter = typing.cast(LingvoParamsAdapter, metadata.fn_or_cls)
+    return cls(params_adapter, **metadata.arguments(values))
 
 
 def _convert_lingvo_param(

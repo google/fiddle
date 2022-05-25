@@ -25,6 +25,7 @@ from absl.testing import absltest
 from fiddle import building
 from fiddle import config
 from fiddle import history
+from fiddle.experimental import daglish
 
 import pytype_extensions
 
@@ -434,6 +435,49 @@ class ConfigTest(absltest.TestCase):
     # But modifying a shared value is seen by both.
     fn_config_copy.arg1.arg2 = 'mutated'
     self.assertEqual(fn_config.arg1.arg2, 'mutated')
+
+  def test_buildable_subclass(self):
+
+    class TestClassConfig(config.Config):
+
+      def __init__(self, *args, **kwargs):
+        super().__init__(TestClass, *args, **kwargs)
+
+      @classmethod
+      def __unflatten__(cls, values, metadata):
+        return cls(**metadata.arguments(values))
+
+    sub_cfg = TestClassConfig(1, 2)
+    cfg = TestClassConfig('foo', sub_cfg)
+
+    with self.subTest('copy'):
+      cfg_copy = copy.copy(cfg)
+      self.assertEqual(cfg, cfg_copy)
+      self.assertIs(cfg_copy.arg2, sub_cfg)
+      cfg_copy.arg1 = 'blah'
+      self.assertNotEqual(cfg, cfg_copy)
+
+    with self.subTest('deepcopy'):
+      cfg_deepcopy = copy.deepcopy(cfg)
+      self.assertEqual(cfg, cfg_deepcopy)
+      self.assertIsNot(cfg_deepcopy.arg2, sub_cfg)
+      cfg_copy.arg2.arg1 = 'blah'
+      self.assertNotEqual(cfg, cfg_deepcopy)
+
+    with self.subTest('traverse'):
+      values_by_path = daglish.collect_value_by_path(cfg, memoizable_only=False)
+      values_by_path_str = {
+          daglish.path_str(path): value
+          for path, value in values_by_path.items()
+      }
+      expected = {
+          '': cfg,
+          '.arg1': 'foo',
+          '.arg2': sub_cfg,
+          '.arg2.arg1': 'blah',
+          '.arg2.arg2': 2
+      }
+      self.assertEqual(expected, values_by_path_str)
 
   def test_deep_copy(self):
     class_config = config.Config(TestClass, 'arg1', 'arg2')
