@@ -17,10 +17,10 @@
 
 import copy
 import dataclasses
-import re
 from typing import Any
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import testing
 from fiddle.experimental import daglish
 from fiddle.experimental import diff
 
@@ -53,35 +53,9 @@ def basic_fn(arg1, arg2, kwarg1=0, kwarg2=None):
   return {'a': arg1 + arg2, 'b': arg2 + kwarg1, 'c': kwarg2}
 
 
-# Helper function to make expected Paths easier to write (and read).
-# Handles a limited set of paths (e.g., only Keys where type(key)=str.)
-def parse_path(s: str) -> daglish.Path:
-  """Build a daglish Path from a string."""
-  make_path_re = re.compile(r'\.(?P<attr>\w+)|'
-                            r'\[(?P<index>\d+)\]|'
-                            r'\[(?P<key>\'[^\']*\'|\"[^\"]+\")\]|'
-                            r'(?P<error>.)')
-
-  path = []
-  for m in make_path_re.finditer(s):
-    if m.group('attr'):
-      if m.group('attr') == '__fn_or_cls__':
-        path.append(daglish.BuildableFnOrCls())
-      else:
-        path.append(daglish.Attr(m.group('attr')))
-    elif m.group('index'):
-      path.append(daglish.Index(int(m.group('index'))))
-    elif m.group('key'):
-      path.append(daglish.Key(m.group('key')[1:-1]))
-    else:
-      raise ValueError(f'Unable to parse path {s!r} at {m}')
-  return tuple(path)
-
-
-# Helper function to make expected References easier to write (and read).
-def parse_reference(root: str, path: str) -> diff.Reference:
-  """Build a diff.Reference from a string."""
-  return diff.Reference(root, parse_path(path))
+# Helper functions to make expected Paths easier to write (and read).
+parse_path = testing.parse_path
+parse_reference = testing.parse_reference
 
 
 @dataclasses.dataclass(frozen=True)
