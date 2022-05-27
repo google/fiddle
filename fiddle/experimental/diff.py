@@ -15,6 +15,8 @@
 
 """Library for finding differences between Fiddle configurations."""
 
+import abc
+import copy
 import dataclasses
 
 from typing import Any, Dict, Sequence, List, Tuple, Union
@@ -36,11 +38,16 @@ class Reference(object):
     return f'<Reference: {self.root}{daglish.path_str(self.target)}>'
 
 
-class DiffOperation:
+class DiffOperation(metaclass=abc.ABCMeta):
   """Base class for diff operations.
 
   Each `DiffOperation` describes a single change to a target `daglish.Path`.
   """
+
+  @abc.abstractmethod
+  def apply(self, parent: Any, child: daglish.PathElement):
+    """Applies this operation to the specified child of `parent`."""
+    raise NotImplementedError()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,6 +81,15 @@ class SetValue(DiffOperation):
   """
   new_value: Union[Reference, Any]
 
+  def apply(self, parent: Any, child: daglish.PathElement):
+    """Sets `child.follow(parent)` to self.new_value."""
+    if isinstance(child, daglish.Attr):
+      setattr(parent, child.name, self.new_value)
+    elif isinstance(child, daglish.Key):
+      parent[child.key] = self.new_value
+    else:
+      raise ValueError(f'SetValue does not support {child}.')
+
 
 @dataclasses.dataclass(frozen=True)
 class ModifyValue(DiffOperation):
@@ -83,6 +99,19 @@ class ModifyValue(DiffOperation):
   """
   new_value: Union[Reference, Any]
 
+  def apply(self, parent: Any, child: daglish.PathElement):
+    """Replaces `child.follow(parent)` with self.new_value."""
+    if isinstance(child, daglish.BuildableFnOrCls):
+      config.update_callable(parent, self.new_value)
+    elif isinstance(child, daglish.Attr):
+      setattr(parent, child.name, self.new_value)
+    elif isinstance(child, daglish.Index):
+      parent[child.index] = self.new_value
+    elif isinstance(child, daglish.Key):
+      parent[child.key] = self.new_value
+    else:
+      raise ValueError(f'ModifyValue does not support {child}.')
+
 
 @dataclasses.dataclass(frozen=True)
 class DeleteValue(DiffOperation):
@@ -90,6 +119,15 @@ class DeleteValue(DiffOperation):
 
   The target's parent may not be a sequence (list or tuple).
   """
+
+  def apply(self, parent: Any, child: daglish.PathElement):
+    """Deletes `child.follow(parent)`."""
+    if isinstance(child, daglish.Attr):
+      delattr(parent, child.name)
+    elif isinstance(child, daglish.Key):
+      del parent[child.key]
+    else:
+      raise ValueError(f'DeleteValue does not support {child}.')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -579,6 +617,7 @@ def _resolve_diff_references(diff, old_root):
       # (not the original diff_value).
       original_target = daglish.follow_path(diff.new_shared_values,
                                             original_diff_value.target)
+
       transformed_diff_value = daglish.traverse_with_path(
           replace_references, original_target)
 
@@ -606,3 +645,126 @@ def _resolve_diff_references(diff, old_root):
       changes[target] = change
 
   return Diff(changes, new_shared_values)
+
+
+def apply_diff(diff: Diff, structure: Any) -> None:
+  """Apply `diff` to `structure`, modifying it in-place.
+
+  Args:
+    diff: A `Diff` describing a set of changes to apply.
+    structure: The structure that should be modified.
+
+  Raises:
+    ValueError: If `diff` is incompatible with `structure`.  If an error
+      is raised, then `structure` may be left in a partially updated state.
+  """
+  # Make a full deepcopy of `diff`, to ensure that we don't mutate the original
+  # `diff argument, and to ensure that none of the values added to `structure`
+  # are shared by `diff`.
+  diff = copy.deepcopy(diff)
+
+  # Replace `Reference` pointers in `diff` with their targets.
+  diff = _resolve_diff_references(diff, structure)
+
+  # Apply the diff operations.  This  modifies `structure` in-place.
+  _apply_changes(diff.changes, structure)
+
+
+def _apply_changes(changes: Dict[daglish.Path, DiffOperation], structure: Any):
+  """Applies `changes` to `structure` (modifying it in-place).
+
+  For each `(path, diff_op)` in `changes`, modifies the value at
+  `follow_path(structure, path)` as specified by `diff_op`.
+
+  Args:
+    changes: Dictionary mapping target to `DiffOperation`, specifying the
+      changes that should be made.  The `DiffOperation`s may not contain
+      `Reference`s -- use `_resolve_diff_references` to resolve them before
+      calling this function.
+    structure: The structure that should be modified in-place.
+
+  Raises:
+    ValueError: If `changes` is incompatible with `structure`.
+  """
+  # Construct path->value map before we make any changes, since the paths
+  # to values may change once we start mutating `structure`.
+  path_to_value = daglish.collect_value_by_path(structure, memoizable_only=True)
+
+  # Perform sanity checks before we apply the diff operations.
+  _validate_changes(changes, path_to_value)
+
+  # Apply all the changes.  Apply all DeleteValue operations, followed by all
+  # ModifyValue operations, followed by all SetValue operations.  This order is
+  # important when __fn_or_cls__ is changed, because we need to remove any
+  # arguments that are not supported by the new __fn_or_cls__ before we change
+  # it; and we need to wait to add any arguments that are not supported by the
+  # old __fn_or_cls__ until after we change it.
+  for op_type in (DeleteValue, ModifyValue, SetValue):
+    for target, diff_op in changes.items():
+      if isinstance(diff_op, op_type):
+        parent = path_to_value[target[:-1]]
+        diff_op.apply(parent, target[-1])
+
+
+def _validate_changes(changes: Dict[daglish.Path, DiffOperation],
+                      path_to_value: Dict[daglish.Path, Any]):
+  """Raises ValueError if any change is incompatible with `path_to_value`.
+
+  Args:
+    changes: Dictionary mapping target to `DiffOperation`.
+    path_to_value: Dictionary mapping `daglihs.Path` to the value at each path.
+  """
+  errors = []
+  for target, diff_op in changes.items():
+    if not target:
+      errors.append('Modifying the root `structure` object is not supported')
+      continue
+    parent = path_to_value.get(target[:-1])
+    if parent is None:
+      errors.append(f'For <root>{daglish.path_str(target)}={diff_op}: ' +
+                    'parent does not exist.')
+      continue
+    if not _path_element_is_compatible(target[-1], parent):
+      errors.append(f'For <root>{daglish.path_str(target)}={diff_op}: ' +
+                    f'parent has unexpected type {type(parent)}.')
+      continue
+    has_value = _child_has_value(parent, target[-1])
+    if isinstance(diff_op, DeleteValue) and not has_value:
+      errors.append(f'For <root>{daglish.path_str(target)}={diff_op}: ' +
+                    'value not found.')
+      continue
+    if isinstance(diff_op, ModifyValue) and not has_value:
+      errors.append(f'For <root>{daglish.path_str(target)}={diff_op}: ' +
+                    'value not found; use SetValue to add a new value.')
+      continue
+    if isinstance(diff_op, SetValue) and has_value:
+      errors.append(f'For <root>{daglish.path_str(target)}={diff_op}: ' +
+                    'already has a value; use ModifyValue to overwrite.')
+      continue
+  if len(errors) == 1:
+    raise ValueError(f'Unable to apply diff: {errors[0]}')
+  elif errors:
+    raise ValueError('Unable to apply diff:' +
+                     ''.join(f'\n  * {err}' for err in sorted(errors)))
+
+
+def _path_element_is_compatible(child: daglish.PathElement, parent: Any):
+  """Returns True if `child` could describe a child of `parent`."""
+  return ((isinstance(child, daglish.Index) and isinstance(parent, Sequence)) or
+          (isinstance(child, daglish.Key) and isinstance(parent, Dict)) or
+          (isinstance(child, (daglish.Attr, daglish.BuildableFnOrCls)) and
+           isinstance(parent, config.Buildable)))
+
+
+def _child_has_value(parent: Any, child: daglish.PathElement):
+  """Returns true if the parent[child] has a value."""
+  if isinstance(child, daglish.Index):
+    return child.index < len(parent)
+  elif isinstance(child, daglish.Key):
+    return child.key in parent
+  elif isinstance(child, daglish.BuildableFnOrCls):
+    return True
+  elif isinstance(child, daglish.Attr):
+    return child.name in parent.__arguments__
+  else:
+    raise ValueError(f'Unsupported PathElement: {child}')

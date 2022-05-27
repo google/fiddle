@@ -84,6 +84,12 @@ def parse_reference(root: str, path: str) -> diff.Reference:
   return diff.Reference(root, parse_path(path))
 
 
+@dataclasses.dataclass(frozen=True)
+class UnsupportedPathElement(daglish.PathElement):
+  code = property(lambda self: '<unsupported>')
+  follow = lambda self, container: container
+
+
 class DiffAlignmentTest(absltest.TestCase):
 
   def test_constructor(self):
@@ -636,6 +642,194 @@ class ResolveDiffReferencesTest(absltest.TestCase):
         changes={parse_path('.z'): diff.SetValue(parse_reference('foo', '.x'))})
     with self.assertRaisesRegex(ValueError, 'Unexpected Reference.root'):
       diff._resolve_diff_references(cfg_diff, old)
+
+
+class ApplyDiffTest(absltest.TestCase):
+
+  def test_delete_buildable_argument(self):
+    old = fdl.Config(SimpleClass, x=5, y=2)
+    cfg_diff = diff.Diff({parse_path('.x'): diff.DeleteValue()})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, y=2))
+
+  def test_modify_buildable_argument(self):
+    old = fdl.Config(SimpleClass, x=5, y=2)
+    cfg_diff = diff.Diff({parse_path('.x'): diff.ModifyValue(6)})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, x=6, y=2))
+
+  def test_set_buildable_argument(self):
+    old = fdl.Config(SimpleClass, x=5, y=2)
+    cfg_diff = diff.Diff({parse_path('.z'): diff.SetValue(6)})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, x=5, y=2, z=6))
+
+  def test_modify_buildable_callable(self):
+    old = fdl.Config(SimpleClass, x=5, z=2)
+    cfg_diff = diff.Diff({
+        parse_path('.__fn_or_cls__'): diff.ModifyValue(AnotherClass),
+        parse_path('.z'): diff.DeleteValue(),
+        parse_path('.a'): diff.SetValue(3)
+    })
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(AnotherClass, x=5, a=3))
+
+  def test_delete_dict_item(self):
+    old = fdl.Config(SimpleClass, x={'1': 2})
+    cfg_diff = diff.Diff({parse_path('.x["1"]'): diff.DeleteValue()})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, x={}))
+
+  def test_modify_dict_item(self):
+    old = fdl.Config(SimpleClass, x={'1': 2})
+    cfg_diff = diff.Diff({parse_path('.x["1"]'): diff.ModifyValue(6)})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, x={'1': 6}))
+
+  def test_set_dict_item(self):
+    old = fdl.Config(SimpleClass, x={'1': 2})
+    cfg_diff = diff.Diff({parse_path('.x["2"]'): diff.SetValue(6)})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, x={'1': 2, '2': 6}))
+
+  def test_modify_list_item(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.x[0]'): diff.ModifyValue(8)})
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, fdl.Config(SimpleClass, x=[8, 2]))
+
+  def test_swap_siblings(self):
+    old = [fdl.Config(SimpleClass, 1), fdl.Config(basic_fn, 2)]
+    cfg_diff = diff.Diff({
+        parse_path('[0]'): diff.ModifyValue(parse_reference('old', '[1]')),
+        parse_path('[1]'): diff.ModifyValue(parse_reference('old', '[0]'))
+    })
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, [fdl.Config(basic_fn, 2), fdl.Config(SimpleClass, 1)])
+
+  def test_swap_child_and_parent(self):
+    original_child = fdl.Config(AnotherClass)
+    original_parent = fdl.Config(SimpleClass, x=original_child)
+    old = [original_parent]
+    cfg_diff = diff.Diff({
+        parse_path('[0]'): diff.ModifyValue(parse_reference('old', '[0].x')),
+        parse_path('[0].x'): diff.DeleteValue(),
+        parse_path('[0].x.x'): diff.SetValue(parse_reference('old', '[0]'))
+    })
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, [fdl.Config(AnotherClass, x=fdl.Config(SimpleClass))])
+    self.assertIs(old[0], original_child)
+    self.assertIs(old[0].x, original_parent)
+
+  def test_apply_diff_with_multiple_references(self):
+    old = [[1], {'x': [2], 'y': [3]}, fdl.Config(SimpleClass, z=4), [5]]
+    cfg_diff = diff.Diff(
+        changes={
+            parse_path("[1]['x']"):
+                diff.ModifyValue(parse_reference('old', "[1]['y']")),
+            parse_path("[1]['y']"):
+                diff.ModifyValue(parse_reference('old', "[1]['x']")),
+            parse_path("[1]['z']"):
+                diff.SetValue(parse_reference('old', '[2]')),
+            parse_path('[2].x'):
+                diff.SetValue(parse_reference('new_shared_values', '[0]')),
+            parse_path('[2].z'):
+                diff.ModifyValue(parse_reference('new_shared_values', '[1]')),
+        },
+        new_shared_values=(parse_reference('old', '[3]'), [
+            parse_reference('old', '[0]'),
+            parse_reference('new_shared_values', '[0]')
+        ]),
+    )
+
+    # Manually apply the same changes described by the diff:
+    new = copy.deepcopy(old)
+    new[1]['x'], new[1]['y'] = new[1]['y'], new[1]['x']
+    new[1]['z'] = new[2]
+    new[2].x = new[3]
+    new[2].z = [new[0], new[3]]
+
+    diff.apply_diff(cfg_diff, old)
+    self.assertEqual(old, new)
+
+  def test_error_modify_root(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({(): diff.ModifyValue(8)})
+    with self.assertRaisesRegex(
+        ValueError, 'Modifying the root `structure` object is not supported'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_parent_does_not_exist(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.y[1]'): diff.ModifyValue(8)})
+    with self.assertRaisesRegex(ValueError, 'parent does not exist'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_wrong_child_path_type(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.x.y'): diff.ModifyValue(8)})
+    with self.assertRaisesRegex(ValueError, 'parent has unexpected type'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_delete_value_not_found(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.y'): diff.DeleteValue()})
+    with self.assertRaisesRegex(ValueError, r'value not found\.'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_modify_value_not_found(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.y'): diff.ModifyValue(5)})
+    with self.assertRaisesRegex(ValueError, 'value not found; use SetValue'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_set_value_already_has_value(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.x'): diff.SetValue(5)})
+    with self.assertRaisesRegex(
+        ValueError, 'already has a value; use ModifyValue to overwrite'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_multiple_errors(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({
+        parse_path('.y.z'): diff.SetValue(5),
+        parse_path('.x.y'): diff.ModifyValue(3),
+        parse_path('.x.z'): diff.DeleteValue()
+    })
+    with self.assertRaisesRegex(
+        ValueError, '\n'.join([
+            r'Unable to apply diff:',
+            r'  \* For <root>.x.y=ModifyValue\(new_value=3\): .*',
+            r'  \* For <root>.x.z=DeleteValue\(\): .*',
+            r'  \* For <root>.y.z=SetValue\(new_value=5\): .*',
+        ])):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_delete_index(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.x[0]'): diff.DeleteValue()})
+    with self.assertRaisesRegex(ValueError,
+                                'DeleteValue does not support Index'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_set_index(self):
+    old = fdl.Config(SimpleClass, x=[1, 2])
+    cfg_diff = diff.Diff({parse_path('.x[2]'): diff.SetValue(5)})
+    with self.assertRaisesRegex(ValueError, 'SetValue does not support Index'):
+      diff.apply_diff(cfg_diff, old)
+
+  def test_error_modify_unsupported_path_elt(self):
+    # Exception unreachable via public methods; test directly for coverage.
+    with self.assertRaisesRegex(
+        ValueError, 'ModifyValue does not support UnsupportedPathElement'):
+      diff.ModifyValue(5).apply([], UnsupportedPathElement())
+
+  def test_error_child_has_value_unsupported_path_elt(self):
+    # Exception unreachable via public methods; test directly for coverage.
+    with self.assertRaisesRegex(
+        ValueError, 'Unsupported PathElement: UnsupportedPathElement'):
+      diff._child_has_value([], UnsupportedPathElement())
 
 
 if __name__ == '__main__':
