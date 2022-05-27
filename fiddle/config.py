@@ -276,7 +276,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """
     if type(self) is not type(other):
       return False
-    if self.__fn_or_cls__ is not other.__fn_or_cls__:
+    if self.__fn_or_cls__ != other.__fn_or_cls__:
       return False
     assert self._has_var_keyword == other._has_var_keyword, (
         'Internal invariant violated: has_var_keyword should be the same if '

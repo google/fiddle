@@ -44,6 +44,10 @@ class TestClass:
   def a_method(self):
     return 4  # A random number (https://xkcd.com/221/)
 
+  @classmethod
+  def a_classmethod(cls):
+    return cls(1, 2)
+
 
 def basic_fn(arg1, arg2, kwarg1=None, kwarg2=None) -> Dict[str, Any]:  # pylint: disable=unused-argument
   return locals()
@@ -563,6 +567,11 @@ class ConfigTest(absltest.TestCase):
     # b.__eq__(a) if isinstance(b, a.__class__), so testing explicitly here.
     self.assertFalse(cfg.__eq__(cfg_subclass))
     self.assertFalse(cfg_subclass.__eq__(cfg))
+
+  def test_equality_classmethods(self):
+    cfg_a = config.Config(TestClass.a_classmethod)
+    cfg_b = config.Config(TestClass.a_classmethod)
+    self.assertEqual(cfg_a, cfg_b)
 
   def test_default_value_equality(self):
     cfg1 = config.Config(TestClass, 1, 2)
