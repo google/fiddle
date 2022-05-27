@@ -169,7 +169,7 @@ class _IndexKey:
 @dataclasses.dataclass
 class _AttributeKey:
   """Wraps the name of an attribute."""
-  __slots__ = ('name')
+  __slots__ = ('name',)
   name: str
 
   def __call__(self, obj):
