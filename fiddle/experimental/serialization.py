@@ -74,8 +74,17 @@ class UnreachableElement(daglish.PathElement):
   informative error messages.
   """
 
-  def follow(self, container: Any):
-    raise NotImplementedError("Unreachable elements can't be followed.")
+  def get_in(self, container: Any) -> Any:
+    raise NotImplementedError("Unreachable elements can't be accessed.")
+
+  def set_in(self, container: Any, new_value: Any):
+    raise NotImplementedError("Unreachable elements can't be accessed.")
+
+  def delete_in(self, container: Any):
+    raise NotImplementedError("Unreachable elements can't be accessed.")
+
+  def is_in(self, container: Any) -> bool:
+    raise NotImplementedError("Unreachable elements can't be accessed.")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -104,8 +113,17 @@ class IdentityElement(daglish.PathElement):
   def code(self):
     return ''
 
-  def follow(self, container: Any):
+  def get_in(self, container: Any):
     return container
+
+  def set_in(self, container: Any, new_value: Any):
+    raise NotImplementedError('Cannot set identity element.')
+
+  def delete_in(self, container: Any):
+    raise NotImplementedError('Cannot set identity element.')
+
+  def is_in(self, container: Any) -> bool:
+    return True
 
 
 # A serialization-specific traverser registry. This can be used to register

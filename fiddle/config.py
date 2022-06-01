@@ -134,6 +134,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         flatten_fn=lambda x: x.__flatten__(),
         unflatten_fn=cls.__unflatten__,
         path_elements_fn=lambda x: x.__path_elements__(),
+        all_path_elements_fn=lambda x: x.__all_path_elements__(),
     )
 
   @abc.abstractmethod
@@ -161,6 +162,15 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __path_elements__(self):
     return tuple(daglish.Attr(name) for name in self.__arguments__.keys())
+
+  def __all_path_elements__(self):
+    names = [
+        name for name, param in self.__signature__.parameters.items()
+        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+    ]
+    extra_kwargs = sorted(
+        [name for name in self.__arguments__.keys() if name not in set(names)])
+    return tuple(daglish.Attr(n) for n in names + extra_kwargs)
 
   def __getattr__(self, name: str):
     """Get parameter with given `name`."""
