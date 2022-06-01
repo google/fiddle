@@ -844,3 +844,107 @@ def _child_has_value(parent: Any, child: daglish.PathElement):
     return child.name in parent.__arguments__
   else:
     raise ValueError(f'Unsupported PathElement: {child}')
+
+
+@dataclasses.dataclass(frozen=True)
+class AnyValue:
+  """Object used by `skeleton_from_diff` to encode an unknown value."""
+
+  def __repr__(self):
+    return '*'
+
+
+class AnyCallable(AnyValue):
+  """Object used by `skeleton_from_diff` to encode an unknown callables."""
+  __name__ = '*'
+
+  def __call__(self, **kwargs):
+    raise ValueError('AnyCallable should not be called.')
+
+
+def skeleton_from_diff(diff: Diff):
+  """Returns a minimal object that can be used as the target for the `diff`.
+
+  Finds the set of `old` paths that occur in `diff`, and returns a minimal
+  "skeleton" object that makes those paths valid.  I.e.
+  `daglish.follow_path(skeleton, path)` is valid for each `old` path.
+  The leaves of the skeleton are `AnyValue` objects, and any `Config`s in
+  the skeleton use `AnyCallable` as their callable.
+
+  Args:
+    diff: The `Diff` object used to search for paths.
+  """
+  root = AnyValue()
+
+  def add_reference_target(path, value):
+    nonlocal root
+    del path  # Unused.
+    if isinstance(value, Reference) and value.root == 'old':
+      root = _add_path_to_skeleton(root, value.target)
+    return (yield)
+
+  for change in diff.changes:
+    root = _add_path_to_skeleton(
+        root, change.target, skip_leaf=isinstance(change, SetValue))
+    if isinstance(change, (ModifyValue, SetValue)):
+      daglish.traverse_with_path(add_reference_target, change.new_value)
+    if isinstance(change, RemoveTag):
+      config.add_tag(
+          daglish.follow_path(root, change.target[:-1]), change.target[-1].name,
+          change.tag)
+  daglish.traverse_with_path(add_reference_target, diff.new_shared_values)
+
+  return root
+
+
+def _add_path_to_skeleton(skeleton, path, skip_leaf=False):
+  """Returns a copy of `skeleton`, updated to make `path` valid."""
+  if not path:
+    return skeleton
+
+  # For BuildableFnOrCls, just make sure skeleton is a Config and return it.
+  if isinstance(path[0], daglish.BuildableFnOrCls):
+    if isinstance(skeleton, AnyValue):
+      skeleton = config.Config(AnyCallable())
+    return skeleton
+
+  # Replace `skeleton` with a type that can be used as a parent for path[0].
+  if isinstance(skeleton, AnyValue):
+    if isinstance(path[0], daglish.Attr):
+      skeleton = config.Config(AnyCallable())
+    elif isinstance(path[0], daglish.Index):
+      skeleton = []
+    elif isinstance(path[0], daglish.Key):
+      skeleton = {}
+
+  if len(path) == 1 and skip_leaf:
+    return skeleton
+
+  # Add child element at path[0], if it's not present.
+  if isinstance(path[0], daglish.Attr):
+    assert isinstance(skeleton, config.Config)
+    if path[0].name not in skeleton.__arguments__:
+      setattr(skeleton, path[0].name, AnyValue())
+  elif isinstance(path[0], daglish.Index):
+    assert isinstance(skeleton, Sequence)
+    if path[0].index >= len(skeleton):
+      skeleton += [AnyValue() for _ in range(path[0].index + 1 - len(skeleton))]
+  elif isinstance(path[0], daglish.Key):
+    assert isinstance(skeleton, dict)
+    skeleton.setdefault(path[0].key, AnyValue())
+  else:
+    raise ValueError(f'Unuspported PathElement {path[0]}')
+
+  # Recurse to the child element.
+  child = _add_path_to_skeleton(path[0].follow(skeleton), path[1:], skip_leaf)
+  if isinstance(path[0], daglish.Attr):
+    assert isinstance(skeleton, config.Config)
+    setattr(skeleton, path[0].name, child)
+  elif isinstance(path[0], daglish.Index):
+    assert isinstance(skeleton, Sequence)
+    skeleton[path[0].index] = child
+  elif isinstance(path[0], daglish.Key):
+    assert isinstance(skeleton, dict)
+    skeleton[path[0].key] = child
+
+  return skeleton
