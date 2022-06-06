@@ -20,6 +20,7 @@ import dataclasses
 from typing import Any
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import tagging
 from fiddle import testing
 from fiddle.experimental import daglish
 from fiddle.experimental import diff
@@ -51,6 +52,14 @@ def make_triple(first, second, third):
 
 def basic_fn(arg1, arg2, kwarg1=0, kwarg2=None):
   return {'a': arg1 + arg2, 'b': arg2 + kwarg1, 'c': kwarg2}
+
+
+class GreenTag(tagging.Tag):
+  """Fiddle tag for testing."""
+
+
+class BlueTag(tagging.Tag):
+  """Fiddle tag for testing."""
 
 
 # Helper functions to make expected Paths easier to write (and read).
@@ -479,6 +488,59 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
       new = copy.deepcopy(old)
       new.y[1] = SimpleClass(1, 2, 3)
       self.check_diff(old, new, {})
+
+  def test_modify_tagged_values(self):
+    old = fdl.Config(
+        SimpleClass,
+        x=GreenTag.new([1]),
+        y=GreenTag.new([5]),
+        z=GreenTag.new(BlueTag.new([20])))
+    new = fdl.Config(
+        SimpleClass,
+        x=BlueTag.new([1]),
+        y=GreenTag.new([6]),
+        z=BlueTag.new(GreenTag.new({1: 2})))
+    expected_changes = {
+        '.x.tags': diff.ModifyValue({BlueTag}),
+        '.y.value[0]': diff.ModifyValue(6),
+        '.z.tags': diff.ModifyValue({BlueTag}),
+        '.z.value.tags': diff.ModifyValue({GreenTag}),
+        '.z.value.value': diff.ModifyValue({1: 2}),
+    }
+    self.check_diff(old, new, expected_changes)
+
+  def test_replace_value_with_tags(self):
+    tagged_value = BlueTag.new(5)
+    self.check_diff(
+        old=[tagged_value.tags],
+        new=[tagged_value],
+        expected_changes={'[0]': diff.ModifyValue(tagged_value)})
+    self.check_diff(
+        old=[tagged_value],
+        new=[tagged_value.tags],
+        expected_changes={'[0]': diff.ModifyValue(tagged_value.tags)})
+
+  def test_shared_new_tags(self):
+    tagged_value = BlueTag.new([0])
+    old = fdl.Config(SimpleClass)
+    new = fdl.Config(SimpleClass, x=tagged_value, y=tagged_value)
+    expected_changes = {
+        '.x': diff.SetValue(parse_reference('new_shared_values', '[1]')),
+        '.y': diff.SetValue(parse_reference('new_shared_values', '[1]'))
+    }
+    expected_new_shared_values = (
+        [0],
+        BlueTag.new(parse_reference('new_shared_values', '[0]')),
+    )
+    self.check_diff(old, new, expected_changes, expected_new_shared_values)
+
+  def test_modify_root_tag(self):
+    old = GreenTag.new([1])
+    new = BlueTag.new([1])
+    expected_changes = {
+        '.tags': diff.ModifyValue({BlueTag}),
+    }
+    self.check_diff(old, new, expected_changes)
 
   def test_diff_from_alignment_builder_can_only_build_once(self):
     diff_builder = self.make_test_diff_builder()

@@ -19,8 +19,9 @@ import abc
 import copy
 import dataclasses
 
-from typing import Any, Dict, Sequence, List, Tuple, Union
+from typing import Any, Dict, Sequence, List, Tuple, Union, Set
 from fiddle import config
+from fiddle import tagging
 from fiddle.experimental import daglish
 
 
@@ -166,6 +167,7 @@ class DiffAlignment:
     with `new_value` if some value contained in `old_value` is aligned with a
     value that contains `new_value`.
   * Aligned values must be "memoizable" (as defined by `daglish.is_memoizable`).
+  * `TaggedValue.tags` values may not be aligned.
 
   These restrictions help ensure that a `Diff` can be built from the alignment.
   Note: `DiffAlignment` is not guaranteed to catch all violations of these
@@ -195,6 +197,12 @@ class DiffAlignment:
     self._new_name: str = new_name
     self._new_by_old_id: Dict[int, Any] = {}  # id(old_value) -> new_value
     self._old_by_new_id: Dict[int, Any] = {}  # id(new_value) -> old_value
+
+    # Any object that's used as the value for `TaggedValue.tags` is not
+    # eligible for alignment; find these values so we can reject them.
+    self._ids_of_tag_sets: Set[int] = set()
+    daglish.traverse_with_path(self._find_tag_sets, old)
+    daglish.traverse_with_path(self._find_tag_sets, new)
 
   @property
   def old(self) -> Any:
@@ -282,6 +290,9 @@ class DiffAlignment:
       return False
     if isinstance(old_value, Sequence) and len(old_value) != len(new_value):
       return False
+    if (id(old_value) in self._ids_of_tag_sets or
+        id(new_value) in self._ids_of_tag_sets):
+      return False
     return True
 
   def _validate_alignment(self, old_value, new_value):
@@ -307,6 +318,10 @@ class DiffAlignment:
         raise AlignmentError(
             f'Aligning sequences with different lengths is not '
             f'currently supported.  ({len(old_value)} vs {len(new_value)})')
+    if (id(old_value) in self._ids_of_tag_sets or
+        id(new_value) in self._ids_of_tag_sets):
+      raise AlignmentError(
+          'Values that are used as TaggedValues.tags may not be aligned.')
 
   def __repr__(self):
     return (
@@ -327,6 +342,13 @@ class DiffAlignment:
     if not lines:
       lines.append('    (no objects aligned)')
     return 'DiffAlignment:\n' + '\n'.join(lines)
+
+  def _find_tag_sets(self, path, value):
+    """If value is a TaggedValue, then update _ids_of_tag_sets with it tags."""
+    del path  # Unused.
+    if isinstance(value, tagging.TaggedValue):
+      self._ids_of_tag_sets.add(id(value.tags))
+    return (yield)
 
 
 def align_by_id(old: Any, new: Any, old_name='old', new_name='new'):
@@ -392,7 +414,8 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
   new_by_id = daglish.collect_value_by_id(new, memoizable_only=True)
   for (value_id, value) in old_by_id.items():
     if value_id in new_by_id:
-      alignment.align(value, value)
+      if alignment.can_align(value, value):
+        alignment.align(value, value)
 
   # Second pass: align any objects that are reachable by the same path.
   path_to_old = daglish.collect_value_by_path(old, memoizable_only=True)
@@ -428,6 +451,11 @@ class _DiffFromAlignmentBuilder:
     self.alignment: DiffAlignment = alignment
     self.paths_by_old_id = daglish.collect_paths_by_id(
         alignment.old, memoizable_only=True)
+
+    # Any object that's used as the value for `TaggedValue.tags` should not
+    # be added to new_shared_values (even if the same set object is used).
+    self._ids_of_tag_sets: Set[int] = set()
+    daglish.traverse_with_path(self._find_tag_sets, alignment.new)
 
   def build_diff(self) -> Diff:
     """Returns a `Diff` between `alignment.old` and `alignment.new`."""
@@ -467,6 +495,8 @@ class _DiffFromAlignmentBuilder:
     if not self.alignment.is_new_value_aligned(new_value):  # New object.
       if len(new_paths) == 1 or not daglish.is_memoizable(new_value):
         return diff_value
+      elif id(new_value) in self._ids_of_tag_sets:
+        return diff_value
       else:
         index = len(self.new_shared_values)
         self.new_shared_values.append(diff_value)
@@ -499,7 +529,9 @@ class _DiffFromAlignmentBuilder:
       old_child_path = old_path + (daglish.Attr(name),)
       if name in new_value.__arguments__:
         new_child = getattr(new_value, name)
-        if not self.aligned_or_equal(old_child, new_child):
+        if not ((isinstance(old_value, tagging.TaggedValue) and
+                 name == 'tags' and old_child == new_child) or
+                self.aligned_or_equal(old_child, new_child)):
           self.changes[old_child_path] = ModifyValue(getattr(diff_value, name))
       else:
         self.changes[old_child_path] = DeleteValue()
@@ -554,6 +586,13 @@ class _DiffFromAlignmentBuilder:
       return False
     else:
       return old_value == new_value
+
+  def _find_tag_sets(self, path, value):
+    """If value is a TaggedValue, then update _ids_of_tag_sets with it tags."""
+    del path  # Unused.
+    if isinstance(value, tagging.TaggedValue):
+      self._ids_of_tag_sets.add(id(value.tags))
+    return (yield)
 
 
 def build_diff_from_alignment(alignment: DiffAlignment) -> Diff:
