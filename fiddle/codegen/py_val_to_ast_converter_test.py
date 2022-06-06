@@ -89,10 +89,14 @@ class PyValToAstConverterTest(parameterized.TestCase):
       (slice, 'slice'),
   ])
   def test_convert(self, pyval, expected):
+    if not hasattr(ast, 'unparse'):
+      self.skipTest('ast.unparse requires Python 3.9+')
     ast_node = py_val_to_ast_converter.convert_py_val_to_ast(pyval)
     self.assertEqual(ast.unparse(ast_node), expected)
 
   def test_convert_multiple_tags(self):
+    if not hasattr(ast, 'unparse'):
+      self.skipTest('ast.unparse requires Python 3.9+')
     pyval = fdl.TaggedValue([TestTag, AnotherTag], 3)
     ast_node = py_val_to_ast_converter.convert_py_val_to_ast(pyval)
     self.assertIn(
@@ -100,6 +104,8 @@ class PyValToAstConverterTest(parameterized.TestCase):
         ['TestTag.new(AnotherTag.new(3))', 'AnotherTag.new(TestTag.new(3))'])
 
   def test_convert_empty_set(self):
+    if not hasattr(ast, 'unparse'):
+      self.skipTest('ast.unparse requires Python 3.9+')
     ast_node = py_val_to_ast_converter.convert_py_val_to_ast(set())
     self.assertEqual(ast.unparse(ast_node), '{*()}')
 
@@ -108,6 +114,8 @@ class PyValToAstConverterTest(parameterized.TestCase):
       py_val_to_ast_converter.convert_py_val_to_ast(object())
 
   def test_additional_converters(self):
+    if not hasattr(ast, 'unparse'):
+      self.skipTest('ast.unparse requires Python 3.9+')
     x = [1]
     pyval = [1, {2: x}, fdl.Config(re.match, 'a|b')]
 
