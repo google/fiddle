@@ -22,6 +22,7 @@ import dataclasses
 from typing import Any, Dict, Sequence, List, Tuple, Union
 from fiddle import config
 from fiddle.experimental import daglish
+from fiddle.experimental import unconstrained
 
 
 class AlignmentError(ValueError):
@@ -282,6 +283,9 @@ class DiffAlignment:
       return False
     if isinstance(old_value, Sequence) and len(old_value) != len(new_value):
       return False
+    if ((not isinstance(old_value, (list, tuple, dict, config.Buildable))) and
+        old_value != new_value):
+      return False
     return True
 
   def _validate_alignment(self, old_value, new_value):
@@ -307,6 +311,11 @@ class DiffAlignment:
         raise AlignmentError(
             f'Aligning sequences with different lengths is not '
             f'currently supported.  ({len(old_value)} vs {len(new_value)})')
+    if ((not isinstance(old_value, (list, tuple, dict, config.Buildable))) and
+        old_value != new_value):
+      raise AlignmentError(
+          f'Values of type {type(old_value)} may only be aligned if they are '
+          f'equal.  ({old_value!r} != {new_value!r})')
 
   def __repr__(self):
     return (
@@ -327,6 +336,29 @@ class DiffAlignment:
     if not lines:
       lines.append('    (no objects aligned)')
     return 'DiffAlignment:\n' + '\n'.join(lines)
+
+  def to_unconstrained(self):
+    """Returns a copy of this Alignment with UnconstrainedBuildables.
+
+    In the returned copy, any `Buildable`s reachable from `self.old` or
+    `self.new` are replaced with `UnconstrainedBuildable`s.
+    """
+
+    constrained_to_unconstrained = {}
+
+    def unconstrain_buildable(paths, value):
+      del paths  # Unused.
+      output = unconstrained.unconstrain_value(value)
+      constrained_to_unconstrained[id(value)] = output
+      return output
+
+    old, new = daglish.memoized_traverse(unconstrain_buildable,
+                                         (self.old, self.new))
+    result = DiffAlignment(old, new, self.old_name, self.new_name)
+    for old_id, new_value in self._new_by_old_id.items():
+      result.align(constrained_to_unconstrained[old_id],
+                   constrained_to_unconstrained[id(new_value)])
+    return result
 
 
 def align_by_id(old: Any, new: Any, old_name='old', new_name='new'):
@@ -425,9 +457,9 @@ class _DiffFromAlignmentBuilder:
   def __init__(self, alignment: DiffAlignment):
     self.changes: Dict[daglish.Path, DiffOperation] = {}
     self.new_shared_values: List[Any] = []
-    self.alignment: DiffAlignment = alignment
+    self.alignment: DiffAlignment = alignment.to_unconstrained()
     self.paths_by_old_id = daglish.collect_paths_by_id(
-        alignment.old, memoizable_only=True)
+        self.alignment.old, memoizable_only=True)
 
   def build_diff(self) -> Diff:
     """Returns a `Diff` between `alignment.old` and `alignment.new`."""
@@ -625,6 +657,10 @@ def _resolve_diff_references(diff, old_root):
       raise ValueError(
           f'Unexpected Reference.root {original_diff_value.root!r}')
 
+    # If transformed_diff_value is unconstrained, then reconstrain it.
+    transformed_diff_value = unconstrained.unconstrain_value(
+        transformed_diff_value)
+
     # Memoize and return the transformed_diff_value.
     original_to_transformed_diff_value[id(
         original_diff_value)] = transformed_diff_value
@@ -659,7 +695,7 @@ def apply_diff(diff: Diff, structure: Any) -> None:
       is raised, then `structure` may be left in a partially updated state.
   """
   # Make a full deepcopy of `diff`, to ensure that we don't mutate the original
-  # `diff argument, and to ensure that none of the values added to `structure`
+  # `diff` argument, and to ensure that none of the values added to `structure`
   # are shared by `diff`.
   diff = copy.deepcopy(diff)
 

@@ -19,9 +19,10 @@ from __future__ import annotations
 import abc
 import collections
 import copy
+import dataclasses
 import functools
 import inspect
-from typing import Any, Callable, Collection, Dict, Generic, Iterable, List, NamedTuple, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union
 
 from fiddle import history
 from fiddle.experimental import daglish
@@ -35,7 +36,8 @@ TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
 _UNSET_SENTINEL = object()
 
 
-class BuildableTraverserMetadata(NamedTuple):
+@dataclasses.dataclass(frozen=True)
+class BuildableTraverserMetadata:
   fn_or_cls: Callable[..., Any]
   argument_names: Tuple[str, ...]
 
