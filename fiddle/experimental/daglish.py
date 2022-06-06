@@ -574,8 +574,9 @@ def memoized_traverse(fn: MemoizedTraverseFn, structure):
   Returns:
     The structured output from the traversal.
   """
-  if not inspect.isgeneratorfunction(fn):
-    raise TypeError("`fn` should contain a yield statement.")
+  # Disabling this for now -- it is over-strict.
+  # if not inspect.isgeneratorfunction(fn):
+  #   raise TypeError("`fn` should contain a yield statement.")
 
   memo = {}
 
