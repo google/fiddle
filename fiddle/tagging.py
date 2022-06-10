@@ -64,6 +64,7 @@ import inspect
 from typing import Any, Collection, FrozenSet, Generic, Iterable, Set, TypeVar, Union
 
 from fiddle import config
+from fiddle.experimental import serialization
 import tree
 
 
@@ -81,6 +82,12 @@ class _NoValue:
 
 
 NO_VALUE = _NoValue()
+
+serialization.register_node_traverser(
+    _NoValue,
+    flatten_fn=lambda _: ((), None),
+    unflatten_fn=lambda values, metadata: NO_VALUE,
+    path_elements_fn=lambda _: ())
 
 
 class TagType(type):
