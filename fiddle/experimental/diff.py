@@ -162,7 +162,7 @@ class DiffAlignment:
   * If `isinstance(old_value, Sequence)`, then `len(new_value)` must be equal
     to `len(old_value)`.
   * If `old_value` and `new_value` are aligned, then it must be possible to
-    mutate `old_value` to become `new_value`.
+    mutate `old_value` to become `new_value` using `DiffOperation`s.
   * Alignments may not create cycles.  E.g., `old_value` may not be aligned
     with `new_value` if some value contained in `old_value` is aligned with a
     value that contains `new_value`.
@@ -293,6 +293,9 @@ class DiffAlignment:
     if (id(old_value) in self._ids_of_tag_sets or
         id(new_value) in self._ids_of_tag_sets):
       return False
+    if (not isinstance(old_value, (list, tuple, dict, config.Buildable)) and
+        old_value != new_value):
+      return False
     return True
 
   def _validate_alignment(self, old_value, new_value):
@@ -322,6 +325,11 @@ class DiffAlignment:
         id(new_value) in self._ids_of_tag_sets):
       raise AlignmentError(
           'Values that are used as TaggedValues.tags may not be aligned.')
+    if (not isinstance(old_value, (list, tuple, dict, config.Buildable)) and
+        old_value != new_value):
+      raise AlignmentError(
+          f'Values of type {type(old_value)} may only be aligned if they are '
+          f'equal.  ({old_value!r} != {new_value!r})')
 
   def __repr__(self):
     return (

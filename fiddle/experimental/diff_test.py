@@ -148,6 +148,27 @@ class DiffAlignmentTest(absltest.TestCase):
               '    old.first.z -> new.second.z',
           ]))
 
+  def test_only_align_nontraversable_values_if_they_are_equal(self):
+    old = [{1}, {2}]
+    new = [{2}, {2}]
+    alignment = diff.DiffAlignment(old, new)
+
+    with self.subTest('can_align'):
+      self.assertFalse(alignment.can_align(old[0], new[0]))
+      self.assertFalse(alignment.can_align(old[0], new[1]))
+      self.assertTrue(alignment.can_align(old[1], new[0]))
+      self.assertTrue(alignment.can_align(old[1], new[1]))
+
+    with self.subTest('align equal values'):
+      alignment.align(old[1], new[1])
+      self.assertIs(alignment.new_from_old(old[1]), new[1])
+
+    with self.subTest('align non-equal values'):
+      with self.assertRaisesRegex(
+          diff.AlignmentError,
+          'Values of type .* may only be aligned if they are equal'):
+        alignment.align(old[0], new[0])
+
   def test_alignment_errors(self):
     old = fdl.Config(make_pair, fdl.Config(SimpleClass, [1], [2], [3]),
                      fdl.Config(basic_fn, 4, 5, 6))
@@ -209,12 +230,12 @@ class DiffAlignmentTest(absltest.TestCase):
     old = fdl.Config(
         make_triple,
         first=fdl.Config(SimpleClass, x=1, y=2, z=[3, 4]),
-        second=fdl.Config(basic_fn, arg1=[5], arg2=5, kwarg1=c),
+        second=fdl.Config(basic_fn, arg1=[set([5])], arg2=5, kwarg1=c),
         third=[[1], 2])
     new = fdl.Config(
         make_triple,
         first=fdl.Config(basic_fn, arg1=1, arg2=c, kwarg1=3, kwarg2=4),
-        second=fdl.Partial(basic_fn, arg1=[8], arg2=[3, 4], kwarg1=d),
+        second=fdl.Partial(basic_fn, arg1=[set([8])], arg2=[3, 4], kwarg1=d),
         third=[[1, 2], 2, [3, 4]])
     alignment = diff.align_heuristically(old, new)
     self.assertCountEqual(
@@ -565,6 +586,12 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
     self.assertFalse(diff_builder.aligned_or_equal(old.second, new.second))
     self.assertFalse(
         diff_builder.aligned_or_equal(old.first.z[1], new.first.kwarg2))
+
+  def test_replace_set(self):
+    self.check_diff([set([5])], [set([6])],
+                    expected_changes={
+                        '[0]': diff.ModifyValue(set([6])),
+                    })
 
 
 class ResolveDiffReferencesTest(absltest.TestCase):
