@@ -600,7 +600,7 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     old = fdl.Config(SimpleClass, x=[1])
     cfg_diff = diff.Diff(
         changes={parse_path('.z'): diff.SetValue(parse_reference('old', '.x'))})
-    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    resolved_diff = diff.resolve_diff_references(cfg_diff, old)
     diff_z = resolved_diff.changes[parse_path('.z')]
     self.assertIsInstance(diff_z, diff.SetValue)
     self.assertIs(diff_z.new_value, old.x)
@@ -613,7 +613,7 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     }
     new_shared_values = ([1],)
     cfg_diff = diff.Diff(changes, new_shared_values)
-    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    resolved_diff = diff.resolve_diff_references(cfg_diff, old)
     diff_z = resolved_diff.changes[parse_path('.z')]
     self.assertIsInstance(diff_z, diff.SetValue)
     self.assertIs(diff_z.new_value, resolved_diff.new_shared_values[0])
@@ -626,7 +626,7 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     }
     new_shared_values = ([parse_reference('old', '.x')],)
     cfg_diff = diff.Diff(changes, new_shared_values)
-    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    resolved_diff = diff.resolve_diff_references(cfg_diff, old)
     diff_z = resolved_diff.changes[parse_path('.z')]
     self.assertIsInstance(diff_z, diff.SetValue)
     self.assertIs(diff_z.new_value, resolved_diff.new_shared_values[0])
@@ -643,7 +643,7 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     }
     new_shared_values = ([1], [parse_reference('new_shared_values', '[0]')])
     cfg_diff = diff.Diff(changes, new_shared_values)
-    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    resolved_diff = diff.resolve_diff_references(cfg_diff, old)
     diff_z = resolved_diff.changes[parse_path('.z')]
     self.assertIsInstance(diff_z, diff.SetValue)
     self.assertIs(diff_z.new_value[0], resolved_diff.new_shared_values[0])
@@ -673,7 +673,7 @@ class ResolveDiffReferencesTest(absltest.TestCase):
             parse_reference('new_shared_values', '[0]')
         ]),
     )
-    resolved_diff = diff._resolve_diff_references(cfg_diff, old)
+    resolved_diff = diff.resolve_diff_references(cfg_diff, old)
 
     diff_1_x = resolved_diff.changes[parse_path("[1]['x']")]
     self.assertIsInstance(diff_1_x, diff.ModifyValue)
@@ -704,7 +704,7 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     cfg_diff = diff.Diff(
         changes={parse_path('.z'): diff.SetValue(parse_reference('foo', '.x'))})
     with self.assertRaisesRegex(ValueError, 'Unexpected Reference.root'):
-      diff._resolve_diff_references(cfg_diff, old)
+      diff.resolve_diff_references(cfg_diff, old)
 
 
 class ApplyDiffTest(absltest.TestCase):

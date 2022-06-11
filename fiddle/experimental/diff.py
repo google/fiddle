@@ -618,7 +618,7 @@ def build_diff_from_alignment(alignment: DiffAlignment) -> Diff:
   return _DiffFromAlignmentBuilder(alignment).build_diff()
 
 
-def _resolve_diff_references(diff, old_root):
+def resolve_diff_references(diff, old_root):
   """Returns a copy of `diff` with references resolved.
 
   I.e., each `Reference` in `diff` is replaced with the object it points to.
@@ -711,7 +711,7 @@ def apply_diff(diff: Diff, structure: Any) -> None:
   diff = copy.deepcopy(diff)
 
   # Replace `Reference` pointers in `diff` with their targets.
-  diff = _resolve_diff_references(diff, structure)
+  diff = resolve_diff_references(diff, structure)
 
   # Apply the diff operations.  This  modifies `structure` in-place.
   _apply_changes(diff.changes, structure)
@@ -726,7 +726,7 @@ def _apply_changes(changes: Dict[daglish.Path, DiffOperation], structure: Any):
   Args:
     changes: Dictionary mapping target to `DiffOperation`, specifying the
       changes that should be made.  The `DiffOperation`s may not contain
-      `Reference`s -- use `_resolve_diff_references` to resolve them before
+      `Reference`s -- use `resolve_diff_references` to resolve them before
       calling this function.
     structure: The structure that should be modified in-place.
 
