@@ -413,7 +413,6 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(shared_instance.arg1, 'arg1')
     self.assertEqual(separate_instance.arg1, 'separate_arg1')
 
-  @absltest.expectedFailure  # TODO: Fix instance sharing bug.
   def test_instance_sharing_collections(self):
     child_configs = [
         config.Config(basic_fn, 1, 'a'),
@@ -863,6 +862,14 @@ class ConfigTest(absltest.TestCase):
   def test_pickling_non_serializable_default(self):
     pickle.dumps(config.Config(_test_fn_unserializable_default))
 
+  def test_build_nested_structure(self):
+    class_config = config.Config(TestClass, 'arg1', 'arg2')
+    built = building.build([class_config, {'child': class_config}])
+    self.assertIsInstance(built[0], TestClass)
+    self.assertEqual(built[0].arg1, 'arg1')
+    self.assertEqual(built[0].arg2, 'arg2')
+    self.assertIs(built[0], built[1]['child'])
+
   def test_build_raises_nice_error_too_few_args(self):
     cfg = config.Config(basic_fn, config.Config(TestClass, 1), 2)
     with self.assertRaisesRegex(building.BuildError, '.*TestClass.*') as e:
@@ -897,7 +904,7 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(e.exception.path_from_config_root, "<root>.arg1[1]['c']")
 
   def test_multithreaded_build(self):
-    """Two threads can each invoke config.build without interfering."""
+    """Two threads can each invoke build.build without interfering."""
     output = None
     background_entered_build = threading.Event()
     foreground_entered_build = threading.Event()

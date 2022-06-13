@@ -19,7 +19,7 @@ import abc
 import collections
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple, Type, TypeVar, Union
 
 
 class PathElement(metaclass=abc.ABCMeta):
@@ -114,6 +114,8 @@ PathElementsFn = Callable[[Any], Tuple[PathElement]]
 FlattenFn = Callable[[Any], Tuple[Tuple[Any, ...], Any]]
 UnflattenFn = Callable[[Iterable[Any], Any], Any]
 
+T = TypeVar("T")
+
 
 @dataclasses.dataclass(frozen=True)
 class NodeTraverser:
@@ -153,6 +155,8 @@ class NodeTraverserRegistry:
         instance of `node_type`, and return a sequence of `PathElement`s aligned
         with the values returned by `flatten_fn`.
     """
+    if not isinstance(node_type, type):
+      raise TypeError(f"`node_type` ({node_type}) must be a type.")
     if node_type in self._node_traversers:
       raise ValueError(
           f"A node traverser for {node_type} has already been registered.")
@@ -178,9 +182,35 @@ class NodeTraverserRegistry:
     Returns:
       A `NodeTraverser` instance for `node_type`, if it exists, else `None`.
     """
+    if not isinstance(node_type, type):
+      raise TypeError(f"`node_type` ({node_type}) must be a type.")
     if is_namedtuple_subclass(node_type):
       node_type = NamedTupleType
     return self._node_traversers.get(node_type)
+
+  def map_children(self, fn: Callable[[Any], Any], value: Any) -> Any:
+    """Maps `fn` over the immediate children of `value`.
+
+    Args:
+      fn: A single-argument callable to apply to the children of `value`.
+      value: The value to map `fn` over.
+
+    Returns:
+      A value of the same type as `value`, but with each child replaced by the
+      return value of `fn(child)`.
+
+    Raises:
+      ValueError: If `value` is not traversable.
+    """
+    traverser = self.find_node_traverser(type(value))
+    if traverser is None:
+      raise ValueError(f"{value} is not traversable.")
+    values, metadata = traverser.flatten(value)
+    return traverser.unflatten((fn(value) for value in values), metadata)
+
+  def is_traversable_type(self, node_type: Type[Any]) -> bool:
+    """Returns whether `node_type` can be traversed."""
+    return self.find_node_traverser(node_type) is not None
 
 
 # The default registry of node traversers.
@@ -189,6 +219,8 @@ _default_traverser_registry = NodeTraverserRegistry()
 # Forward functions from the module level to the default registry.
 register_node_traverser = _default_traverser_registry.register_node_traverser
 find_node_traverser = _default_traverser_registry.find_node_traverser
+map_children = _default_traverser_registry.map_children
+is_traversable_type = _default_traverser_registry.is_traversable_type
 
 register_node_traverser(
     dict,

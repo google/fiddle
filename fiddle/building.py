@@ -17,13 +17,11 @@
 import contextlib
 import threading
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 from fiddle import config
 from fiddle import tagging
-
-
-import tree
+from fiddle.experimental import daglish
 
 
 class _BuildGuardState(threading.local):
@@ -98,31 +96,35 @@ def build(buildable):
   instances).
 
   Args:
-    buildable: A `Buildable` instance to build.
+    buildable: A `Buildable` instance to build, or a nested structure of
+      `Buildable` objects.
 
   Returns:
     The built version of `buildable`.
   """
   memo = {}
 
-  def _build(buildable, path_str: str):
+  # The implementation here performs explicit recursion instead of using
+  # `daglish.memoized_traverse` in order to avoid unnecessary unflattening of
+  # `Buildable`s (which can cause errors for certain `Buildable` subclasses).
+  def traverse(value):
+    if id(value) not in memo:
+      if isinstance(value, config.Buildable):
+        arguments = daglish.map_children(traverse, value.__arguments__)
+        try:
+          memo[id(value)] = value.__build__(**arguments)
+        except tagging.TaggedValueNotFilledError:
+          raise
+        except Exception as e:
+          paths = daglish.collect_paths_by_id(buildable, memoizable_only=True)
+          path_str = '<root>' + daglish.path_str(paths[id(value)][0])
+          raise BuildError(value, path_str, e, (), arguments) from e
+      elif daglish.is_traversable_type(type(value)):
+        memo[id(value)] = daglish.map_children(traverse, value)
+      else:
+        memo[id(value)] = value
 
-    def map_fn(map_path: List[Any], leaf):
-      attr, *rest = map_path
-      leaf_path = f'{path_str}.{attr}' + ''.join(f'[{x!r}]' for x in rest)
-      is_buildable = isinstance(leaf, config.Buildable)
-      return _build(leaf, leaf_path) if is_buildable else leaf
-
-    if id(buildable) not in memo:
-      kwargs = tree.map_structure_with_path(map_fn, buildable.__arguments__)
-      try:
-        memo[id(buildable)] = buildable.__build__(**kwargs)
-      except tagging.TaggedValueNotFilledError:
-        raise
-      except Exception as e:
-        raise BuildError(buildable, path_str, e, (), kwargs) from e
-
-    return memo[id(buildable)]
+    return memo[id(value)]
 
   with _in_build():
-    return _build(buildable, '<root>')
+    return traverse(buildable)

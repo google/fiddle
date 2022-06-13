@@ -17,9 +17,11 @@
 
 import collections
 import dataclasses
-from typing import Any, List, NamedTuple
+from typing import Any, cast, List, NamedTuple
 
 from absl.testing import absltest
+from absl.testing import parameterized
+
 import fiddle as fdl
 from fiddle.experimental import daglish
 
@@ -566,10 +568,32 @@ class CollectValueByPathTest(absltest.TestCase):
       self.assertIs(value_by_path[path], expected[path])
 
 
-class TraverserRegistryTest(absltest.TestCase):
+class TraverserRegistryTest(parameterized.TestCase):
+
+  @parameterized.named_parameters([
+      ("config", fdl.Config(Foo, bar=1, baz=2)),
+      ("tagged_value", TestTag.new()),
+      ("namedtuple", TestNamedTuple("a", "b")),
+      ("list", [1, 2, 3]),
+      ("tuple", (1, 2, 3)),
+      ("dict", dict(a=1, b=2)),
+      ("defaultdict", collections.defaultdict(list, a=[1], b=[2])),
+  ])
+  def test_unflatten_flatten(self, value):
+    traverser = daglish.find_node_traverser(type(value))
+    self.assertIsNotNone(traverser)
+    traverser = cast(daglish.NodeTraverser, traverser)
+    values, metadata = traverser.flatten(value)
+    unflattened_value = traverser.unflatten(values, metadata)
+    self.assertIs(type(value), type(unflattened_value))
+    self.assertEqual(value, unflattened_value)
 
   def test_unknown_node_type(self):
     self.assertIsNone(daglish.find_node_traverser(Foo))
+
+  def test_find_node_traverser_non_type_error(self):
+    with self.assertRaises(TypeError):
+      daglish.find_node_traverser(cast(Any, 42))
 
   def test_custom_traverser_registries(self):
     registry = daglish.NodeTraverserRegistry()
@@ -590,13 +614,30 @@ class TraverserRegistryTest(absltest.TestCase):
     self.assertIs(namedtuple_traverser,
                   daglish.find_node_traverser(TestNamedTuple))
 
-  def test_reregistration_error(self):
+  def test_register_node_traverser_non_type_error(self):
+    with self.assertRaises(TypeError):
+      daglish.register_node_traverser(
+          cast(Any, 42),
+          flatten_fn=lambda x: (tuple(x), None),
+          unflatten_fn=lambda x, _: list(x),
+          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
+
+  def test_register_node_traverser_existing_registration_error(self):
     with self.assertRaises(ValueError):
       daglish.register_node_traverser(
           list,
           flatten_fn=lambda x: (tuple(x), None),
           unflatten_fn=lambda x, _: list(x),
           path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
+
+  def test_map_children(self):
+    value = {"a": 1, "b": 2}
+    result = daglish.map_children(lambda x: x - 1, value)
+    self.assertEqual({"a": 0, "b": 1}, result)
+
+  def test_map_children_non_traversable_error(self):
+    with self.assertRaises(ValueError):
+      daglish.map_children(lambda x: x, 42)
 
 
 if __name__ == "__main__":

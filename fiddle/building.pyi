@@ -62,3 +62,9 @@ def build(buildable: config.Config) -> Any:
 @overload
 def build(buildable: config.Buildable) -> Any:
   ...
+
+
+# Define typing overload for nested structures.
+@overload
+def build(buildable: Any) -> Any:
+  ...
