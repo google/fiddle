@@ -326,7 +326,7 @@ class Config(Generic[T], Buildable[T]):
   exposing configured parameters as mutable attributes. For example, given a
   class
 
-      TestClass:
+      class SampleClass:
         '''Example class for demonstration purposes.'''
 
         def __init__(self, arg, kwarg=None):
@@ -335,11 +335,11 @@ class Config(Generic[T], Buildable[T]):
 
   a configuration may (for instance) be accomplished via
 
-      class_config = Config(TestClass, 1, kwarg='kwarg')
+      class_config = Config(SampleClass, 1, kwarg='kwarg')
 
   or via
 
-      class_config = Config(TestClass)
+      class_config = Config(SampleClass)
       class_config.arg = 1
       class_config.kwarg = 'kwarg'
 
@@ -354,8 +354,8 @@ class Config(Generic[T], Buildable[T]):
   A `Config` instance may be transformd into instances and function outputs by
   passing it to the `build` function. The `build` function invokes each function
   or class in the configuration tree (appropriately propagating the built
-  outputs from nested `Config`s). For example, using the `TestClass` config from
-  above:
+  outputs from nested `Config`s). For example, using the `SampleClass` config
+  from above:
 
       instance = build(class_config)
       assert instance.arg == 'arg'
@@ -409,7 +409,7 @@ class Partial(Generic[T], Buildable[T]):
   base class calls its underlying `__fn_or_cls__` when built, this `Partial`
   instead results in a partially bound function or class:
 
-      partial_config = Partial(TestClass)
+      partial_config = Partial(SampleClass)
       partial_config.arg = 1
       partial_config.kwarg = 'kwarg'
       partial_class = build(partial_config)

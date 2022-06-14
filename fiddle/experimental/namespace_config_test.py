@@ -44,11 +44,11 @@ class NamespaceConfigTest(absltest.TestCase):
 
   def test_nesting(self):
 
-    def dummy_fn(**kwargs):
-      return (dummy_fn, kwargs)
+    def sample_fn(**kwargs):
+      return (sample_fn, kwargs)
 
     cfg = namespace_config.NamespaceConfig()
-    cfg.nested = fdl.Config(dummy_fn, x='a')
+    cfg.nested = fdl.Config(sample_fn, x='a')
     cfg.nested.y = 123
     cfg.nested.other_dictconfig = namespace_config.NamespaceConfig(
         very_inside='here')
@@ -56,7 +56,7 @@ class NamespaceConfigTest(absltest.TestCase):
 
     obj = fdl.build(cfg)
     self.assertIsInstance(obj, types.SimpleNamespace)
-    self.assertIs(dummy_fn, obj.nested[0])
+    self.assertIs(sample_fn, obj.nested[0])
     self.assertEqual(321, obj.other)
     self.assertIsInstance(obj.nested[1]['other_dictconfig'],
                           types.SimpleNamespace)

@@ -38,7 +38,7 @@ def fn_with_kwargs(**kwargs):
 
 
 @dataclasses.dataclass(frozen=True)
-class TestClass:
+class SampleClass:
   arg1: Any
   arg2: Any
 
@@ -61,24 +61,24 @@ def _line_number():
 class AutoConfigTest(parameterized.TestCase):
 
   def test_create_basic_config(self):
-    expected_config = config.Config(TestClass, 1, arg2=2)
+    expected_config = config.Config(SampleClass, 1, arg2=2)
 
     @auto_config.auto_config
     def test_class_config():
-      return TestClass(1, 2)
+      return SampleClass(1, 2)
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
-    self.assertEqual(TestClass(1, 2), test_class_config())
+    self.assertEqual(SampleClass(1, 2), test_class_config())
 
   def test_create_basic_config_parents(self):
-    expected_config = config.Config(TestClass, 1, arg2=2)
+    expected_config = config.Config(SampleClass, 1, arg2=2)
 
     @auto_config.auto_config()  # Note the parenthesis!
     def test_class_config():
-      return TestClass(1, 2)
+      return SampleClass(1, 2)
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
-    self.assertEqual(TestClass(1, 2), test_class_config())
+    self.assertEqual(SampleClass(1, 2), test_class_config())
 
   def test_create_basic_partial(self):
     expected_config = config.Partial(basic_fn, 1, kwarg='kwarg')
@@ -90,36 +90,36 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_create_config_with_args(self):
-    expected_config = config.Config(TestClass, 'positional', arg2='default')
+    expected_config = config.Config(SampleClass, 'positional', arg2='default')
 
     @auto_config.auto_config
     def test_class_config(arg1, arg2='default'):
-      return TestClass(arg1, arg2)
+      return SampleClass(arg1, arg2)
 
     self.assertEqual(expected_config,
                      test_class_config.as_buildable('positional'))
     self.assertEqual(
-        TestClass('positional', 'default'), test_class_config('positional'))
+        SampleClass('positional', 'default'), test_class_config('positional'))
 
   def test_create_config_with_kwonly_args(self):
-    expected_config = config.Config(TestClass, 'positional', arg2='default')
+    expected_config = config.Config(SampleClass, 'positional', arg2='default')
 
     @auto_config.auto_config
     def test_class_config(arg1, *, arg2='default'):
-      return TestClass(arg1, arg2)
+      return SampleClass(arg1, arg2)
 
     self.assertEqual(expected_config,
                      test_class_config.as_buildable('positional'))
     self.assertEqual(
-        TestClass('positional', 'default'), test_class_config('positional'))
+        SampleClass('positional', 'default'), test_class_config('positional'))
 
   def test_calling_auto_config(self):
     expected_config = config.Config(
-        basic_fn, 1, kwarg=config.Config(TestClass, 1, 2))
+        basic_fn, 1, kwarg=config.Config(SampleClass, 1, 2))
 
     @auto_config.auto_config
     def test_class_config():
-      return TestClass(1, arg2=2)
+      return SampleClass(1, arg2=2)
 
     @auto_config.auto_config
     def test_fn_config():
@@ -128,31 +128,31 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(expected_config, test_fn_config.as_buildable())
     self.assertEqual({
         'arg': 1,
-        'kwarg': TestClass(1, arg2=2)
+        'kwarg': SampleClass(1, arg2=2)
     }, test_fn_config())
 
   def test_nested_calls(self):
     expected_config = config.Config(
-        TestClass, 1, arg2=config.Config(basic_fn, 2, 'kwarg'))
+        SampleClass, 1, arg2=config.Config(basic_fn, 2, 'kwarg'))
 
     @auto_config.auto_config
     def test_class_config():
-      return TestClass(1, basic_fn(2, 'kwarg'))
+      return SampleClass(1, basic_fn(2, 'kwarg'))
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
     self.assertEqual(
-        TestClass(1, {
+        SampleClass(1, {
             'arg': 2,
             'kwarg': 'kwarg'
         }), test_class_config())
 
   def test_calling_explicit_function(self):
     expected_config = config.Config(
-        TestClass, 1, arg2=config.Config(basic_fn, 5, 10))
+        SampleClass, 1, arg2=config.Config(basic_fn, 5, 10))
 
     @auto_config.auto_config
     def test_nested_call():
-      return TestClass(1, explicit_config_building_fn(10))
+      return SampleClass(1, explicit_config_building_fn(10))
 
     self.assertEqual(expected_config, test_nested_call.as_buildable())
 
@@ -167,11 +167,11 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_calling_builtins(self):
-    expected_config = config.Config(TestClass, [0, 1, 2], ['a', 'b'])
+    expected_config = config.Config(SampleClass, [0, 1, 2], ['a', 'b'])
 
     @auto_config.auto_config
     def test_config():
-      return TestClass(list(range(3)), list({'a': 0, 'b': 1}.keys()))
+      return SampleClass(list(range(3)), list({'a': 0, 'b': 1}.keys()))
 
     self.assertEqual(expected_config, test_config.as_buildable())
 
@@ -185,7 +185,7 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertFalse(auto_config._is_auto_config_eligible([].append))
     self.assertFalse(auto_config._is_auto_config_eligible({}.keys))
     # A method.
-    test_class = TestClass(1, 2)
+    test_class = SampleClass(1, 2)
     self.assertFalse(auto_config._is_auto_config_eligible(test_class.method))
     # Buildable subclasses.
     self.assertFalse(auto_config._is_auto_config_eligible(config.Config))
@@ -195,11 +195,11 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_autobuilders_in_auto_config(self):
     expected_config = config.Config(
-        basic_fn, arg=ab.config(TestClass, require_skeleton=False))
+        basic_fn, arg=ab.config(SampleClass, require_skeleton=False))
 
     @auto_config.auto_config
     def autobuilder_using_fn():
-      x = ab.config(TestClass, require_skeleton=False)
+      x = ab.config(SampleClass, require_skeleton=False)
       return basic_fn(x)
 
     self.assertEqual(expected_config, autobuilder_using_fn.as_buildable())
@@ -210,16 +210,16 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_return_structure(self):
     expected_config = {
-        'test_key1': config.Config(TestClass, 1, arg2=2),
-        'test_key2': [config.Config(TestClass, 3, 4), 5],
+        'test_key1': config.Config(SampleClass, 1, arg2=2),
+        'test_key2': [config.Config(SampleClass, 3, 4), 5],
         'test_key3': (config.Partial(pass_through, 'arg'), 6),
     }
 
     @auto_config.auto_config
     def test_config():
       return {
-          'test_key1': TestClass(1, 2),
-          'test_key2': [TestClass(3, 4), 5],
+          'test_key1': SampleClass(1, 2),
+          'test_key2': [SampleClass(3, 4), 5],
           'test_key3': (functools.partial(pass_through, 'arg'), 6),
       }
 
@@ -245,16 +245,16 @@ class AutoConfigTest(parameterized.TestCase):
       @staticmethod
       @auto_config.auto_config
       def my_fn():
-        return TestClass(2, 1)
+        return SampleClass(2, 1)
 
     self.assertEqual(
-        config.Config(TestClass, 2, 1), MyClass.my_fn.as_buildable())
-    self.assertEqual(TestClass(2, 1), MyClass.my_fn())
+        config.Config(SampleClass, 2, 1), MyClass.my_fn.as_buildable())
+    self.assertEqual(SampleClass(2, 1), MyClass.my_fn())
 
     instance = MyClass()
     self.assertEqual(
-        config.Config(TestClass, 2, 1), instance.my_fn.as_buildable())
-    self.assertEqual(TestClass(2, 1), instance.my_fn())
+        config.Config(SampleClass, 2, 1), instance.my_fn.as_buildable())
+    self.assertEqual(SampleClass(2, 1), instance.my_fn())
 
   def test_staticmethod_arguments(self):
 
@@ -263,17 +263,17 @@ class AutoConfigTest(parameterized.TestCase):
       @staticmethod
       @auto_config.auto_config
       def my_fn(x):
-        return TestClass(x, x + 1)
+        return SampleClass(x, x + 1)
 
     self.assertEqual(
-        config.Config(TestClass, 5, 6), MyClass.my_fn.as_buildable(5))
-    self.assertEqual(TestClass(5, 6), MyClass.my_fn(5))
+        config.Config(SampleClass, 5, 6), MyClass.my_fn.as_buildable(5))
+    self.assertEqual(SampleClass(5, 6), MyClass.my_fn(5))
 
     instance = MyClass()
 
     self.assertEqual(
-        config.Config(TestClass, 5, 6), instance.my_fn.as_buildable(5))
-    self.assertEqual(TestClass(5, 6), instance.my_fn(5))
+        config.Config(SampleClass, 5, 6), instance.my_fn.as_buildable(5))
+    self.assertEqual(SampleClass(5, 6), instance.my_fn(5))
 
   def test_staticmethod_not_on_top(self):
     with self.assertRaisesRegex(TypeError, 'Please order the decorators'):
@@ -283,7 +283,7 @@ class AutoConfigTest(parameterized.TestCase):
         @auto_config.auto_config
         @staticmethod
         def my_fn(x, y):
-          return TestClass(x, y)
+          return SampleClass(x, y)
 
   def test_control_flow_if(self):
 
@@ -318,7 +318,7 @@ class AutoConfigTest(parameterized.TestCase):
     def test_config():
       layers = []
       for i in range(3):
-        layers.append(TestClass(i, i))
+        layers.append(SampleClass(i, i))
       return pass_through(layers)
 
     with self.assertRaisesRegex(
@@ -327,7 +327,7 @@ class AutoConfigTest(parameterized.TestCase):
       auto_config.auto_config(test_config)
 
     expected_config = config.Config(
-        pass_through, [config.Config(TestClass, i, i) for i in range(3)])
+        pass_through, [config.Config(SampleClass, i, i) for i in range(3)])
     actual_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
     self.assertEqual(expected_config, actual_config)
@@ -459,7 +459,7 @@ class AutoConfigTest(parameterized.TestCase):
   def test_disallow_lambda_definitions(self):
 
     def test_config():
-      return pass_through(lambda: TestClass(1, 2))
+      return pass_through(lambda: SampleClass(1, 2))
 
     with self.assertRaisesRegex(
         auto_config.UnsupportedLanguageConstructError,

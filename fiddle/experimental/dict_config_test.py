@@ -43,18 +43,18 @@ class DictConfigTest(absltest.TestCase):
 
   def test_nesting(self):
 
-    def dummy_fn(**kwargs):
-      return (dummy_fn, kwargs)
+    def sample_fn(**kwargs):
+      return (sample_fn, kwargs)
 
     cfg = dict_config.DictConfig()
-    cfg.nested = fdl.Config(dummy_fn, x='a')
+    cfg.nested = fdl.Config(sample_fn, x='a')
     cfg.nested.y = 123
     cfg.nested.other_dictconfig = dict_config.DictConfig(very_inside='here')
     cfg.other = 321
 
     obj = fdl.build(cfg)
     self.assertIsInstance(obj, dict)
-    self.assertIs(dummy_fn, obj['nested'][0])
+    self.assertIs(sample_fn, obj['nested'][0])
     expected_inner = {
         'x': 'a',
         'y': 123,

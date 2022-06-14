@@ -26,11 +26,11 @@ from fiddle import printing
 from fiddle import tagging
 
 
-class DummyTag(tagging.Tag):
-  """Dummy tag for testing."""
+class SampleTag(tagging.Tag):
+  """Sample tag for testing."""
 
 
-class OtherTag(tagging.Tag):
+class SampleTag2(tagging.Tag):
   """Second tag, for fun & profit!"""
 
 
@@ -42,7 +42,7 @@ def fn_with_kwargs(x, y, **kwargs):  # pylint: disable=unused-argument
   pass
 
 
-class TestHelper:
+class SampleClass:
 
   def __init__(self, a, b):  # pylint: disable=unused-argument
     pass
@@ -58,7 +58,7 @@ class DataclassHelper:
   y: str
 
 
-def advanced_annotations_helper(x: TestHelper, **kwargs: DataclassHelper):  # pylint: disable=unused-argument
+def advanced_annotations_helper(x: SampleClass, **kwargs: DataclassHelper):  # pylint: disable=unused-argument
   pass
 
 
@@ -113,7 +113,7 @@ class AsStrFlattenedTests(absltest.TestCase):
     self.assertEqual(output, expected)
 
   def test_class(self):
-    cfg = fdl.Config(TestHelper, 'a_param', b=123)
+    cfg = fdl.Config(SampleClass, 'a_param', b=123)
     output = printing.as_str_flattened(cfg)
 
     expected = textwrap.dedent("""\
@@ -148,7 +148,7 @@ class AsStrFlattenedTests(absltest.TestCase):
   def test_nested_collections(self):
     cfg = fdl.Config(fn_x_y,
                      [fdl.Config(fn_x_y, 1, '1'),
-                      fdl.Config(TestHelper, 2)])
+                      fdl.Config(SampleClass, 2)])
     output = printing.as_str_flattened(cfg)
 
     expected = textwrap.dedent("""\
@@ -194,41 +194,41 @@ class AsStrFlattenedTests(absltest.TestCase):
     self.assertEqual(output, expected)
 
   def test_tagged_values(self):
-    cfg = fdl.Config(fn_x_y, x=DummyTag.new(), y=DummyTag.new(default='abc'))
+    cfg = fdl.Config(fn_x_y, x=SampleTag.new(), y=SampleTag.new(default='abc'))
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
         output, """\
-        x = <[unset]> #__main__.DummyTag
-        y = 'abc' #__main__.DummyTag""")
+        x = <[unset]> #__main__.SampleTag
+        y = 'abc' #__main__.SampleTag""")
 
-    tagging.set_tagged(cfg, tag=DummyTag, value='cba')
+    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
         output, """\
-        x = 'cba' #__main__.DummyTag
-        y = 'cba' #__main__.DummyTag""")
+        x = 'cba' #__main__.SampleTag
+        y = 'cba' #__main__.SampleTag""")
 
   def test_tagged_values_multiple_tags(self):
     cfg = fdl.Config(
         fn_x_y,
-        x=tagging.TaggedValue(tags=(DummyTag, OtherTag)),
-        y=tagging.TaggedValue(tags=(DummyTag, OtherTag), default='abc'))
+        x=tagging.TaggedValue(tags=(SampleTag, SampleTag2)),
+        y=tagging.TaggedValue(tags=(SampleTag, SampleTag2), default='abc'))
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
         output, """\
-        x = <[unset]> #__main__.DummyTag #__main__.OtherTag
-        y = 'abc' #__main__.DummyTag #__main__.OtherTag""")
+        x = <[unset]> #__main__.SampleTag #__main__.SampleTag2
+        y = 'abc' #__main__.SampleTag #__main__.SampleTag2""")
 
-    tagging.set_tagged(cfg, tag=DummyTag, value='cba')
+    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
         output, """\
-        x = 'cba' #__main__.DummyTag #__main__.OtherTag
-        y = 'cba' #__main__.DummyTag #__main__.OtherTag""")
+        x = 'cba' #__main__.SampleTag #__main__.SampleTag2
+        y = 'cba' #__main__.SampleTag #__main__.SampleTag2""")
 
   def test_partial(self):
     partial = fdl.Partial(fn_x_y)
@@ -257,7 +257,7 @@ class AsStrFlattenedTests(absltest.TestCase):
     output = printing.as_str_flattened(cfg)
 
     expected = textwrap.dedent("""\
-        x: TestHelper = <[unset]>
+        x: SampleClass = <[unset]>
         abc.x: int = <[unset]>
         abc.y: str = <[unset]>""")
     self.assertEqual(output, expected)
@@ -325,7 +325,7 @@ class HistoryPerLeafParamTests(absltest.TestCase):
   def test_nested_in_collections(self):
     cfg = fdl.Config(fn_x_y,
                      [fdl.Config(fn_x_y, 1, '1'),
-                      fdl.Config(TestHelper, 2)])
+                      fdl.Config(SampleClass, 2)])
     cfg.x[0].x = 3
     cfg.x[1].a = 2  # Reset to same value.
     cfg.x[0].y = 'abc'
@@ -339,7 +339,7 @@ class HistoryPerLeafParamTests(absltest.TestCase):
           - previously: 1 @ .*/printing_test.py:\d+:test_nested_in_collections
         x\[0\].y = 'abc' @ .*/printing_test.py:\d+:test_nested_in_collections
           - previously: '1' @ .*/printing_test.py:\d+:test_nested_in_collections
-        x\[1\].__fn_or_cls__ = .*{_local_module_regex}.TestHelper.*/printing_test.py:\d+:test_nested_in_collections
+        x\[1\].__fn_or_cls__ = .*{_local_module_regex}.SampleClass.*/printing_test.py:\d+:test_nested_in_collections
         x\[1\].a = 2 @ .*/printing_test.py:\d+:test_nested_in_collections
           - previously: 2 @ .*/printing_test.py:\d+:test_nested_in_collections
         x\[1\].b = <\[unset\]>

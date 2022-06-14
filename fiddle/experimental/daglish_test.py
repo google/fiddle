@@ -32,12 +32,12 @@ class Foo:
   baz: Any
 
 
-class TestNamedTuple(NamedTuple):
+class SampleNamedTuple(NamedTuple):
   fizz: Any
   buzz: Any
 
 
-class TestTag(fdl.Tag):
+class SampleTag(fdl.Tag):
   """`fdl.Tag` to use for testing."""
 
 
@@ -72,7 +72,7 @@ class PathElementTest(absltest.TestCase):
     root = [
         1, {
             "a": Foo("bar", "baz"),
-            "b": TestNamedTuple("fizz", "buzz")
+            "b": SampleNamedTuple("fizz", "buzz")
         }, [3, 4, fdl.Config(Foo)]
     ]
     path1 = (daglish.Index(1), daglish.Key("a"), daglish.Attr("bar"))
@@ -118,8 +118,8 @@ class PathElementTest(absltest.TestCase):
 class TraverseWithPathTest(absltest.TestCase):
 
   def test_is_namedtuple(self):
-    self.assertTrue(daglish.is_namedtuple_subclass(TestNamedTuple))
-    typing_namedtuple = TestNamedTuple(1, 2)
+    self.assertTrue(daglish.is_namedtuple_subclass(SampleNamedTuple))
+    typing_namedtuple = SampleNamedTuple(1, 2)
     self.assertTrue(daglish.is_namedtuple_instance(typing_namedtuple))
     collections_namedtuple_type = collections.namedtuple(
         "CollectionsNamedTuple", ["arg1", "arg2"])
@@ -134,7 +134,7 @@ class TraverseWithPathTest(absltest.TestCase):
         bar=[1, {
             "key": (2,)
         }],
-        baz=TestNamedTuple(
+        baz=SampleNamedTuple(
             fizz=fdl.Config(Foo, bar=(1,), baz="boop"), buzz=None))
 
     visited_values = {}
@@ -164,7 +164,7 @@ class TraverseWithPathTest(absltest.TestCase):
     self.assertEqual(config, output)
 
   def test_pretraversal_return(self):
-    config = TestNamedTuple(fizz=[1, 2, 3], buzz=(4, 5, 6))
+    config = SampleNamedTuple(fizz=[1, 2, 3], buzz=(4, 5, 6))
 
     def traverse(path, value):
       del value
@@ -175,7 +175,7 @@ class TraverseWithPathTest(absltest.TestCase):
       return (yield)
 
     output = daglish.traverse_with_path(traverse, config)
-    expected = TestNamedTuple(fizz="fizz!", buzz="buzz!")
+    expected = SampleNamedTuple(fizz="fizz!", buzz="buzz!")
     self.assertEqual(expected, output)
 
   def test_posttraversal_return(self):
@@ -184,7 +184,7 @@ class TraverseWithPathTest(absltest.TestCase):
         bar=[1, {
             "key": (2,)
         }],
-        baz=TestNamedTuple(
+        baz=SampleNamedTuple(
             fizz=fdl.Config(Foo, bar=(1,), baz="boop"), buzz=None))
 
     def traverse(path, value):
@@ -216,7 +216,7 @@ class TraverseWithPathTest(absltest.TestCase):
     self.assertEqual(expected.items(), output.items())
 
   def test_yield_non_none_error(self):
-    config = TestNamedTuple(fizz=[1, 2, 3], buzz=(4, 5, 6))
+    config = SampleNamedTuple(fizz=[1, 2, 3], buzz=(4, 5, 6))
 
     def traverse(unused_path, value):
       yield value
@@ -406,7 +406,7 @@ class CollectPathsByIdTest(absltest.TestCase):
     self.assertEqual(daglish.collect_paths_by_id((), True), {})
 
   def test_tagged_value(self):
-    tagged_value = TestTag.new(1)
+    tagged_value = SampleTag.new(1)
     expected = {
         id(tagged_value): [()],
         id(tagged_value.tags): [(daglish.Attr("tags"),)]
@@ -452,10 +452,10 @@ class CollectValueByIdTest(absltest.TestCase):
     self.assertEqual(daglish.collect_value_by_id((), False), {id(()): ()})
 
   def test_tagged_value(self):
-    tagged_value = TestTag.new(1)
+    tagged_value = SampleTag.new(1)
     expected = {
         id(tagged_value): tagged_value,
-        id(tagged_value.tags): {TestTag},
+        id(tagged_value.tags): {SampleTag},
         id(tagged_value.value): 1
     }
     value_by_id = daglish.collect_value_by_id(tagged_value, False)
@@ -505,10 +505,10 @@ class CollectValueByPathTest(absltest.TestCase):
     self.assertEqual(daglish.collect_value_by_path((), False), {(): ()})
 
   def test_tagged_value(self):
-    tagged_value = TestTag.new(1)
+    tagged_value = SampleTag.new(1)
     expected = {
         (): tagged_value,
-        (daglish.Attr("tags"),): {TestTag},
+        (daglish.Attr("tags"),): {SampleTag},
         (daglish.Attr("value"),): 1
     }
     value_by_path = daglish.collect_value_by_path(tagged_value, False)
@@ -572,8 +572,8 @@ class TraverserRegistryTest(parameterized.TestCase):
 
   @parameterized.named_parameters([
       ("config", fdl.Config(Foo, bar=1, baz=2)),
-      ("tagged_value", TestTag.new()),
-      ("namedtuple", TestNamedTuple("a", "b")),
+      ("tagged_value", SampleTag.new()),
+      ("namedtuple", SampleNamedTuple("a", "b")),
       ("list", [1, 2, 3]),
       ("tuple", (1, 2, 3)),
       ("dict", dict(a=1, b=2)),
@@ -612,7 +612,7 @@ class TraverserRegistryTest(parameterized.TestCase):
     namedtuple_traverser = daglish.find_node_traverser(daglish.NamedTupleType)
     self.assertIsNotNone(namedtuple_traverser)
     self.assertIs(namedtuple_traverser,
-                  daglish.find_node_traverser(TestNamedTuple))
+                  daglish.find_node_traverser(SampleNamedTuple))
 
   def test_register_node_traverser_non_type_error(self):
     with self.assertRaises(TypeError):
