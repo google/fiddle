@@ -238,6 +238,53 @@ class AutoConfigTest(parameterized.TestCase):
         r'which is not \(or did not contain\) a `fdl\.Buildable`\.'):
       test_config.as_buildable()
 
+  def test_staticmethod_nullary(self):
+
+    class MyClass:
+
+      @staticmethod
+      @auto_config.auto_config
+      def my_fn():
+        return TestClass(2, 1)
+
+    self.assertEqual(
+        config.Config(TestClass, 2, 1), MyClass.my_fn.as_buildable())
+    self.assertEqual(TestClass(2, 1), MyClass.my_fn())
+
+    instance = MyClass()
+    self.assertEqual(
+        config.Config(TestClass, 2, 1), instance.my_fn.as_buildable())
+    self.assertEqual(TestClass(2, 1), instance.my_fn())
+
+  def test_staticmethod_arguments(self):
+
+    class MyClass:
+
+      @staticmethod
+      @auto_config.auto_config
+      def my_fn(x):
+        return TestClass(x, x + 1)
+
+    self.assertEqual(
+        config.Config(TestClass, 5, 6), MyClass.my_fn.as_buildable(5))
+    self.assertEqual(TestClass(5, 6), MyClass.my_fn(5))
+
+    instance = MyClass()
+
+    self.assertEqual(
+        config.Config(TestClass, 5, 6), instance.my_fn.as_buildable(5))
+    self.assertEqual(TestClass(5, 6), instance.my_fn(5))
+
+  def test_staticmethod_not_on_top(self):
+    with self.assertRaisesRegex(TypeError, 'Please order the decorators'):
+
+      class MyClass:  # pylint: disable=unused-variable
+
+        @auto_config.auto_config
+        @staticmethod
+        def my_fn(x, y):
+          return TestClass(x, y)
+
   def test_control_flow_if(self):
 
     def test_config(condition):

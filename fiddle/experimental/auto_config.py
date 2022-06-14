@@ -325,8 +325,15 @@ def auto_config(
   """
 
   def make_auto_config(fn):
+    if isinstance(fn, staticmethod):
+      raise TypeError(
+          'Please order the decorators such that `@staticmethod` is on top (as '
+          'the outermost decorator). Example:\n'
+          '@staticmethod\n@auto_config.auto_config\ndef my_fn():\n  ...')
+
     if not inspect.isfunction(fn):
-      raise ValueError('`auto_config` is only compatible with functions.')
+      raise ValueError('`auto_config` is only compatible with functions and '
+                       '`@staticmethod`s.')
 
     # Get the source code of the function, and remove any indentation which
     # would cause parsing issues when creating the AST (indentation generally is
