@@ -17,7 +17,7 @@ Additional details can be found in the [documentation].
 Install Fiddle with pip:
 
 ```shell
-pip install fiddle-config
+pip install fiddle
 ```
 
 Install Fiddle from source:

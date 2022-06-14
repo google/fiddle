@@ -21,7 +21,7 @@ See https://github.com/google/fiddle for documentation.
 from setuptools import find_packages
 from setuptools import setup
 
-_VERSION = '0.1.0'
+_VERSION = '0.2.0'
 
 long_description = """
 # Fiddle
@@ -35,7 +35,7 @@ Python code.
 """
 
 setup(
-    name='fiddle-config',
+    name='fiddle',
     version=_VERSION,
     include_package_data=True,
     packages=find_packages(exclude=['docs']),  # Required
@@ -49,7 +49,7 @@ setup(
             'absl-py',
             'pytest',
             'pytype',
-            'seqio',
+            'seqio-nightly',
         ]
     },
     description='Fiddle: A Python-first configuration library',
