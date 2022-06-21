@@ -61,9 +61,10 @@ from __future__ import annotations
 
 import copy
 import inspect
-from typing import Any, Collection, FrozenSet, Generic, Iterable, Set, TypeVar, Union
+from typing import Any, Collection, FrozenSet, Generic, Iterable, Optional, Set, TypeVar, Union
 
 from fiddle import config
+from fiddle.experimental import daglish
 from fiddle.experimental import serialization
 import tree
 
@@ -270,3 +271,36 @@ def list_tags(
           tags.add(base)
 
   return frozenset(tags)
+
+
+def materialize_tags(buildable: config.Buildable,
+                     tags: Optional[Set[TagType]] = None):
+  """Materialize tagged fields with assigned values or default values.
+
+  Converts:
+  ```foo.bar.baz = MyCustomTag.new(4096)```
+
+  Into:
+  ```foo.bar.baz = 4096```
+
+  Args:
+    buildable: A `fdl.Buildable` to materialize tags in. This will not be
+      mutated.
+    tags: An optional set of `Tags` to replace. If this is not specified, all
+      tagged fields with a value assigned or with a default tag value will be
+      materialized. Note, if you would like to exclude a set of tags from being
+      materialized, you can pass `tagging.list_tags(buildable) - excluded_tags`
+      as the `tag` parameter.
+
+  Returns:
+    A new `fdl.Buildable` with its tags replaced by their values.
+  """
+
+  def traverse_fn(unused_all_paths: daglish.Paths, value):
+    value = yield
+    if isinstance(value, TaggedValue) and value.value != NO_VALUE and (
+        tags is None or set(value.tags) & tags):
+      value = value.value
+    return value
+
+  return daglish.memoized_traverse(traverse_fn, buildable)

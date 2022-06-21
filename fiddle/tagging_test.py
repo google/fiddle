@@ -16,6 +16,7 @@
 """Tests for tagging."""
 
 import copy
+import dataclasses
 from unittest import mock
 
 from absl.testing import absltest
@@ -23,6 +24,20 @@ import fiddle as fdl
 from fiddle import tagging
 from fiddle import tagging_test_module as tst
 from fiddle.experimental import selectors
+
+
+@dataclasses.dataclass
+class Foo:
+  bar: int
+  qux: str
+
+
+class RedTag(fdl.Tag):
+  """A custom tag used for testing."""
+
+
+class BlueTag(fdl.Tag):
+  """A custom tag used for testing."""
 
 
 def return_kwargs(**kwargs):
@@ -65,7 +80,7 @@ class TaggingTest(absltest.TestCase):
     with self.assertRaisesRegex(TypeError,
                                 "You must provide a tag description"):
 
-      class Foo(tagging.Tag):  # pylint: disable=unused-variable
+      class Bar(tagging.Tag):  # pylint: disable=unused-variable
         pass
 
   def test_tagvalue_fn_exception(self):
@@ -283,6 +298,62 @@ class TaggingTest(absltest.TestCase):
     # Now set it using the second key.
     tagging.set_tagged(cfg, tag=tst.MyModel.EncoderDType, value=6)
     self.assertEqual(fdl.build(cfg), 6)
+
+  def test_materialize_tags_keeps_tag_in_ignore_list(self):
+    foo_cfg = fdl.Config(Foo)
+    foo_cfg.bar = RedTag.new(5)
+    foo_cfg.qux = "abc"
+
+    foo_cfg = tagging.materialize_tags(
+        foo_cfg, tags=set(tagging.list_tags(foo_cfg) - {RedTag}))
+    self.assertIsInstance(foo_cfg.bar, fdl.TaggedValue)
+    self.assertEqual(foo_cfg.bar.tags, {RedTag})
+
+  def test_materialize_tags_removes_tag_when_default_provided(self):
+    foo_cfg = fdl.Config(Foo)
+    foo_cfg.bar = RedTag.new(5)
+    foo_cfg.qux = "abc"
+
+    foo_cfg = tagging.materialize_tags(foo_cfg)
+    self.assertEqual(foo_cfg.bar, 5)
+    self.assertIsInstance(foo_cfg.bar, int)
+
+  def test_materialize_tags_removes_tag_when_value_supplied(self):
+    foo_cfg = fdl.Config(Foo)
+    foo_cfg.bar = RedTag.new()
+    foo_cfg.qux = "abc"
+
+    selectors.select(foo_cfg, tag=RedTag).set(value=5)
+    foo_cfg = tagging.materialize_tags(foo_cfg)
+    self.assertEqual(foo_cfg.bar, 5)
+    self.assertIsInstance(foo_cfg.bar, int)
+
+  def test_materialize_tags_keeps_tag_when_no_default_provided(self):
+    foo_cfg = fdl.Config(Foo)
+    foo_cfg.bar = RedTag.new()
+    foo_cfg.qux = "abc"
+
+    foo_cfg = tagging.materialize_tags(foo_cfg)
+    self.assertIsInstance(foo_cfg.bar, fdl.TaggedValue)
+    self.assertEqual(foo_cfg.bar.tags, {RedTag})
+
+  def test_materialize_tags_keeps_tag_in_tags_list(self):
+    foo_cfg = fdl.Config(Foo)
+    foo_cfg.bar = RedTag.new(5)
+    foo_cfg.qux = "abc"
+
+    foo_cfg = tagging.materialize_tags(foo_cfg, tags={RedTag})
+    self.assertEqual(foo_cfg.bar, 5)
+    self.assertIsInstance(foo_cfg.bar, int)
+
+  def test_materialize_tags_ignores_tag_not_in_tags_list(self):
+    foo_cfg = fdl.Config(Foo)
+    foo_cfg.bar = RedTag.new(5)
+    foo_cfg.qux = "abc"
+
+    foo_cfg = tagging.materialize_tags(foo_cfg, tags={BlueTag})
+    self.assertIsInstance(foo_cfg.bar, fdl.TaggedValue)
+    self.assertEqual(foo_cfg.bar.tags, {RedTag})
 
 
 # TODO: Test set_tagged that leverages tag inheritance.
