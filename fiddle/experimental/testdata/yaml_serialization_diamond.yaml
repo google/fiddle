@@ -1,0 +1,15 @@
+!fdl.Config
+__fn_or_cls__:
+  module: __main__
+  name: Foo
+a: 2
+b: root
+c:
+- &id001 !fdl.Config
+  __fn_or_cls__:
+    module: __main__
+    name: Foo
+  a: 1
+  b: shared
+  c: null
+- *id001
