@@ -26,6 +26,7 @@ import inspect
 from typing import Any
 
 from fiddle import config
+from fiddle import tagging
 from fiddle.experimental import fixture
 import yaml
 
@@ -65,9 +66,17 @@ def _fixture_representer(dumper, data):
       dumper, data, type_name="fiddle.experimental.Fixture")
 
 
+def _taggedvalue_representer(dumper, data):
+  return dumper.represent_mapping("!fdl.TaggedValue", {
+      "tags": [tag.name for tag in data.tags],
+      "value": data.value,
+  })
+
+
 yaml.SafeDumper.add_representer(config.Config, _config_representer)
 yaml.SafeDumper.add_representer(config.Partial, _partial_representer)
 yaml.SafeDumper.add_representer(fixture.Fixture, _fixture_representer)
+yaml.SafeDumper.add_representer(tagging.TaggedValue, _taggedvalue_representer)
 
 
 def dump_yaml(value: Any) -> str:

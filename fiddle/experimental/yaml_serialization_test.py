@@ -15,6 +15,7 @@
 
 """Tests for yaml_serialization."""
 import dataclasses
+import pathlib
 from typing import Any
 
 from absl.testing import absltest
@@ -27,8 +28,8 @@ import yaml
 
 
 def _testdata_dir():
-  return (absltest.get_default_test_srcdir() +
-          "/fiddle/experimental/testdata")
+  return (pathlib.Path(absltest.get_default_test_srcdir()) /
+          "fiddle/experimental/testdata")
 
 
 def _config_constructor(loader, node):
@@ -86,6 +87,15 @@ def my_fixture(template):
   return template
 
 
+class FakeTag(fdl.Tag):
+  """Fake/test tag class."""
+
+
+def _normalize_expected_config(config_str: str):
+  return config_str.replace("fiddle.experimental.yaml_serialization_test",
+                            "__main__")
+
+
 class YamlSerializationTest(test_util.TestCase):
 
   def test_dump_yaml_config(self):
@@ -125,13 +135,23 @@ class YamlSerializationTest(test_util.TestCase):
     self.assertIsInstance(loaded, fixture.Fixture)
     self.assertEqual(loaded, config)
 
+  def test_dump_tagged_value(self):
+    self.assertRegex(
+        yaml_serialization.dump_yaml(value=FakeTag.new(2)).strip(),
+        r"""!fdl\.TaggedValue
+tags:
+- [\w\d_\.]+\.FakeTag
+value: 2""")
+
   def test_dump_diamond(self):
     shared = fdl.Config(Foo, a=1, b="shared", c=None)
     config = fdl.Config(Foo, a=2, b="root", c=[shared, shared])
     serialized = yaml_serialization.dump_yaml(value=config)
-    with open(_testdata_dir() + "/yaml_serialization_diamond.yaml") as f:
+    with open(_testdata_dir() / "yaml_serialization_diamond.yaml") as f:
       expected = f.read()
-    self.assertEqual(serialized, expected)
+    self.assertEqual(
+        _normalize_expected_config(serialized),
+        _normalize_expected_config(expected))
     loaded = load_yaml_test_only(serialized)
     self.assertDagEqual(config, loaded)
 
