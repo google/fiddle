@@ -25,6 +25,8 @@ from fiddle import config
 from fiddle import tagging
 from fiddle.experimental import daglish
 
+# TODO: Support the new Tag API, emitting tags for buildables.
+
 # A function that takes any python value, and returns an ast node.
 PyValToAstFunc = Callable[[Any], ast.AST]
 
@@ -273,7 +275,7 @@ def _convert_buildable(value: Any, conversion_fn: PyValToAstFunc) -> ast.AST:
       ])
 
 
-@register_py_val_to_ast_converter(tagging.TaggedValue)
+@register_py_val_to_ast_converter(tagging.TaggedValueCls)
 def _convert_tagged_value(value: Any, conversion_fn: PyValToAstFunc) -> ast.AST:
   """Converts a fdl.TaggedValue to AST."""
   node = conversion_fn(value.value)

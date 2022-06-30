@@ -44,9 +44,9 @@ def return_kwargs(**kwargs):
   return kwargs
 
 
-def get_single_tag(tagged_value: tagging.TaggedValue) -> tagging.TagType:
+def get_single_tag(tagged_value: tagging.TaggedValueCls) -> tagging.TagType:
   """Gets a single tag from a TaggedValue, errors if there are multiple."""
-  assert isinstance(tagged_value, tagging.TaggedValue)
+  assert isinstance(tagged_value, tagging.TaggedValueCls)
   assert len(tagged_value.tags) == 1
   return next(iter(tagged_value.tags))
 
@@ -83,18 +83,23 @@ class TaggingTest(absltest.TestCase):
       class Bar(tagging.Tag):  # pylint: disable=unused-variable
         pass
 
-  def test_tagvalue_fn_exception(self):
+  def test_inline_tag_definition_fails(self):
+
+    with self.assertRaisesRegex(
+        TypeError, "You cannot define a tag within a function or lambda"):
+
+      class Bar(tagging.Tag):  # pylint: disable=unused-variable
+        """Bar tag."""
+
+  def test_tagged_value_identity_fn_exception(self):
     with self.assertRaisesRegex(
         tagging.TaggedValueNotFilledError,
-        "Expected.*TaggedValue.*replaced.*one "
-        r"with tags \{fiddle.tagging_test_module.LinearParamDType\} was "
-        "not set"):
-      tagging.tagvalue_fn({tst.LinearParamDType})
+        "Expected.*TaggedValue.*replaced.*one was not set"):
+      tagging.tagged_value_identity_fn()
 
-  def test_tagvalue_fn_none_value(self):
+  def test_tagged_value_identity_fn_none_value(self):
     # Test that when the value is None, that's OK.
-    self.assertIsNone(
-        tagging.tagvalue_fn(tags={tst.ParameterDType}, value=None))
+    self.assertIsNone(tagging.tagged_value_identity_fn(value=None))
 
   def test_taggedvalue_default_none(self):
     cfg = tagging.TaggedValue(tags={tst.ParameterDType}, default=None)
@@ -107,9 +112,7 @@ class TaggingTest(absltest.TestCase):
         bar=tst.ParameterDType.new())
     with self.assertRaisesRegex(
         tagging.TaggedValueNotFilledError,
-        "Expected.*TaggedValue.*replaced.*one "
-        r"with tags \{fiddle.tagging_test_module.ParameterDType\} was "
-        "not set"):
+        "Expected.*TaggedValue.*replaced.*one was not set"):
       fdl.build(cfg)
 
   def test_set_tagged(self):
@@ -306,8 +309,8 @@ class TaggingTest(absltest.TestCase):
 
     foo_cfg = tagging.materialize_tags(
         foo_cfg, tags=set(tagging.list_tags(foo_cfg) - {RedTag}))
-    self.assertIsInstance(foo_cfg.bar, fdl.TaggedValue)
-    self.assertEqual(foo_cfg.bar.tags, {RedTag})
+    self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
+    self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
   def test_materialize_tags_removes_tag_when_default_provided(self):
     foo_cfg = fdl.Config(Foo)
@@ -334,8 +337,8 @@ class TaggingTest(absltest.TestCase):
     foo_cfg.qux = "abc"
 
     foo_cfg = tagging.materialize_tags(foo_cfg)
-    self.assertIsInstance(foo_cfg.bar, fdl.TaggedValue)
-    self.assertEqual(foo_cfg.bar.tags, {RedTag})
+    self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
+    self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
   def test_materialize_tags_keeps_tag_in_tags_list(self):
     foo_cfg = fdl.Config(Foo)
@@ -352,8 +355,8 @@ class TaggingTest(absltest.TestCase):
     foo_cfg.qux = "abc"
 
     foo_cfg = tagging.materialize_tags(foo_cfg, tags={BlueTag})
-    self.assertIsInstance(foo_cfg.bar, fdl.TaggedValue)
-    self.assertEqual(foo_cfg.bar.tags, {RedTag})
+    self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
+    self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
 
 # TODO: Test set_tagged that leverages tag inheritance.

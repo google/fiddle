@@ -79,7 +79,7 @@ class Selection:
     # For tags, check that the tag is present, and then
     # refer to underlying configuration.
     if self.tag is not None:
-      if not isinstance(node, tagging.TaggedValue):
+      if not isinstance(node, tagging.TaggedValueCls):
         return False
       if not any(issubclass(tag, self.tag) for tag in node.tags):
         return False

@@ -409,7 +409,6 @@ class CollectPathsByIdTest(absltest.TestCase):
     tagged_value = SampleTag.new(1)
     expected = {
         id(tagged_value): [()],
-        id(tagged_value.tags): [(daglish.Attr("tags"),)]
     }
     paths_by_id = daglish.collect_paths_by_id(tagged_value, True)
     self.assertEqual(paths_by_id, expected)
@@ -453,11 +452,7 @@ class CollectValueByIdTest(absltest.TestCase):
 
   def test_tagged_value(self):
     tagged_value = SampleTag.new(1)
-    expected = {
-        id(tagged_value): tagged_value,
-        id(tagged_value.tags): {SampleTag},
-        id(tagged_value.value): 1
-    }
+    expected = {id(tagged_value): tagged_value, id(tagged_value.value): 1}
     value_by_id = daglish.collect_value_by_id(tagged_value, False)
     self.assertEqual(value_by_id, expected)
 
@@ -506,11 +501,7 @@ class CollectValueByPathTest(absltest.TestCase):
 
   def test_tagged_value(self):
     tagged_value = SampleTag.new(1)
-    expected = {
-        (): tagged_value,
-        (daglish.Attr("tags"),): {SampleTag},
-        (daglish.Attr("value"),): 1
-    }
+    expected = {(): tagged_value, (daglish.Attr("value"),): 1}
     value_by_path = daglish.collect_value_by_path(tagged_value, False)
     self.assertEqual(value_by_path, expected)
 

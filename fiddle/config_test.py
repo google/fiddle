@@ -25,11 +25,19 @@ from absl.testing import absltest
 from fiddle import building
 from fiddle import config
 from fiddle import history
+from fiddle import tagging
 from fiddle.experimental import daglish
 
 import pytype_extensions
-
 import tree
+
+
+class Tag1(tagging.Tag):
+  """One tag."""
+
+
+class Tag2(tagging.Tag):
+  """Another tag."""
 
 
 class SampleClass:
@@ -599,6 +607,45 @@ class ConfigTest(absltest.TestCase):
       del fn_config.unknown_arg
 
     self.assertEqual(4, fn_config.arg2)
+
+  def test_tagging(self):
+    cfg = config.Config(SampleClass)
+    config.add_tag(cfg, 'arg1', Tag1)
+
+    self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
+    self.assertEqual(frozenset([]), config.get_tags(cfg, 'arg2'))
+
+    config.add_tag(cfg, 'arg1', Tag2)
+    self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(cfg, 'arg1'))
+
+    config.remove_tag(cfg, 'arg1', Tag2)
+    self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
+
+    with self.assertRaisesRegex(ValueError, '.*not set.*'):
+      config.remove_tag(cfg, 'arg1', Tag2)
+
+  def test_clear_tags(self):
+    cfg = config.Config(SampleClass)
+    config.add_tag(cfg, 'arg1', Tag1)
+    config.add_tag(cfg, 'arg1', Tag2)
+    config.clear_tags(cfg, 'arg1')
+    self.assertEqual(frozenset([]), config.get_tags(cfg, 'arg1'))
+
+  def test_set_tags(self):
+    cfg = config.Config(SampleClass)
+    config.add_tag(cfg, 'arg1', Tag1)
+    config.add_tag(cfg, 'arg1', Tag2)
+    config.set_tags(cfg, 'arg1', {Tag2})
+    self.assertEqual(frozenset([Tag2]), config.get_tags(cfg, 'arg1'))
+
+  def test_flatten_unflatten_tags(self):
+    cfg = config.Config(SampleClass)
+    config.add_tag(cfg, 'arg1', Tag1)
+    values, metadata = cfg.__flatten__()
+    copied = config.Config.__unflatten__(values, metadata)
+    config.add_tag(copied, 'arg1', Tag2)
+    self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
+    self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(copied, 'arg1'))
 
   def test_dir_simple(self):
     fn_config = config.Config(basic_fn)

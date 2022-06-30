@@ -86,7 +86,7 @@ def _format_value(value: Any, *, raw_value_repr: bool) -> str:
 class _TaggedValueWrapper:
   """Customizes representation for TaggedValues in flattened output."""
   __slots__ = ('wrapped',)
-  wrapped: tagging.TaggedValue
+  wrapped: tagging.TaggedValueCls
 
   def __repr__(self):
     if self.wrapped.value is tagging.NO_VALUE:
@@ -122,7 +122,7 @@ def as_str_flattened(cfg: config.Buildable,
     flattened_children = tree.flatten_with_path(value)
     if _has_nested_builder(flattened_children):
       for child_path, leaf in flattened_children:
-        if isinstance(leaf, tagging.TaggedValue):
+        if isinstance(leaf, tagging.TaggedValueCls):
           yield path + child_path, None, _TaggedValueWrapper(leaf)
         elif isinstance(leaf, config.Buildable):
           for subpath, subannotation, actual_leaf in recursive_flatten(leaf):

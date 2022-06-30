@@ -39,6 +39,9 @@ class Reference(object):
     return f'<Reference: {self.root}{daglish.path_str(self.target)}>'
 
 
+# TODO: Add new diff ops to support new Tag APIs.
+
+
 class DiffOperation(metaclass=abc.ABCMeta):
   """Base class for diff operations.
 
@@ -354,7 +357,7 @@ class DiffAlignment:
   def _find_tag_sets(self, path, value):
     """If value is a TaggedValue, then update _ids_of_tag_sets with it tags."""
     del path  # Unused.
-    if isinstance(value, tagging.TaggedValue):
+    if isinstance(value, tagging.TaggedValueCls):
       self._ids_of_tag_sets.add(id(value.tags))
     return (yield)
 
@@ -533,11 +536,16 @@ class _DiffFromAlignmentBuilder:
       old_callable_path = old_path + (daglish.BuildableFnOrCls(),)
       self.changes[old_callable_path] = ModifyValue(new_value.__fn_or_cls__)
 
-    for name, old_child in old_value.__arguments__.items():
+    def argument_names_and_tags(value):
+      return list(value.__arguments__) + (['tags'] if isinstance(
+          value, tagging.TaggedValueCls) else [])
+
+    for name in argument_names_and_tags(old_value):
+      old_child = getattr(old_value, name)
       old_child_path = old_path + (daglish.Attr(name),)
-      if name in new_value.__arguments__:
+      if name in argument_names_and_tags(new_value):
         new_child = getattr(new_value, name)
-        if not ((isinstance(old_value, tagging.TaggedValue) and
+        if not ((isinstance(old_value, tagging.TaggedValueCls) and
                  name == 'tags' and old_child == new_child) or
                 self.aligned_or_equal(old_child, new_child)):
           self.changes[old_child_path] = ModifyValue(getattr(diff_value, name))
@@ -598,7 +606,7 @@ class _DiffFromAlignmentBuilder:
   def _find_tag_sets(self, path, value):
     """If value is a TaggedValue, then update _ids_of_tag_sets with it tags."""
     del path  # Unused.
-    if isinstance(value, tagging.TaggedValue):
+    if isinstance(value, tagging.TaggedValueCls):
       self._ids_of_tag_sets.add(id(value.tags))
     return (yield)
 

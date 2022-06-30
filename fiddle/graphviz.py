@@ -370,7 +370,7 @@ class _GraphvizRenderer:
       return self.tag('i')('tagging.NO_VALUE')
     elif isinstance(value, CustomGraphvizBuildable):
       return value.__render_value__(self)
-    elif isinstance(value, tagging.TaggedValue):
+    elif isinstance(value, tagging.TaggedValueCls):
       return self._render_tagged_value(value, color)
     elif isinstance(value, fdl.Buildable):
       return self._render_config(value, color)

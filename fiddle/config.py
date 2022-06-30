@@ -21,9 +21,10 @@ import collections
 import copy
 import functools
 import inspect
-from typing import Any, Callable, Collection, Dict, Generic, Iterable, List, NamedTuple, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, NamedTuple, Set, Tuple, Type, TypeVar, Union
 
 from fiddle import history
+from fiddle import tag_type
 from fiddle.experimental import daglish
 
 T = TypeVar('T')
@@ -36,12 +37,21 @@ _UNSET_SENTINEL = object()
 
 
 class BuildableTraverserMetadata(NamedTuple):
+  """Metadata for a Buildable.
+
+  This separate class is used for DAG traversals.
+  """
   fn_or_cls: Callable[..., Any]
   argument_names: Tuple[str, ...]
+  argument_tags: Dict[str, FrozenSet[tag_type.TagType]]
 
   def arguments(self, values: Iterable[Any]) -> Dict[str, Any]:
     """Returns a dictionary combining `self.argument_names` with `values`."""
     return dict(zip(self.argument_names, values))
+
+  def tags(self) -> Dict[str, set[tag_type.TagType]]:
+    return collections.defaultdict(
+        set, {name: set(tags) for name, tags in self.argument_tags.items()})
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
@@ -58,6 +68,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   __signature__: inspect.Signature
   __arguments__: Dict[str, Any]
   __argument_history__: Dict[str, List[history.HistoryEntry]]
+  __argument_tags__: Dict[str, Set[tag_type.TagType]]
   _has_var_keyword: bool
 
   def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
@@ -88,6 +99,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     arg_history['__fn_or_cls__'].append(
         history.entry('__fn_or_cls__', fn_or_cls))
     super().__setattr__('__argument_history__', arg_history)
+    super().__setattr__('__argument_tags__', collections.defaultdict(set))
     super().__setattr__('_has_var_keyword', has_var_keyword)
 
     arguments = signature.bind_partial(*args, **kwargs).arguments
@@ -122,14 +134,20 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __flatten__(self) -> Tuple[Tuple[Any, ...], BuildableTraverserMetadata]:
     keys = tuple(self.__arguments__.keys())
     values = tuple(self.__arguments__.values())
+    tags = {
+        name: frozenset(tags) for name, tags in self.__argument_tags__.items()
+    }
     metadata = BuildableTraverserMetadata(
-        fn_or_cls=self.__fn_or_cls__, argument_names=keys)
+        fn_or_cls=self.__fn_or_cls__, argument_names=keys, argument_tags=tags)
     return values, metadata
 
   @classmethod
   def __unflatten__(cls, values: Iterable[Any],
                     metadata: BuildableTraverserMetadata):
-    return cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
+
+    rebuilt = cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
+    object.__setattr__(rebuilt, '__argument_tags__', metadata.tags())
+    return rebuilt
 
   def __path_elements__(self):
     return tuple(daglish.Attr(name) for name in self.__arguments__.keys())
@@ -154,8 +172,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
               'forget to call `fdl.build(...)`?')
     raise AttributeError(msg)
 
-  def __setattr__(self, name: str, value: Any):
-    """Sets parameter `name` to `value`."""
+  def __validate_param_name__(self, name) -> None:
+    """Raises an error if `name` is not a valid parameter name."""
     param = self.__signature__.parameters.get(name)
 
     if param is not None:
@@ -181,6 +199,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
                    f"{', '.join(valid_parameter_names)}.")
       raise TypeError(err_msg)
 
+  def __setattr__(self, name: str, value: Any):
+    """Sets parameter `name` to `value`."""
+
+    self.__validate_param_name__(name)
     self.__arguments__[name] = value
     self.__argument_history__[name].append(history.entry(name, value))
 
@@ -538,3 +560,40 @@ def assign(buildable: Buildable, **kwargs):
   """
   for name, value in kwargs.items():
     setattr(buildable, name, value)
+
+
+def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
+  """Tags `name` with `tag` in `buildable`."""
+  buildable.__validate_param_name__(argument)
+  buildable.__argument_tags__[argument].add(tag)
+
+
+def set_tags(builable: Buildable, argument: str,
+             tags: Collection[tag_type.TagType]) -> None:
+  """Sets tags for a parameter in `buildable`, overriding existing tags."""
+  clear_tags(builable, argument)
+  for tag in tags:
+    add_tag(builable, argument, tag)
+
+
+def remove_tag(buildable: Buildable, argument: str,
+               tag: tag_type.TagType) -> None:
+  """Removes a given tag from a named argument of a Buildable."""
+  buildable.__validate_param_name__(argument)
+  field_tag_set = buildable.__argument_tags__[argument]
+  if tag not in field_tag_set:
+    raise ValueError(
+        f'{tag} not set on {argument}; current tags: {field_tag_set}.')
+  # TODO: Track in history?
+  field_tag_set.remove(tag)
+
+
+def clear_tags(buildable: Buildable, argument: str) -> None:
+  """Removes all tags from a named argument of a Buildable."""
+  buildable.__validate_param_name__(argument)
+  buildable.__argument_tags__[argument].clear()
+
+
+def get_tags(buildable: Buildable,
+             argument: str) -> FrozenSet[tag_type.TagType]:
+  return frozenset(buildable.__argument_tags__[argument])

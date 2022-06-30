@@ -59,14 +59,16 @@ with the value.
 
 from __future__ import annotations
 
-import copy
 import inspect
-from typing import Any, Collection, FrozenSet, Generic, Iterable, Optional, Set, TypeVar, Union
+from typing import Any, Collection, FrozenSet, Generic, Optional, Set, TypeVar, Union
 
 from fiddle import config
+from fiddle import tag_type
 from fiddle.experimental import daglish
 from fiddle.experimental import serialization
 import tree
+
+TagType = tag_type.TagType
 
 
 class TaggedValueNotFilledError(ValueError):
@@ -91,47 +93,6 @@ serialization.register_node_traverser(
     path_elements_fn=lambda _: ())
 
 
-class TagType(type):
-  """All Fiddle tags are instances of this class.
-
-  For defining Tags, we leverage Python's class definition and documentation
-  syntax.
-
-  See the documentation on `fdl.Tag` for instructions on how to use.
-  """
-
-  def __init__(cls, name, bases, dct):
-    if '__doc__' not in dct:
-      raise TypeError('You must provide a tag description with a docstring.')
-    if '__qualname__' not in dct:
-      raise TypeError('No `__qualname__` property found.')
-    if '<' in dct['__qualname__']:
-      raise TypeError('You cannot define a tag within a function or lambda.')
-    super().__init__(name, bases, dct)
-
-  def __call__(cls, *args, **kwds):
-    raise TypeError('You cannot instantiate Fiddle tags (trying to instantiate '
-                    f'{cls.name}); just use the type itself (no parenthesis) '
-                    'when specifying tags on a TaggedValue(...) call, or call '
-                    '`.new(default=)` to create a new `TaggedValue`.')
-
-  @property
-  def description(cls) -> str:
-    """A string describing the semantics and intended usecases for this tag."""
-    return cls.__doc__
-
-  @property
-  def name(cls) -> str:
-    """A unique name for this tag."""
-    return f'{cls.__module__}.{cls.__qualname__}'
-
-  def __str__(cls) -> str:
-    return f'#{cls.name}'
-
-  def __repr__(cls) -> str:  # pylint: disable=invalid-repr-returned
-    return cls.name
-
-
 class Tag(metaclass=TagType):
   """Metadata associated with a Fiddle configurable value.
 
@@ -141,7 +102,7 @@ class Tag(metaclass=TagType):
   """
 
   @classmethod
-  def new(cls, default: Any = NO_VALUE) -> TaggedValue:
+  def new(cls, default: Any = NO_VALUE) -> TaggedValueCls:
     """Creates a new `TaggedValue` with `cls` as the only tag.
 
     If you would like to create a `TaggedValue` with multiple tags attached,
@@ -160,58 +121,53 @@ class Tag(metaclass=TagType):
     return TaggedValue(tags=(cls,), default=default)
 
 
-def tagvalue_fn(tags: Set[TagType], value: Any = NO_VALUE) -> Any:
+T = TypeVar('T')
+
+
+def tagged_value_identity_fn(value: Union[T, _NoValue] = NO_VALUE) -> T:
   if value is NO_VALUE:
     raise TaggedValueNotFilledError(
         'Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
-        f'calls, but one with tags {tags} was not set.')
+        'calls, but one was not set.')
   else:
     return value
 
 
-T = TypeVar('T')
+class TaggedValueCls(Generic[T], config.Config[T]):
+  """Placeholder class for TaggedValue instances."""
+
+  @property
+  def tags(self):
+    return self.__argument_tags__['value']
 
 
-class TaggedValue(Generic[T], config.Config[T]):
-  """Declares a value annotated with a set of `Tag`s."""
+def TaggedValue(  # pylint: disable=invalid-name
+    tags: Collection[TagType],
+    default: Union[_NoValue, T] = NO_VALUE,
+) -> TaggedValueCls[T]:
+  """Declares a value annotated with a set of `Tag`s.
 
-  def __init__(
-      self,
-      tags: Collection[TagType],
-      default: Union[_NoValue, T] = NO_VALUE,
-  ):
-    """Initializes the TaggedValue.
+  This is now basically a fdl.Config(lambda value: value) configuration, since
+  tags can be set on any field.
 
-    Args:
-      tags: A non-empty collection of tags to associated with this value.
-      default: Default value of the TaggedValue. By default this is a sentinel
-        which will cause the configuration to fail to build when the
-        placeholders are not set.
-    """
-    if isinstance(tags, TaggedValue):
-      # Handle copy.copy call (`type(self)(self)`).
-      other = tags
-      super().__init__(tagvalue_fn, tags=other.tags, value=other.value)
-      return
-    if not tags:
-      raise ValueError('At least one tag must be provided.')
-    super().__init__(tagvalue_fn, tags=set(tags), value=default)
+  Args:
+    tags: Set of tags to apply.
+    default: Default value to the identity function.
 
-  def __deepcopy__(self, memo) -> config.Buildable[T]:
-    """Implements the deepcopy API."""
-    return TaggedValue(tags=self.tags, default=copy.deepcopy(self.value, memo))
+  Returns:
+    Tagged value configuration object.
 
-  @classmethod
-  def __unflatten__(
-      cls,
-      values: Iterable[Any],
-      metadata: config.BuildableTraverserMetadata,
-  ) -> TaggedValue:
-    tags, default = values
-    return cls(tags, default)
+  Raises:
+    ValueError: If `tags` is empty.
+  """
+  result = TaggedValueCls(tagged_value_identity_fn, value=default)
+  if not tags:
+    raise ValueError('At least one tag must be provided.')
+  for tag in tags:
+    config.add_tag(result, 'value', tag)
+  return result
 
 
-# TODO: Migrate users of this API to a `select`-based API.
 def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
   """Sets all parameters in `root` tagged with `tag` to `value`.
 
@@ -220,17 +176,18 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     tag: The tag to search for.
     value: Value to set for all parameters tagged with `tag`.
   """
-  if isinstance(root, TaggedValue):
-    if any(issubclass(t, tag) for t in root.tags):
-      root.value = value
 
-  def map_fn(leaf):
-    if isinstance(leaf, config.Buildable):
-      set_tagged(root=leaf, tag=tag, value=value)
-    return leaf
+  def map_fn(unused_all_paths, node_value):
+    # Recurses, but ignores returned value, because we are mutating the
+    # config instead of returning a modified copy.
+    yield
+    if isinstance(node_value, config.Buildable):
+      for key, tags in node_value.__argument_tags__.items():
+        if any(issubclass(t, tag) for t in tags):
+          setattr(node_value, key, value)
+    return node_value
 
-  # TODO: Use something other than map to avoid creating unused garbage.
-  tree.map_structure(map_fn, root.__arguments__)
+  daglish.memoized_traverse(map_fn, root)
 
 
 def list_tags(
@@ -250,8 +207,8 @@ def list_tags(
   tags = set()
 
   def _inner(node: config.Buildable):
-    if isinstance(node, TaggedValue):
-      tags.update(node.tags)
+    for node_tags in node.__argument_tags__.values():
+      tags.update(node_tags)
 
     def map_fn(leaf):
       if isinstance(leaf, config.Buildable):
@@ -298,7 +255,7 @@ def materialize_tags(buildable: config.Buildable,
 
   def traverse_fn(unused_all_paths: daglish.Paths, value):
     value = yield
-    if isinstance(value, TaggedValue) and value.value != NO_VALUE and (
+    if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):
       value = value.value
     return value
