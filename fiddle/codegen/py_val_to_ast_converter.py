@@ -17,6 +17,7 @@
 
 import ast
 import builtins
+import functools
 import inspect
 import types
 from typing import Any, Callable, Union, Type, List, Optional, NamedTuple, Sequence
@@ -320,3 +321,16 @@ def _convert_importable(value: Any, conversion_fn: PyValToAstFunc) -> ast.AST:
     for piece in value.__qualname__.split('.'):
       result = ast.Attribute(value=result, attr=piece, ctx=ast.Load())
     return result
+
+
+@register_py_val_to_ast_converter(functools.partial)
+def _convert_partial(value: functools.partial,
+                     conversion_fn: PyValToAstFunc) -> ast.AST:
+  """Converts a functools.partial to AST."""
+  return ast.Call(
+      func=conversion_fn(functools.partial),
+      args=[conversion_fn(arg) for arg in (value.func,) + value.args],
+      keywords=[
+          ast.keyword(arg=arg_name, value=conversion_fn(arg_val))
+          for (arg_name, arg_val) in value.keywords.items()
+      ])
