@@ -46,10 +46,10 @@ setup(
     ],
     extras_require={
         'testing': [
-            'absl-py',
-            'pytest',
-            'pytype',
-            'seqio-nightly',
+            'absl-py>=1.1.0',
+            'pytest<7.1.2',
+            'pytype<2022.6.30',
+            'seqio-nightly<=0.0.7.dev20220701',
         ]
     },
     description='Fiddle: A Python-first configuration library',
