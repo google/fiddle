@@ -19,9 +19,9 @@ import abc
 import copy
 import dataclasses
 
-from typing import Any, Dict, Sequence, List, Tuple, Union, Set
+from typing import Any, Dict, Sequence, List, Tuple, Union
 from fiddle import config
-from fiddle import tagging
+from fiddle import tag_type
 from fiddle.experimental import daglish
 
 
@@ -39,14 +39,12 @@ class Reference(object):
     return f'<Reference: {self.root}{daglish.path_str(self.target)}>'
 
 
-# TODO: Add new diff ops to support new Tag APIs.
-
-
 class DiffOperation(metaclass=abc.ABCMeta):
   """Base class for diff operations.
 
   Each `DiffOperation` describes a single change to a target `daglish.Path`.
   """
+  target: daglish.Path
 
   @abc.abstractmethod
   def apply(self, parent: Any, child: daglish.PathElement):
@@ -56,25 +54,28 @@ class DiffOperation(metaclass=abc.ABCMeta):
 
 @dataclasses.dataclass(frozen=True)
 class Diff:
-  """Describes a set of changes to a `Buildable`.
+  """Describes a set of changes to a `Buildable` (or structure).
 
   Attributes:
-    changes: A dictionary whose keys are `Path`s used to identify objects in
-      `old`; and whose values are `DiffOperation`s describing how those objects
-      should be mutated.
+    changes: A set of `DiffOperation`s describing individual modifications.
     new_shared_values: A list of new shared values that can be pointed to using
       `Reference` objects in `changes`.
   """
-  changes: Dict[daglish.Path, DiffOperation]
+  changes: Tuple[DiffOperation, ...]
   new_shared_values: Tuple[Any, ...] = ()
 
+  def __post_init__(self):
+    if not isinstance(self.changes, tuple):
+      raise ValueError('Expected changes to be a tuple')
+    if not isinstance(self.new_shared_values, tuple):
+      raise ValueError('Expected new_shared_values to be a tuple')
+
   def __str__(self):
-    return ('Diff(changes=[\n' +
-            '\n'.join(f'          {daglish.path_str(path)}: {change!r}'
-                      for (path, change) in self.changes.items()) +
-            '\n      ],\n      new_shared_values=[\n' +
-            '\n'.join(f'          {v!r}' for v in self.new_shared_values) +
-            '\n      ])')
+    return ('Diff(changes=(\n' +
+            '\n'.join(f'         {change!r},' for change in self.changes) +
+            '\n     ),\n     new_shared_values=(\n' +
+            '\n'.join(f'         {val!r},' for val in self.new_shared_values) +
+            '\n     ))')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -83,6 +84,7 @@ class SetValue(DiffOperation):
 
   The target's parent may not be a sequence (list or tuple).
   """
+  target: daglish.Path
   new_value: Union[Reference, Any]
 
   def apply(self, parent: Any, child: daglish.PathElement):
@@ -101,6 +103,7 @@ class ModifyValue(DiffOperation):
 
   The target's parent may not be a tuple.
   """
+  target: daglish.Path
   new_value: Union[Reference, Any]
 
   def apply(self, parent: Any, child: daglish.PathElement):
@@ -123,6 +126,7 @@ class DeleteValue(DiffOperation):
 
   The target's parent may not be a sequence (list or tuple).
   """
+  target: daglish.Path
 
   def apply(self, parent: Any, child: daglish.PathElement):
     """Deletes `child.follow(parent)`."""
@@ -130,6 +134,38 @@ class DeleteValue(DiffOperation):
       delattr(parent, child.name)
     elif isinstance(child, daglish.Key):
       del parent[child.key]
+    else:
+      raise ValueError(f'DeleteValue does not support {child}.')
+
+
+@dataclasses.dataclass(frozen=True)
+class AddTag(DiffOperation):
+  """Adds a tag to a Buildable argument.
+
+  The target's parent must be a `fdl.Buildable`.
+  """
+  target: daglish.Path
+  tag: tag_type.TagType
+
+  def apply(self, parent: Any, child: daglish.PathElement):
+    if isinstance(child, daglish.Attr):
+      config.add_tag(parent, child.name, self.tag)
+    else:
+      raise ValueError(f'DeleteValue does not support {child}.')
+
+
+@dataclasses.dataclass(frozen=True)
+class RemoveTag(DiffOperation):
+  """Removes a tag from a Buildable argument.
+
+  The target's parent must be a `fdl.Buildable`.
+  """
+  target: daglish.Path
+  tag: tag_type.TagType
+
+  def apply(self, parent: Any, child: daglish.PathElement):
+    if isinstance(child, daglish.Attr):
+      config.remove_tag(parent, child.name, self.tag)
     else:
       raise ValueError(f'DeleteValue does not support {child}.')
 
@@ -170,7 +206,6 @@ class DiffAlignment:
     with `new_value` if some value contained in `old_value` is aligned with a
     value that contains `new_value`.
   * Aligned values must be "memoizable" (as defined by `daglish.is_memoizable`).
-  * `TaggedValue.tags` values may not be aligned.
 
   These restrictions help ensure that a `Diff` can be built from the alignment.
   Note: `DiffAlignment` is not guaranteed to catch all violations of these
@@ -200,12 +235,6 @@ class DiffAlignment:
     self._new_name: str = new_name
     self._new_by_old_id: Dict[int, Any] = {}  # id(old_value) -> new_value
     self._old_by_new_id: Dict[int, Any] = {}  # id(new_value) -> old_value
-
-    # Any object that's used as the value for `TaggedValue.tags` is not
-    # eligible for alignment; find these values so we can reject them.
-    self._ids_of_tag_sets: Set[int] = set()
-    daglish.traverse_with_path(self._find_tag_sets, old)
-    daglish.traverse_with_path(self._find_tag_sets, new)
 
   @property
   def old(self) -> Any:
@@ -293,9 +322,6 @@ class DiffAlignment:
       return False
     if isinstance(old_value, Sequence) and len(old_value) != len(new_value):
       return False
-    if (id(old_value) in self._ids_of_tag_sets or
-        id(new_value) in self._ids_of_tag_sets):
-      return False
     if (not isinstance(old_value, (list, tuple, dict, config.Buildable)) and
         old_value != new_value):
       return False
@@ -324,10 +350,6 @@ class DiffAlignment:
         raise AlignmentError(
             f'Aligning sequences with different lengths is not '
             f'currently supported.  ({len(old_value)} vs {len(new_value)})')
-    if (id(old_value) in self._ids_of_tag_sets or
-        id(new_value) in self._ids_of_tag_sets):
-      raise AlignmentError(
-          'Values that are used as TaggedValues.tags may not be aligned.')
     if (not isinstance(old_value, (list, tuple, dict, config.Buildable)) and
         old_value != new_value):
       raise AlignmentError(
@@ -353,13 +375,6 @@ class DiffAlignment:
     if not lines:
       lines.append('    (no objects aligned)')
     return 'DiffAlignment:\n' + '\n'.join(lines)
-
-  def _find_tag_sets(self, path, value):
-    """If value is a TaggedValue, then update _ids_of_tag_sets with it tags."""
-    del path  # Unused.
-    if isinstance(value, tagging.TaggedValueCls):
-      self._ids_of_tag_sets.add(id(value.tags))
-    return (yield)
 
 
 def align_by_id(old: Any, new: Any, old_name='old', new_name='new'):
@@ -452,28 +467,23 @@ class _DiffFromAlignmentBuilder:
   This private class is used to implement `build_diff_from_alignment`.
   """
   alignment: DiffAlignment
-  changes: Dict[daglish.Path, DiffOperation]
+  changes: List[DiffOperation]
   new_shared_values: List[Any]
   paths_by_old_id: Dict[int, List[daglish.Path]]
 
   def __init__(self, alignment: DiffAlignment):
-    self.changes: Dict[daglish.Path, DiffOperation] = {}
+    self.changes: List[DiffOperation] = []
     self.new_shared_values: List[Any] = []
     self.alignment: DiffAlignment = alignment
     self.paths_by_old_id = daglish.collect_paths_by_id(
         alignment.old, memoizable_only=True)
-
-    # Any object that's used as the value for `TaggedValue.tags` should not
-    # be added to new_shared_values (even if the same set object is used).
-    self._ids_of_tag_sets: Set[int] = set()
-    daglish.traverse_with_path(self._find_tag_sets, alignment.new)
 
   def build_diff(self) -> Diff:
     """Returns a `Diff` between `alignment.old` and `alignment.new`."""
     if self.changes or self.new_shared_values:
       raise ValueError('build_diff should be called at most once.')
     daglish.memoized_traverse(self.record_diffs, self.alignment.new)
-    return Diff(self.changes, tuple(self.new_shared_values))
+    return Diff(tuple(self.changes), tuple(self.new_shared_values))
 
   def record_diffs(self, new_paths: daglish.Paths, new_value: Any):
     """Daglish traversal function that records diffs to generate `new_value`.
@@ -506,8 +516,6 @@ class _DiffFromAlignmentBuilder:
     if not self.alignment.is_new_value_aligned(new_value):  # New object.
       if len(new_paths) == 1 or not daglish.is_memoizable(new_value):
         return diff_value
-      elif id(new_value) in self._ids_of_tag_sets:
-        return diff_value
       else:
         index = len(self.new_shared_values)
         self.new_shared_values.append(diff_value)
@@ -531,31 +539,47 @@ class _DiffFromAlignmentBuilder:
                              old_value: config.Buildable,
                              new_value: config.Buildable,
                              diff_value: config.Buildable):
-    """Records changes needed to turn Buildable `old_value` into `new_value."""
+    """Records changes needed to turn Buildable `old_value` into `new_value`."""
     if old_value.__fn_or_cls__ != new_value.__fn_or_cls__:
       old_callable_path = old_path + (daglish.BuildableFnOrCls(),)
-      self.changes[old_callable_path] = ModifyValue(new_value.__fn_or_cls__)
+      self.changes.append(
+          ModifyValue(old_callable_path, new_value.__fn_or_cls__))
 
-    def argument_names_and_tags(value):
-      return list(value.__arguments__) + (['tags'] if isinstance(
-          value, tagging.TaggedValueCls) else [])
+    if old_value.__argument_tags__ != new_value.__argument_tags__:
+      self.record_tag_diffs(old_path, old_value, new_value)
 
-    for name in argument_names_and_tags(old_value):
+    for name in old_value.__arguments__:
       old_child = getattr(old_value, name)
       old_child_path = old_path + (daglish.Attr(name),)
-      if name in argument_names_and_tags(new_value):
+      if name in new_value.__arguments__:
         new_child = getattr(new_value, name)
-        if not ((isinstance(old_value, tagging.TaggedValueCls) and
-                 name == 'tags' and old_child == new_child) or
-                self.aligned_or_equal(old_child, new_child)):
-          self.changes[old_child_path] = ModifyValue(getattr(diff_value, name))
+        if not self.aligned_or_equal(old_child, new_child):
+          self.changes.append(
+              ModifyValue(old_child_path, getattr(diff_value, name)))
       else:
-        self.changes[old_child_path] = DeleteValue()
+        self.changes.append(DeleteValue(old_child_path))
 
     for name in new_value.__arguments__:
       if name not in old_value.__arguments__:
         old_child_path = old_path + (daglish.Attr(name),)
-        self.changes[old_child_path] = SetValue(getattr(diff_value, name))
+        self.changes.append(SetValue(old_child_path, getattr(diff_value, name)))
+
+  def record_tag_diffs(self, old_path: daglish.Path,
+                       old_value: config.Buildable,
+                       new_value: config.Buildable):
+    """Records changes to tags between `old_value` and `new_value`."""
+    old_arg_tags = old_value.__argument_tags__
+    new_arg_tags = new_value.__argument_tags__
+    empty_set = set([])  # Default value for dict.get.
+    tag_name = lambda tag: tag.__name__  # For sorting.
+    for arg_name in sorted(set(old_arg_tags) | set(new_arg_tags)):
+      target = old_path + (daglish.Attr(arg_name),)
+      old_tags = old_arg_tags.get(arg_name, empty_set)
+      new_tags = new_arg_tags.get(arg_name, empty_set)
+      for removed_tag in sorted(old_tags - new_tags, key=tag_name):
+        self.changes.append(RemoveTag(target, removed_tag))
+      for added_tag in sorted(new_tags - old_tags, key=tag_name):
+        self.changes.append(AddTag(target, added_tag))
 
   def record_dict_diffs(self, old_path: daglish.Path, old_value: Dict[Any, Any],
                         new_value: Dict[Any, Any], diff_value: Dict[Any, Any]):
@@ -564,14 +588,14 @@ class _DiffFromAlignmentBuilder:
       old_child_path = old_path + (daglish.Key(key),)
       if key in new_value:
         if not self.aligned_or_equal(old_child, new_value[key]):
-          self.changes[old_child_path] = ModifyValue(diff_value[key])
+          self.changes.append(ModifyValue(old_child_path, diff_value[key]))
       else:
-        self.changes[old_child_path] = DeleteValue()
+        self.changes.append(DeleteValue(old_child_path))
 
     for key in new_value:
       if key not in old_value:
         old_child_path = old_path + (daglish.Key(key),)
-        self.changes[old_child_path] = SetValue(diff_value[key])
+        self.changes.append(SetValue(old_child_path, diff_value[key]))
 
   def record_sequence_diffs(self, old_path: daglish.Path,
                             old_value: Sequence[Any], new_value: Sequence[Any],
@@ -580,7 +604,7 @@ class _DiffFromAlignmentBuilder:
     for index, old_child in enumerate(old_value):
       old_child_path = old_path + (daglish.Index(index),)
       if not self.aligned_or_equal(old_child, new_value[index]):
-        self.changes[old_child_path] = ModifyValue(diff_value[index])
+        self.changes.append(ModifyValue(old_child_path, diff_value[index]))
 
   def aligned_or_equal(self, old_value: Any, new_value: Any) -> bool:
     """Returns true if `old_value` and `new_value` are aligned or equal.
@@ -602,13 +626,6 @@ class _DiffFromAlignmentBuilder:
       return False
     else:
       return old_value == new_value
-
-  def _find_tag_sets(self, path, value):
-    """If value is a TaggedValue, then update _ids_of_tag_sets with it tags."""
-    del path  # Unused.
-    if isinstance(value, tagging.TaggedValueCls):
-      self._ids_of_tag_sets.add(id(value.tags))
-    return (yield)
 
 
 def build_diff_from_alignment(alignment: DiffAlignment) -> Diff:
@@ -690,16 +707,16 @@ def resolve_diff_references(diff, old_root):
                                                  diff.new_shared_values)
 
   # Replace references in each change in `diff.changes`.
-  changes = {}
-  for target, change in diff.changes.items():
+  changes = []
+  for change in diff.changes:
     if isinstance(change, (ModifyValue, SetValue)):
       new_value = daglish.traverse_with_path(replace_references,
                                              change.new_value)
-      changes[target] = dataclasses.replace(change, new_value=new_value)
+      changes.append(dataclasses.replace(change, new_value=new_value))
     else:
-      changes[target] = change
+      changes.append(change)
 
-  return Diff(changes, new_shared_values)
+  return Diff(tuple(changes), new_shared_values)
 
 
 def apply_diff(diff: Diff, structure: Any) -> None:
@@ -725,7 +742,7 @@ def apply_diff(diff: Diff, structure: Any) -> None:
   _apply_changes(diff.changes, structure)
 
 
-def _apply_changes(changes: Dict[daglish.Path, DiffOperation], structure: Any):
+def _apply_changes(changes: Tuple[DiffOperation, ...], structure: Any):
   """Applies `changes` to `structure` (modifying it in-place).
 
   For each `(path, diff_op)` in `changes`, modifies the value at
@@ -754,14 +771,14 @@ def _apply_changes(changes: Dict[daglish.Path, DiffOperation], structure: Any):
   # arguments that are not supported by the new __fn_or_cls__ before we change
   # it; and we need to wait to add any arguments that are not supported by the
   # old __fn_or_cls__ until after we change it.
-  for op_type in (DeleteValue, ModifyValue, SetValue):
-    for target, diff_op in changes.items():
+  for op_type in (DeleteValue, RemoveTag, ModifyValue, SetValue, AddTag):
+    for diff_op in changes:
       if isinstance(diff_op, op_type):
-        parent = path_to_value[target[:-1]]
-        diff_op.apply(parent, target[-1])
+        parent = path_to_value[diff_op.target[:-1]]
+        diff_op.apply(parent, diff_op.target[-1])
 
 
-def _validate_changes(changes: Dict[daglish.Path, DiffOperation],
+def _validate_changes(changes: Tuple[DiffOperation, ...],
                       path_to_value: Dict[daglish.Path, Any]):
   """Raises ValueError if any change is incompatible with `path_to_value`.
 
@@ -770,7 +787,11 @@ def _validate_changes(changes: Dict[daglish.Path, DiffOperation],
     path_to_value: Dictionary mapping `daglihs.Path` to the value at each path.
   """
   errors = []
-  for target, diff_op in changes.items():
+  for diff_op in changes:
+    if not isinstance(diff_op,
+                      (DeleteValue, RemoveTag, ModifyValue, SetValue, AddTag)):
+      raise ValueError(f'Unsupported DiffOperation type {type(diff_op)!r}')
+    target = diff_op.target
     if not target:
       errors.append('Modifying the root `structure` object is not supported')
       continue

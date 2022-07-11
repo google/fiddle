@@ -616,16 +616,16 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
 
   # Index changes by their parent node.
   changes_by_parent = collections.defaultdict(list)
-  for target, change in diff.changes.items():
-    changes_by_parent[target[:-1]].append((target[-1], change))
+  for change in diff.changes:
+    changes_by_parent[change.target[:-1]].append(change)
 
   # Find Buildables whose __fn_or_cls__ was modified.
   buildables_with_modified_callable = {}
-  for target, change in diff.changes.items():
-    if (isinstance(change, fdl_diff.ModifyValue) and target and
-        target[-1] == daglish.BuildableFnOrCls()):
-      assert target[:-1] not in buildables_with_modified_callable
-      buildables_with_modified_callable[target[:-1]] = change.new_value
+  for change in diff.changes:
+    if (isinstance(change, fdl_diff.ModifyValue) and change.target and
+        change.target[-1] == daglish.BuildableFnOrCls()):
+      assert change.target[:-1] not in buildables_with_modified_callable
+      buildables_with_modified_callable[change.target[:-1]] = change.new_value
 
   # Traverse `old`, replacing any target of a `diff.change` with a
   # `_ChangedValue` object.  We do not fill in the `_ChangedValue.new_value`
@@ -659,7 +659,8 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
 
     # Record any changes to the children of this object.
     for path in paths:
-      for path_elt, change in changes_by_parent.get(path, ()):
+      for change in changes_by_parent.get(path, ()):
+        path_elt = change.target[-1]
         if (isinstance(change, fdl_diff.ModifyValue) and
             isinstance(path_elt, daglish.BuildableFnOrCls)):
           continue  # Handled elsewhere.
@@ -697,9 +698,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
 
     return transformed_value
 
-  new_values = [
-      getattr(change, 'new_value', None) for change in diff.changes.values()
-  ]
+  new_values = [getattr(change, 'new_value', None) for change in diff.changes]
   old_and_new = _OldAndNewSharedValues(old, new_values)
   result = daglish.memoized_traverse(record_change, old_and_new).old
 

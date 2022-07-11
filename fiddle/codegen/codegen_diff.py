@@ -86,7 +86,7 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
   # variables for all used paths.
   moved_value_names = {}
   if old is not None:
-    modified_paths = set(diff.changes)
+    modified_paths = set([change.target for change in diff.changes])
     _add_path_aliases(modified_paths, old)
     for path in sorted(used_paths, key=daglish.path_str):
       if any(path[:i] in modified_paths for i in range(len(path) + 1)):
@@ -218,7 +218,7 @@ def _find_used_paths(diff: fdl_diff.Diff) -> Set[daglish.Path]:
     diff: The `fdl.Diff` that should be scanned for used paths.
   """
   # For each change, we need the path to its *parent* object.
-  used_paths = set(path[:-1] for path in diff.changes)
+  used_paths = set(change.target[:-1] for change in diff.changes)
 
   # For each Reference to `old`, we need the target path.
   def collect_ref_targets(path, node):
@@ -227,7 +227,7 @@ def _find_used_paths(diff: fdl_diff.Diff) -> Set[daglish.Path]:
     if isinstance(node, fdl_diff.Reference) and node.root == 'old':
       used_paths.add(node.target)
 
-  for change in diff.changes.values():
+  for change in diff.changes:
     if isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
       daglish.traverse_with_path(collect_ref_targets, change.new_value)
   daglish.traverse_with_path(collect_ref_targets, diff.new_shared_values)
@@ -256,18 +256,18 @@ def _add_path_aliases(paths: Set[daglish.Path], structure: Any):
       paths.update(id_to_paths[id(value)])
 
 
-ChangeToChild = Tuple[daglish.PathElement, fdl_diff.DiffOperation]
-ChangesByParent = List[Tuple[daglish.Path, List[ChangeToChild]]]
+ChangesByParent = List[Tuple[daglish.Path, List[fdl_diff.DiffOperation]]]
 
 
 def _group_changes_by_parent(diff: fdl_diff.Diff) -> ChangesByParent:
   """Returns a sorted list of changes in `diff`, grouped by their parent."""
   # Group changes by parent path.
   changes_by_parent = collections.defaultdict(list)
-  for (path, change) in diff.changes.items():
+  for change in diff.changes:
+    path = change.target
     if not path:
       raise ValueError('Changing the root object is not supported')
-    changes_by_parent[path[:-1]].append((path[-1], change))
+    changes_by_parent[path[:-1]].append(change)
 
   # Sort by path (converted to path_str).
   return sorted(
@@ -306,7 +306,8 @@ def _ast_for_changes(diff: fdl_diff.Diff, param_name: str,
     deletes = []
     update_callable = None
     assigns = []
-    for child_path_elt, change in changes:
+    for change in changes:
+      child_path_elt = change.target[-1]
       child_ast = _ast_for_child(parent_ast, child_path_elt, pyval_to_ast)
 
       if isinstance(child_path_elt, daglish.BuildableFnOrCls):
@@ -323,10 +324,36 @@ def _ast_for_changes(diff: fdl_diff.Diff, param_name: str,
         child_ast.ctx = ast.Del()
         deletes.append(ast.Delete(targets=[child_ast]))
 
+      elif isinstance(change, fdl_diff.RemoveTag):
+        arg_name = change.target[-1].name
+        deletes.append(
+            ast.Expr(
+                value=ast.Call(
+                    func=pyval_to_ast(config.remove_tag),
+                    args=[
+                        parent_ast,
+                        pyval_to_ast(arg_name),
+                        pyval_to_ast(change.tag)
+                    ],
+                    keywords=[])))
+
       elif isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
         child_ast.ctx = ast.Store()
         new_value_ast = pyval_to_ast(change.new_value)
         assigns.append(ast.Assign(targets=[child_ast], value=new_value_ast))
+
+      elif isinstance(change, fdl_diff.AddTag):
+        arg_name = change.target[-1].name
+        assigns.append(
+            ast.Expr(
+                value=ast.Call(
+                    func=pyval_to_ast(config.add_tag),
+                    args=[
+                        parent_ast,
+                        pyval_to_ast(arg_name),
+                        pyval_to_ast(change.tag)
+                    ],
+                    keywords=[])))
 
       else:
         raise ValueError(f'Unsupported DiffOperation {type(change)}')
