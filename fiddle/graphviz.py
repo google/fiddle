@@ -26,6 +26,7 @@ import types
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Type, NamedTuple, Set
 
 from fiddle import config as fdl
+from fiddle import tag_type
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 from fiddle.experimental import daglish
@@ -326,7 +327,10 @@ class _GraphvizRenderer:
     # Generate the arguments table.
     if config.__arguments__:
       label = self._render_dict(
-          config.__arguments__, header=header, key_format_fn=str)
+          config.__arguments__,
+          header=header,
+          key_format_fn=str,
+          tags=config.__argument_tags__)
     else:
       table = self.tag('table')
       italics = self.tag('i')
@@ -469,10 +473,12 @@ class _GraphvizRenderer:
       rows.extend([tr(cells[i:i + row_stride]), tr(indices[i:i + row_stride])])
     return table(rows)
 
-  def _render_dict(self,
-                   dict_: Dict[str, Any],
-                   header: Optional[str] = None,
-                   key_format_fn: Callable[[Any], str] = repr) -> str:
+  def _render_dict(
+      self,
+      dict_: Dict[str, Any],
+      header: Optional[str] = None,
+      key_format_fn: Callable[[Any], str] = repr,
+      tags: Optional[Dict[str, Set[tag_type.TagType]]] = None) -> str:
     """Renders the given `dict_` as an HTML table.
 
     Args:
@@ -481,6 +487,7 @@ class _GraphvizRenderer:
         table cell should have colspan="2" to render properly in the table.
       key_format_fn: A function to apply to dictionary keys to conver them into
         a string representation. Defaults to `repr`.
+      tags: Optional tags for dictionary entries.
 
     Returns:
       The HTML markup for the resulting table representing `dict_`.
@@ -490,10 +497,25 @@ class _GraphvizRenderer:
     key_td = self.tag('td', align='right', bgcolor=_DEFAULT_HEADER_COLOR)
     value_td = self.tag('td', align='left')
 
+    tag_table = self.tag('table', border='0', cellborder='0')
+    tag_font = self.tag('font', face='arial')
+    tag_td = self.tag('td', align='right')
+    italic = self.tag('i')
+    if tags is None:
+      tags = {}
+
     rows = [header] if header is not None else []
     for key, value in dict_.items():
       key = key_format_fn(key)
-      rows.append(tr([key_td(key), value_td(self._render_nested_value(value))]))
+      value_str = self._render_nested_value(value)
+      key_tags = tags.get(key, ())
+      if key_tags:
+        tag_str = '<BR/>'.join(
+            f'(tag: {html.escape(repr(tag))})' for tag in key_tags)
+        value_str = tag_table(
+            tr([value_td(value_str),
+                tag_td(italic(tag_font(tag_str)))]))
+      rows.append(tr([key_td(key), value_td(value_str)]))
     return table(rows)
 
   def _render_leaf(self, value: Any) -> str:
