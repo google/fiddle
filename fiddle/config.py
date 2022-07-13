@@ -201,6 +201,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __setattr__(self, name: str, value: Any):
     """Sets parameter `name` to `value`."""
+    # TODO: Refactor to avoid circular dependency.
+    while type(value).__name__ == 'TaggedValueCls':
+      tags = get_tags(value, 'value')
+      value = value.value
+      set_tags(self, name, tags)
 
     self.__validate_param_name__(name)
     self.__arguments__[name] = value
@@ -239,9 +244,19 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       formatted_fn_or_cls = self.__fn_or_cls__.__qualname__
     else:
       formatted_fn_or_cls = str(self.__fn_or_cls__)
-    formatted_params = [f'{k}={v!r}' for k, v in self.__arguments__.items()]
+    formatted_params = [
+        self._format_param(name, val)
+        for name, val in self.__arguments__.items()
+    ]
     name = type(self).__name__
     return f"<{name}[{formatted_fn_or_cls}({', '.join(formatted_params)})]>"
+
+  def _format_param(self, name, val):
+    val_repr = repr(val)
+    tags = self.__argument_tags__.get(name, ())
+    for tag in sorted(tags, key=repr):
+      val_repr = f'{tag!r}.new({val_repr})'
+    return f'{name}={val_repr}'
 
   def __copy__(self):
     """Shallowly copies this `Buildable` instance.
@@ -287,6 +302,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     another does not, the two will still be considered equal (motivated by the
     fact that calls to the function or class being configured will be the same).
 
+    Argument tags are compared.  I.e., if two buildables have different tags
+    for an argument, they will not be considered equal.
+
     Argument history is not compared (i.e., it doesn't matter how the
     `Buildable`s being compared reached their current state).
 
@@ -303,6 +321,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     assert self._has_var_keyword == other._has_var_keyword, (
         'Internal invariant violated: has_var_keyword should be the same if '
         "__fn_or_cls__'s are the same.")
+
+    if self.__argument_tags__ != other.__argument_tags__:
+      return False
 
     missing = object()
     for key in set(self.__arguments__) | set(other.__arguments__):
