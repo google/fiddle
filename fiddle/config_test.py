@@ -589,6 +589,15 @@ class ConfigTest(absltest.TestCase):
     cfg2 = config.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
+  def test_equality_tags(self):
+    cfg1 = config.Config(SampleClass, 'arg1')
+    cfg2 = config.Config(SampleClass, 'arg1')
+    self.assertEqual(cfg1, cfg2)
+    config.add_tag(cfg1, 'arg1', Tag1)
+    self.assertNotEqual(cfg1, cfg2)
+    config.add_tag(cfg2, 'arg1', Tag1)
+    self.assertEqual(cfg1, cfg2)
+
   def test_unsetting_argument(self):
     fn_config = config.Config(basic_fn)
     fn_config.arg1 = 3
@@ -646,6 +655,15 @@ class ConfigTest(absltest.TestCase):
     config.add_tag(copied, 'arg1', Tag2)
     self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
     self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(copied, 'arg1'))
+
+  def test_construct_with_tags(self):
+    cfg_a = config.Config(SampleClass, arg2=5)
+    config.add_tag(cfg_a, 'arg1', Tag1)
+    config.add_tag(cfg_a, 'arg1', Tag2)
+    cfg_b = config.Config(
+        SampleClass, arg2=5, __argument_tags__={'arg1': set([Tag1, Tag2])})
+    self.assertEqual(cfg_a, cfg_b)
+    self.assertEqual(cfg_a.__argument_tags__, cfg_b.__argument_tags__)
 
   def test_dir_simple(self):
     fn_config = config.Config(basic_fn)
@@ -772,6 +790,13 @@ class ConfigTest(absltest.TestCase):
     fn_partial = config.Partial(basic_fn, 1, 2, kwarg1='kwarg1')
     expected_repr = "<Partial[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_partial), expected_repr)
+
+  def test_repr_tags(self):
+    fn_config = config.Config(basic_fn, 1, 2, kwarg1='kwarg1')
+    config.add_tag(fn_config, 'arg1', Tag1)
+    expected_repr = ("<Config[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')," +
+                     " tags={'arg1': {__main__.Tag1}}]>")
+    self.assertEqual(repr(fn_config), expected_repr)
 
   def test_nonexistent_attribute_error(self):
     class_config = config.Config(SampleClass, 1)

@@ -102,6 +102,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__argument_tags__', collections.defaultdict(set))
     super().__setattr__('_has_var_keyword', has_var_keyword)
 
+    argument_tags = kwargs.pop('__argument_tags__', None)
+
     arguments = signature.bind_partial(*args, **kwargs).arguments
     for name in list(arguments.keys()):  # Make a copy in case we mutate.
       param = signature.parameters[name]
@@ -117,6 +119,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     for name, value in arguments.items():
       setattr(self, name, value)
+
+    if argument_tags:
+      for parameter, tags in argument_tags.items():
+        for tag in tags:
+          add_tag(self, parameter, tag)
 
   def __init_subclass__(cls):
     daglish.register_node_traverser(
@@ -240,8 +247,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     else:
       formatted_fn_or_cls = str(self.__fn_or_cls__)
     formatted_params = [f'{k}={v!r}' for k, v in self.__arguments__.items()]
+    formatted_params = ', '.join(formatted_params)
     name = type(self).__name__
-    return f"<{name}[{formatted_fn_or_cls}({', '.join(formatted_params)})]>"
+    if self.__argument_tags__:
+      tags = f', tags={dict(self.__argument_tags__)}'
+    else:
+      tags = ''
+    return f'<{name}[{formatted_fn_or_cls}({formatted_params}){tags}]>'
 
   def __copy__(self):
     """Shallowly copies this `Buildable` instance.
@@ -287,6 +299,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     another does not, the two will still be considered equal (motivated by the
     fact that calls to the function or class being configured will be the same).
 
+    Argument tags are compared.  I.e., if two buildables have different tags
+    for an argument, they will not be considered equal.
+
     Argument history is not compared (i.e., it doesn't matter how the
     `Buildable`s being compared reached their current state).
 
@@ -303,6 +318,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     assert self._has_var_keyword == other._has_var_keyword, (
         'Internal invariant violated: has_var_keyword should be the same if '
         "__fn_or_cls__'s are the same.")
+
+    if self.__argument_tags__ != other.__argument_tags__:
+      return False
 
     missing = object()
     for key in set(self.__arguments__) | set(other.__arguments__):
@@ -453,6 +471,7 @@ class Partial(Generic[T], Buildable[T]):
 
   # NOTE: We currently need to repeat this annotation for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
+  __signature__: inspect.Signature
 
   def __build__(self, *args, **kwargs):
     """Builds this `Partial` for the given `args` and `kwargs`.
