@@ -589,6 +589,15 @@ class ConfigTest(absltest.TestCase):
     cfg2 = config.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
+  def test_equality_tags(self):
+    cfg1 = config.Config(SampleClass, 'arg1')
+    cfg2 = config.Config(SampleClass, 'arg1')
+    self.assertEqual(cfg1, cfg2)
+    config.add_tag(cfg1, 'arg1', Tag1)
+    self.assertNotEqual(cfg1, cfg2)
+    config.add_tag(cfg2, 'arg1', Tag1)
+    self.assertEqual(cfg1, cfg2)
+
   def test_unsetting_argument(self):
     fn_config = config.Config(basic_fn)
     fn_config.arg1 = 3
@@ -646,6 +655,13 @@ class ConfigTest(absltest.TestCase):
     config.add_tag(copied, 'arg1', Tag2)
     self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
     self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(copied, 'arg1'))
+
+  def test_unbox_tags(self):
+    cfg = config.Config(SampleClass, Tag1.new(Tag2.new('arg1')),
+                        Tag2.new('arg2'))
+    self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(cfg, 'arg1'))
+    self.assertEqual(frozenset([Tag2]), config.get_tags(cfg, 'arg2'))
+    self.assertEqual(frozenset([]), config.get_tags(cfg, 'kwarg1'))
 
   def test_dir_simple(self):
     fn_config = config.Config(basic_fn)
