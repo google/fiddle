@@ -589,6 +589,17 @@ class ConfigTest(absltest.TestCase):
     cfg2 = config.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
+  def test_equality_tags(self):
+    cfg1 = config.Config(SampleClass, 'arg1')
+    cfg2 = config.Config(SampleClass, 'arg1')
+    self.assertEqual(cfg1, cfg2)
+    config.add_tag(cfg1, 'arg1', Tag1)
+    self.assertNotEqual(cfg1, cfg2)
+    config.add_tag(cfg2, 'arg1', Tag1)
+    self.assertEqual(cfg1, cfg2)
+    config.add_tag(cfg1, 'arg1', Tag2)
+    self.assertNotEqual(cfg1, cfg2)
+
   def test_unsetting_argument(self):
     fn_config = config.Config(basic_fn)
     fn_config.arg1 = 3
