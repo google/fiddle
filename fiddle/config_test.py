@@ -16,10 +16,11 @@
 """Tests for the `fiddle.config` module."""
 
 import copy
+import dataclasses
 import functools
 import pickle
 import threading
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 from absl.testing import absltest
 from fiddle import building
@@ -352,6 +353,33 @@ class ConfigTest(absltest.TestCase):
     obj = building.build(cfg)
     self.assertEqual(2, obj['x'])
     self.assertEqual('xyz', obj['y'])
+
+  def test_config_with_default_factories(self):
+
+    @dataclasses.dataclass
+    class A:
+      a: List[int] = dataclasses.field(default_factory=list)
+      b: int = dataclasses.field(default=1)
+
+    cfg = config.Config(A)
+    cfg.a.append(4)
+    self.assertEqual(cfg.a, [4])
+    self.assertEqual(cfg.__arguments__.keys(), {'a'})
+
+    cfg = config.Config(A)
+    _ = cfg.b
+    self.assertEqual(cfg.__arguments__.keys(), set())
+    cfg.b += 1
+    self.assertEqual(cfg.b, 2)
+    self.assertEqual(cfg.__arguments__.keys(), {'b'})
+
+    # Checks that two configs have different lists / the mutable default is not
+    # shared.
+    cfg1 = config.Config(A)
+    cfg1.a.append(4)
+    cfg2 = config.Config(A)
+    cfg2.a.append(3)
+    self.assertIsNot(cfg1.a, cfg2.a)
 
   def test_config_defaults_not_materialized(self):
 
