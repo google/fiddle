@@ -118,7 +118,7 @@ import inspect
 import re
 import sys
 import typing
-from typing import Any, List, Union, Sequence
+from typing import Any, List, Union, Sequence, Optional
 
 from absl import app
 from absl import flags
@@ -350,16 +350,20 @@ def apply_fiddlers_to(cfg: config.Buildable,
     fiddler(cfg)
 
 
-def create_buildable_from_flags(module: Any,
+def create_buildable_from_flags(module: Optional[Any],
                                 allow_imports=False) -> config.Buildable:
   """Returns a fdl.Buildable based on standardized flags.
 
   Args:
     module: A common namespace to use as the basis for finding configs and
-      fiddlers.
+      fiddlers. May be None; if None, only fully qualified Fiddler imports
+      will be used.
     allow_imports: If true, then fully qualified dotted names may be used to
       specify configs or fiddlers that should be automatically imported.
   """
+  if not module and not allow_imports:
+    raise ValueError('If module is None, allow_imports must be True.')
+
   base_name = _FDL_CONFIG.value
   if _FDL_HELP.value or base_name is None:
     print(
