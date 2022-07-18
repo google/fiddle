@@ -615,3 +615,24 @@ def clear_tags(buildable: Buildable, argument: str) -> None:
 def get_tags(buildable: Buildable,
              argument: str) -> FrozenSet[tag_type.TagType]:
   return frozenset(buildable.__argument_tags__[argument])
+
+
+def replace_buildable_internals(*, source: Buildable, destination: Buildable):
+  """Changes the internals of `destination` to be equivalent to `source`.
+
+  Currently, this results in aliasing behavior, but this should not be relied
+  upon. All the internals of `source` are aliased into `destination` except
+  `__argument_history__`.
+
+  This is a dangerous function; please reach out to the Fiddle team to help us
+  understand your use-cases.
+
+  Args:
+    source: The source to copy from. Source is unmodified.
+    destination: The `Buildable` to update.
+  """
+  # Update in-place using object.__setattr__ to bypass argument checking.
+  for attr in ('__fn_or_cls__', '__signature__', '__arguments__',
+               '_has_var_keyword', '__argument_tags__'):
+    object.__setattr__(destination, attr, getattr(source, attr))
+  # TODO: Figure out what to do with `argument_history`.

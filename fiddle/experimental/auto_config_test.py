@@ -554,5 +554,87 @@ class AutoConfigTest(parameterized.TestCase):
       auto_config.auto_config(test_config)
 
 
+class InlineTest(absltest.TestCase):
+
+  def test_simple(self):
+
+    @auto_config.auto_config
+    def my_fn(x: int, y: str):
+      return SampleClass(basic_fn(x), y)
+
+    cfg = config.Config(my_fn, x=4, y='y')
+    orig = building.build(cfg)
+    auto_config.inline(cfg)
+
+    self.assertEqual(SampleClass, cfg.__fn_or_cls__)
+    self.assertEqual(cfg.arg2, 'y')
+    self.assertIsInstance(cfg.arg1, config.Config)
+    self.assertEqual(basic_fn, cfg.arg1.__fn_or_cls__)
+    self.assertEqual(4, cfg.arg1.arg)
+    self.assertEqual(orig, building.build(cfg))
+
+  def test_bound_auto_config(self):
+
+    @dataclasses.dataclass
+    class AutoConfigClass:
+      x: Any
+      y: Any
+
+      @classmethod
+      @auto_config.auto_config
+      def default(cls, z):
+        return cls(z, z + 2)
+
+    cfg = config.Config(AutoConfigClass.default, z=5)
+    orig = building.build(cfg)
+    auto_config.inline(cfg)
+
+    self.assertEqual(AutoConfigClass, cfg.__fn_or_cls__)
+    self.assertEqual(cfg.x, 5)
+    self.assertEqual(cfg.y, 7)
+    self.assertEqual(orig, building.build(cfg))
+
+  def test_inlining_nested_config(self):
+
+    @auto_config.auto_config(api_boundary=True)
+    def make_library_type(x: int, y: str) -> SampleClass:
+      """A function that forms a configuration API boundary.
+
+      These functions are often vended by libraries.
+
+      Args:
+       x: A sample argument to be configured.
+       y: An additional argument to be configured.
+
+      Returns:
+        An instance of the sample class configured per the policy encapsulated
+        by this function.
+      """
+      return SampleClass(arg1=x + 1, arg2='Hello ' + y)
+
+    @auto_config.auto_config
+    def make_experiment():
+      thing1 = basic_fn(arg=5)
+      thing2 = make_library_type(5, 'world')
+      return SampleClass(thing1, thing2)
+
+    expected_config = config.Config(
+        SampleClass,
+        arg1=config.Config(basic_fn, arg=5),
+        arg2=config.Config(make_library_type, 5, 'world'))
+
+    actual_config = make_experiment.as_buildable()
+    self.assertEqual(expected_config, actual_config)
+
+    auto_config.inline(actual_config.arg2)
+
+    inline_expected_config = config.Config(
+        SampleClass,
+        arg1=config.Config(basic_fn, arg=5),
+        arg2=config.Config(SampleClass, 6, 'Hello world'))
+
+    self.assertEqual(inline_expected_config, actual_config)
+
+
 if __name__ == '__main__':
   absltest.main()

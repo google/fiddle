@@ -647,6 +647,22 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
     self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(copied, 'arg1'))
 
+  def test_replace_buildable_internals(self):
+    source = config.Config(SampleClass, arg1=42)
+    destination = config.Config(fn_with_var_kwargs, x=123)
+
+    self.assertEqual(fn_with_var_kwargs, destination.__fn_or_cls__)
+    self.assertEqual({'x': 123}, destination.__arguments__)
+    self.assertTrue(destination._has_var_keyword)
+    self.assertLen(destination.__signature__.parameters, 3)
+
+    config.replace_buildable_internals(source=source, destination=destination)
+
+    self.assertEqual({'arg1': 42}, destination.__arguments__)
+    self.assertEqual(SampleClass, destination.__fn_or_cls__)
+    self.assertFalse(destination._has_var_keyword)
+    self.assertLen(destination.__signature__.parameters, 4)
+
   def test_dir_simple(self):
     fn_config = config.Config(basic_fn)
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(fn_config))
