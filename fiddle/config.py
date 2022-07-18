@@ -19,6 +19,7 @@ from __future__ import annotations
 import abc
 import collections
 import copy
+import dataclasses
 import functools
 import inspect
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, NamedTuple, Set, Tuple, Type, TypeVar, Union
@@ -157,10 +158,24 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     value = self.__arguments__.get(name, _UNSET_SENTINEL)
     if value is not _UNSET_SENTINEL:
       return value
+
+    # Set and return a new value based on dataclass default factories. These
+    # may be mutable objects.
+    if dataclasses.is_dataclass(self.__fn_or_cls__):
+      matching = [
+          field for field in dataclasses.fields(self.__fn_or_cls__)
+          if field.name == name
+      ]
+      if matching and matching[0].default_factory is not dataclasses.MISSING:
+        self.__setattr__(name, matching[0].default_factory())
+        return self.__arguments__[name]
+
+    # Otherwise, return the default from the signature.
     param = self.__signature__.parameters.get(name)
     if param is not None and param.default is not param.empty:
       return param.default
     msg = f"No parameter '{name}' has been set on {self!r}."
+
     # TODO: Implement an edit distance function and display valid
     # attributes that are close to `name`.
     if hasattr(self.__fn_or_cls__, name):
