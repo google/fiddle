@@ -45,6 +45,16 @@ class ParentDC:
   child2: ChildDC
 
 
+@dataclasses.dataclass
+class StringTypeAnnotations:
+  """Type annotations can be strings instead of the types themselves.
+
+  See also `from future import annotations`.
+  """
+  x: 'Child'
+  y: 'ChildDC'
+
+
 class AutoFillTest(absltest.TestCase):
 
   def test_nothing_to_fill(self):
@@ -65,6 +75,18 @@ class AutoFillTest(absltest.TestCase):
     self.assertEqual(cfg.child1.__fn_or_cls__, Child)
     self.assertIsInstance(cfg.child2, config.Config)
     self.assertEqual(cfg.child2.__fn_or_cls__, ChildDC)
+
+  def test_autofill_with_string_annotations(self):
+    cfg = config.Config(StringTypeAnnotations)
+    self.assertFalse(hasattr(cfg, 'x'))
+    self.assertFalse(hasattr(cfg, 'y'))
+
+    autofill.autofill(cfg)
+
+    self.assertIsInstance(cfg.x, config.Config)
+    self.assertEqual(cfg.x.__fn_or_cls__, Child)
+    self.assertIsInstance(cfg.y, config.Config)
+    self.assertEqual(cfg.y.__fn_or_cls__, ChildDC)
 
   def test_recursive_autofill(self):
 

@@ -29,6 +29,7 @@ pronounced "auto-Fiddle").
 """
 
 import dataclasses
+import typing
 from typing import Any, Type
 
 from fiddle import config
@@ -65,6 +66,7 @@ def autofill(cfg: config.Buildable):
       in-place.
   """
   # TODO: Explore adding a configurable policy argument.
+  type_hints = typing.get_type_hints(cfg.__fn_or_cls__)
   for param in cfg.__signature__.parameters.values():
 
     if param.name in cfg.__arguments__:
@@ -84,10 +86,14 @@ def autofill(cfg: config.Buildable):
       # it is not supported.
       continue
 
-    if not _is_autofillable(param.annotation):
+    if isinstance(param.annotation, str):
+      annotation = type_hints[param.name]
+    else:
+      annotation = param.annotation
+    if not _is_autofillable(annotation):
       # Policy doesn't allow for autobuilding.
       continue
 
-    child = config.Config(param.annotation)
+    child = config.Config(annotation)
     autofill(child)
     setattr(cfg, param.name, child)
