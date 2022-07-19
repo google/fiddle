@@ -191,7 +191,7 @@ def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
     match = _PATH_COMPONENT_REGEX.match(path, curr_index)
     if match is None:
       raise ValueError(
-          f'Could not parse {path[1:]} (failed index: {curr_index - 1}).')
+          f'Could not parse {path[1:]!r} (failed index: {curr_index - 1}).')
     curr_index = match.end(0)  # Advance
     if match[1] is not None:
       result.append(_AttributeKey(match[1]))
