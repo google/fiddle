@@ -24,11 +24,12 @@ will yield same object graph as the original function.
 
 import ast
 import builtins
+import dataclasses
 import functools
 import inspect
 import textwrap
 import types
-from typing import Any
+from typing import Any, Callable
 
 from fiddle import config
 from fiddle.experimental import daglish
@@ -38,6 +39,67 @@ _BUILTINS = frozenset([
     builtin for builtin in builtins.__dict__.values()
     if inspect.isroutine(builtin) or inspect.isclass(builtin)
 ])
+
+
+@dataclasses.dataclass(frozen=True)
+class AutoConfig:
+  """A function wrapper for auto_config'd functions.
+
+  In order to support auto_config'ing @classmethod's, we need to customize the
+  descriptor protocol for the auto_config'd function. This simple wrapper type
+  is designed to look like a simple `functool.wraps` wrapper, but implements
+  custom behavior for bound methods.
+  """
+  func: Callable[..., Any]
+  buildable_func: Callable[..., config.Buildable]
+
+  def __post_init__(self):
+    # Must copy-over to correctly implement "functools.wraps"-like
+    # functionality.
+    for name in ('__module__', '__name__', '__qualname__', '__doc__',
+                 '__annotations__'):
+      try:
+        value = getattr(self.func, name)
+      except AttributeError:
+        pass
+      else:
+        object.__setattr__(self, name, value)
+
+  def __call__(self, *args, **kwargs) -> Any:
+    return self.func(*args, **kwargs)
+
+  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+    return self.buildable_func(*args, **kwargs)
+
+  def __get__(self, obj, objtype=None):
+    return _BoundAutoConfig(self, obj)
+
+  @property
+  def __wrapped__(self):
+    return self.func
+
+  def __getattr__(self, name):
+    # Pass through extra things on the thing we wrapped.
+    return getattr(self.func, name)
+
+
+@dataclasses.dataclass(frozen=True)
+class _BoundAutoConfig:
+  """An `AutoConfig` bound to an object.
+
+  This parallels the function / bound method pair.
+  """
+  __slots__ = 'auto_config', 'obj'
+  auto_config: AutoConfig
+  obj: Any
+
+  def __call__(self, *args, **kwargs) -> Any:
+    ac: AutoConfig = self.auto_config  # pytype: disable=annotation-type-mismatch
+    return ac.func(self.obj, *args, **kwargs)
+
+  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+    ac: AutoConfig = self.auto_config  # pytype: disable=annotation-type-mismatch
+    return ac.buildable_func(self.obj, *args, **kwargs)
 
 
 def _returns_buildable(signature: inspect.Signature) -> bool:
@@ -325,15 +387,15 @@ def auto_config(
   """
 
   def make_auto_config(fn):
-    if isinstance(fn, staticmethod):
+    if isinstance(fn, (staticmethod, classmethod)):
       raise TypeError(
-          'Please order the decorators such that `@staticmethod` is on top (as '
-          'the outermost decorator). Example:\n'
-          '@staticmethod\n@auto_config.auto_config\ndef my_fn():\n  ...')
+          f'Please order the decorators such that `@{type(fn).__name__}` is on '
+          'top (as the outermost decorator). Example:\n'
+          f'@{type(fn).__name__}\n@auto_config\ndef my_fn():\n  ...')
 
     if not inspect.isfunction(fn):
-      raise ValueError('`auto_config` is only compatible with functions and '
-                       '`@staticmethod`s.')
+      raise ValueError('`auto_config` is only compatible with functions, '
+                       '`@classmethod`s, and `@staticmethod`s.')
 
     # Get the source code of the function, and remove any indentation which
     # would cause parsing issues when creating the AST (indentation generally is
@@ -406,13 +468,7 @@ def auto_config(
             'supported container (list, tuple, dict) containing one.')
       return output
 
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-      return fn(*args, **kwargs)
-
-    wrapper.as_buildable = as_buildable
-
-    return wrapper
+    return AutoConfig(fn, as_buildable)
 
   # Decorator with empty parenthesis.
   if fn is None:

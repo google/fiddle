@@ -17,6 +17,7 @@
 
 import dataclasses
 import functools
+import inspect
 import sys
 from typing import Any
 
@@ -276,7 +277,9 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(SampleClass(5, 6), instance.my_fn(5))
 
   def test_staticmethod_not_on_top(self):
-    with self.assertRaisesRegex(TypeError, 'Please order the decorators'):
+    with self.assertRaisesRegex(
+        TypeError,
+        'Please order the decorators such that `@staticmethod` is on top'):
 
       class MyClass:  # pylint: disable=unused-variable
 
@@ -284,6 +287,65 @@ class AutoConfigTest(parameterized.TestCase):
         @staticmethod
         def my_fn(x, y):
           return SampleClass(x, y)
+
+  def test_classmethod(self):
+
+    @dataclasses.dataclass
+    class MyClass:
+      x: int
+      y: str
+      z: float = 2.0
+
+      @classmethod
+      @auto_config.auto_config
+      def simple(cls):
+        return cls(x=1, y='1', z=1.0)
+
+    cfg = MyClass.simple.as_buildable()
+    self.assertEqual(MyClass, cfg.__fn_or_cls__)
+    self.assertEqual(1, cfg.x)
+    self.assertEqual('1', cfg.y)
+    self.assertEqual(1.0, cfg.z)
+
+    class_instance = MyClass(1, '2')
+    cfg = class_instance.simple.as_buildable()
+    self.assertEqual(MyClass, cfg.__fn_or_cls__)
+    self.assertEqual(1, cfg.x)
+    self.assertEqual('1', cfg.y)
+    self.assertEqual(1.0, cfg.z)
+
+  def test_classmethod_not_on_top(self):
+    with self.assertRaisesRegex(
+        TypeError,
+        'Please order the decorators such that `@classmethod` is on top'):
+
+      class MyClass:  # pylint: disable=unused-variable
+
+        @auto_config.auto_config
+        @classmethod
+        def my_fn(cls, x, y):
+          return SampleClass(x, y)
+
+  def test_function_metadata(self):
+
+    @auto_config.auto_config
+    def my_helpful_function(x: int, y: str = 'y') -> SampleClass:
+      """A docstring."""
+      return SampleClass(x, y)
+
+    self.assertEqual('A docstring.', inspect.getdoc(my_helpful_function))
+    param_kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    expected_parameters = (inspect.Parameter(
+        'x', kind=param_kind, annotation=int),
+                           inspect.Parameter(
+                               'y',
+                               kind=param_kind,
+                               default='y',
+                               annotation=str))
+    expected_signature = inspect.Signature(
+        expected_parameters, return_annotation=SampleClass)
+    self.assertEqual(expected_signature, inspect.signature(my_helpful_function))
+    self.assertEqual('my_helpful_function', my_helpful_function.__name__)
 
   def test_control_flow_if(self):
 
