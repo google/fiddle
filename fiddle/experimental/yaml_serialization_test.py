@@ -16,6 +16,7 @@
 """Tests for yaml_serialization."""
 import dataclasses
 import pathlib
+import textwrap
 from typing import Any
 
 from absl.testing import absltest
@@ -34,12 +35,7 @@ def _testdata_dir():
 
 def _config_constructor(loader, node):
   arguments = loader.construct_mapping(node, deep=True)
-  fn_or_cls_pyref = arguments.pop("__fn_or_cls__")
-  fn_or_cls = serialization.import_symbol(
-      serialization.DefaultPyrefPolicy(),
-      fn_or_cls_pyref["module"],
-      fn_or_cls_pyref["name"],
-  )
+  fn_or_cls = arguments.pop("__fn_or_cls__")
   return fdl.Config(fn_or_cls, **arguments)
 
 
@@ -49,6 +45,13 @@ def _partial_constructor(loader, node):
 
 def _fixture_constructor(loader, node):
   return fixture.Fixture(_config_constructor(loader, node))
+
+
+def _fn_or_cls_constructor(loader, node):
+  del loader
+  module, name = node.value.rsplit(".", 1)
+  policy = serialization.DefaultPyrefPolicy()
+  return serialization.import_symbol(policy, module, name)
 
 
 class SemiSafeLoader(yaml.SafeLoader):
@@ -73,6 +76,8 @@ def load_yaml_test_only(serialized: str) -> Any:
   SemiSafeLoader.add_constructor("!fdl.Partial", _partial_constructor)
   SemiSafeLoader.add_constructor("!fiddle.experimental.Fixture",
                                  _fixture_constructor)
+  SemiSafeLoader.add_constructor("!function", _fn_or_cls_constructor)
+  SemiSafeLoader.add_constructor("!class", _fn_or_cls_constructor)
   return yaml.load(serialized, Loader=SemiSafeLoader)
 
 
@@ -136,12 +141,12 @@ class YamlSerializationTest(test_util.TestCase):
     self.assertEqual(loaded, config)
 
   def test_dump_tagged_value(self):
-    self.assertRegex(
-        yaml_serialization.dump_yaml(value=FakeTag.new(2)).strip(),
-        r"""!fdl\.TaggedValue
-tags:
-- [\w\d_\.]+\.FakeTag
-value: 2""")
+    regex = textwrap.dedent(r"""
+        !fdl\.TaggedValueCls
+        tags:
+        - [\w\d_\.]+\.FakeTag
+        value: 2""").lstrip()
+    self.assertRegex(yaml_serialization.dump_yaml(value=FakeTag.new(2)), regex)
 
   def test_dump_diamond(self):
     shared = fdl.Config(Foo, a=1, b="shared", c=None)
@@ -154,6 +159,16 @@ value: 2""")
         _normalize_expected_config(expected))
     loaded = load_yaml_test_only(serialized)
     self.assertDagEqual(config, loaded)
+
+  def test_dump_custom_object(self):
+    serialized = yaml_serialization.dump_yaml(value=Foo(1, "a", None))
+    expected = textwrap.dedent("""
+        !object
+        __type__: __main__.Foo
+        a: 1
+        b: a
+        c: null""")
+    self.assertEqual(expected.strip(), serialized.strip())
 
 
 if __name__ == "__main__":
