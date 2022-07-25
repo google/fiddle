@@ -18,13 +18,14 @@
 Currently this just affects codegen, graphviz, and other debugging functions.
 """
 
-import ast
 from fiddle.codegen import codegen
 from fiddle.codegen import mini_ast
-from fiddle.codegen import py_val_to_ast_converter
+from fiddle.codegen import py_val_to_cst_converter
 from fiddle.codegen import special_value_codegen
 import jax
 from jax import numpy as jnp
+
+import libcst as cst
 
 
 def _make_jnp_importable(name: str) -> special_value_codegen.Importable:
@@ -88,15 +89,15 @@ def is_jnp_device_array(value):
   return isinstance(value, jnp.DeviceArray)
 
 
-def convert_jnp_device_array_to_ast(value, convert_child):
-  return ast.Call(
-      func=ast.Attribute(value=convert_child(jnp), attr="array"),
-      args=[convert_child(value.tolist())],
-      keywords=[
-          # Explicitly specify dtype (can't always be inferred from elts).
-          ast.keyword(arg="dtype", value=convert_child(value.dtype.name)),
-          # Explicitly specify rank (in case value.size==0).
-          ast.keyword(arg="ndmin", value=convert_child(value.ndim)),
+def convert_jnp_device_array_to_cst(value, convert_child):
+  return cst.Call(
+      func=cst.Attribute(value=convert_child(jnp), attr=cst.Name("array")),
+      args=[
+          cst.Arg(convert_child(value.tolist())),
+          py_val_to_cst_converter.kwarg_to_cst("dtype",
+                                               convert_child(value.dtype.name)),
+          py_val_to_cst_converter.kwarg_to_cst("ndmin",
+                                               convert_child(value.ndim))
       ])
 
 
@@ -116,5 +117,5 @@ def enable():
 
   # The odd calling syntax here ("register(type)(handler)") comes from the fact
   # that register_converter is usually a decorator, but we call it directly.
-  py_val_to_ast_converter.register_py_val_to_ast_converter(is_jnp_device_array)(
-      convert_jnp_device_array_to_ast)
+  py_val_to_cst_converter.register_py_val_to_cst_converter(is_jnp_device_array)(
+      convert_jnp_device_array_to_cst)

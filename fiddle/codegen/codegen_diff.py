@@ -15,7 +15,6 @@
 
 """Library for converting generating fiddlers from diffs."""
 
-import ast
 import collections
 import functools
 import re
@@ -24,18 +23,20 @@ from typing import List, Tuple, Any, Set, Dict, Callable
 
 from fiddle import config
 from fiddle.codegen import codegen
-from fiddle.codegen import py_val_to_ast_converter
+from fiddle.codegen import py_val_to_cst_converter
 from fiddle.experimental import daglish
 from fiddle.experimental import diff as fdl_diff
+
+import libcst as cst
 
 
 def fiddler_from_diff(diff: fdl_diff.Diff,
                       old: Any = None,
                       func_name: str = 'fiddler',
                       param_name: str = 'cfg'):
-  """Returns the AST for a fiddler function that applies the changes in `diff`.
+  """Returns the CST for a fiddler function that applies the changes in `diff`.
 
-  The returned `ast.Module` consists of a set of `import` statements for any
+  The returned `cst.Module` consists of a set of `import` statements for any
   necessary imports, followed by a function definition for a function whose
   name is `func_name`, which takes a single parameter named `param_name`
   containing a `fdl.Config` (or other `Buildable` or structure), and mutates
@@ -66,8 +67,8 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
     param_name: The name for the parameter to the fiddler function.
 
   Returns:
-    An `ast.Module` object.  You can convert this to a string using
-    `ast.unparse(result)`.
+    An `cst.Module` object.  You can convert this to a string using
+    `result.code`.
   """
   # Create a namespace to keep track of variables that we add.  Reserve the
   # names of the param & func.
@@ -103,14 +104,14 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
       for value in diff.new_shared_values
   ]
 
-  # Construct a PyValToAstConverter to convert constants to AST.
+  # Construct a PyValToCstConverter to convert constants to CST.
   value_converters = [
-      py_val_to_ast_converter.ValueConverter(
+      py_val_to_cst_converter.ValueConverter(
           matcher=types.ModuleType,
           priority=200,
           converter=functools.partial(
               _convert_module, import_manager=import_manager)),
-      py_val_to_ast_converter.ValueConverter(
+      py_val_to_cst_converter.ValueConverter(
           matcher=fdl_diff.Reference,
           priority=200,
           converter=functools.partial(
@@ -120,90 +121,85 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
               new_shared_value_names=new_shared_value_names)),
   ]
 
-  pyval_to_ast = functools.partial(
-      py_val_to_ast_converter.convert_py_val_to_ast,
+  pyval_to_cst = functools.partial(
+      py_val_to_cst_converter.convert_py_val_to_cst,
       additional_converters=value_converters)
 
   body = []
-  body += _ast_for_new_shared_value_variables(diff.new_shared_values,
+  body += _cst_for_new_shared_value_variables(diff.new_shared_values,
                                               new_shared_value_names,
-                                              pyval_to_ast)
-  body += _ast_for_moved_value_variables(param_name, moved_value_names)
-  body += _ast_for_changes(diff, param_name, moved_value_names, pyval_to_ast)
+                                              pyval_to_cst)
+  body += _cst_for_moved_value_variables(param_name, moved_value_names,
+                                         pyval_to_cst)
+  body += _cst_for_changes(diff, param_name, moved_value_names, pyval_to_cst)
 
-  imports = _ast_for_imports(import_manager)
-  fiddler = _ast_for_fiddler(func_name, param_name, body)
+  imports = _cst_for_imports(import_manager)
+  fiddler = _cst_for_fiddler(func_name, param_name, body, bool(imports))
 
-  result = ast.Module(body=imports + [fiddler], type_ignores=[])
-
-  # Add .lineno to AST nodes (required by `ast.unparse`).
-  ast.fix_missing_locations(result)
+  result = cst.Module(body=imports + [fiddler])
 
   return result
 
 
-def _ast_for_imports(import_manager: codegen.ImportManager) -> List[ast.AST]:
-  """Returns a list of `ast.AST` for import satements in `import_manager`."""
+def _cst_for_imports(
+    import_manager: codegen.ImportManager) -> List[cst.CSTNode]:
+  """Returns a list of `cst.CSTNode` for import satements in `import_manager`."""
   imp_lines = []
   for imp in import_manager.sorted_imports():
     imp_lines.extend(imp.lines())
-  import_str = '\n'.join(imp_lines)
-  module = ast.parse(import_str)
-  assert isinstance(module, ast.Module)
+  import_str = '\n'.join(imp_lines) + '\n'
+  module = cst.parse_module(import_str)
   return module.body
 
 
-def _ast_for_fiddler(func_name: str, param_name: str,
-                     body: List[ast.AST]) -> ast.FunctionDef:
-  """Returns an `ast.FunctionDef` for the fiddler function.
+def _cst_for_fiddler(func_name: str, param_name: str, body: List[cst.CSTNode],
+                     add_leading_blank_line: bool) -> cst.FunctionDef:
+  """Returns an `cst.FunctionDef` for the fiddler function.
 
   Args:
     func_name: The name of the fiddler function.
     param_name: The name of the fiddler function's parameter.
     body: The body of the fiddler function.
+    add_leading_blank_line: If true, add a leading blank line.
   """
-  return ast.FunctionDef(
-      name=func_name,
-      args=ast.arguments(
-          args=[ast.arg(arg=param_name)],
-          posonlyargs=[],
-          kwonlyargs=[],
-          kw_defaults=[],
-          defaults=[]),
-      body=body,
-      decorator_list=[])
+  return cst.FunctionDef(
+      name=cst.Name(func_name),
+      params=cst.Parameters(
+          params=[cst.Param(name=cst.Name(param_name), star='')]),
+      body=cst.IndentedBlock(body),
+      leading_lines=[cst.EmptyLine()] if add_leading_blank_line else [])
 
 
-# A function that takes any python value, and returns an ast node.
-PyValToAstFunc = Callable[[Any], ast.AST]
+# A function that takes any python value, and returns a CSTNode.
+PyValToCstFunc = Callable[[Any], cst.CSTNode]
 
 
-def _ast_for_new_shared_value_variables(
+def _cst_for_new_shared_value_variables(
     values: Tuple[Any], names: List[str],
-    pyval_to_ast: PyValToAstFunc) -> List[ast.AST]:
-  """Returns a list of `ast.AST` for creating new shared value variables."""
+    pyval_to_cst: PyValToCstFunc) -> List[cst.CSTNode]:
+  """Returns a list of `CSTNode`s for creating new shared value variables."""
   statements = []
   for value, name in sorted(zip(values, names), key=lambda item: item[1]):
     statements.append(
-        ast.Assign(
-            targets=[ast.Name(name, ctx=ast.Store())],
-            value=pyval_to_ast(value)))
-  return statements
+        cst.Assign(
+            targets=[cst.AssignTarget(target=cst.Name(name))],
+            value=pyval_to_cst(value)))
+  return [cst.SimpleStatementLine([stmt]) for stmt in statements]
 
 
-def _ast_for_moved_value_variables(
-    param_name: str, moved_value_names: Dict[daglish.Path,
-                                             str]) -> List[ast.AST]:
-  """Returns a list of `ast.AST` for creating moved value alias variables."""
+def _cst_for_moved_value_variables(
+    param_name: str, moved_value_names: Dict[daglish.Path, str],
+    pyval_to_cst: PyValToCstFunc) -> List[cst.CSTNode]:
+  """Returns a list of `CSTNode`s for creating moved value alias variables."""
   statements = []
   sorted_moved_value_names = sorted(
       moved_value_names.items(), key=lambda item: daglish.path_str(item[0]))
   for path, name in sorted_moved_value_names:
     statements.append(
-        ast.Assign(
-            targets=[ast.Name(name, ctx=ast.Store())],
-            value=_ast_for_path(param_name, path)))
-  return statements
+        cst.Assign(
+            targets=[cst.AssignTarget(target=cst.Name(name))],
+            value=_cst_for_path(param_name, path, pyval_to_cst)))
+  return [cst.SimpleStatementLine([stmt]) for stmt in statements]
 
 
 def _find_used_paths(diff: fdl_diff.Diff) -> Set[daglish.Path]:
@@ -274,10 +270,10 @@ def _group_changes_by_parent(diff: fdl_diff.Diff) -> ChangesByParent:
       changes_by_parent.items(), key=lambda item: daglish.path_str(item[0]))
 
 
-def _ast_for_changes(diff: fdl_diff.Diff, param_name: str,
+def _cst_for_changes(diff: fdl_diff.Diff, param_name: str,
                      moved_value_names: Dict[daglish.Path, str],
-                     pyval_to_ast: PyValToAstFunc) -> List[ast.AST]:
-  """Returns a list of AST nodes that apply the changes described in `diff`.
+                     pyval_to_cst: PyValToCstFunc) -> List[cst.CSTNode]:
+  """Returns a list of CST nodes that apply the changes described in `diff`.
 
   Args:
     diff: The `fdl.Diff` whose changes should be applied.
@@ -285,20 +281,20 @@ def _ast_for_changes(diff: fdl_diff.Diff, param_name: str,
     moved_value_names: Dictionary mapping any paths that might become
       unreachable once the config is mutated to alias variables that can be used
       to reach those values.
-    pyval_to_ast: A function used to convert Python values to AST.
+    pyval_to_cst: A function used to convert Python values to CST.
   """
   body = []
 
   # Apply changes to a single parent at a time.
   for parent_path, changes in _group_changes_by_parent(diff):
 
-    # Get an AST expression that can be used to refer to the parent.
+    # Get a CST expression that can be used to refer to the parent.
     if parent_path in moved_value_names:
-      parent_ast = ast.Name(moved_value_names[parent_path], ctx=ast.Load())
+      parent_cst = cst.Name(moved_value_names[parent_path])
     else:
-      parent_ast = _ast_for_path(param_name, parent_path)
+      parent_cst = _cst_for_path(param_name, parent_path, pyval_to_cst)
 
-    # Add AST statements that apply the changes to the parent.  Ensure that
+    # Add CST statements that apply the changes to the parent.  Ensure that
     # all DeleteValues occur before Buildable.__fn_or_cls__ is changed, and
     # that all SetValues occur after Buildable.__fn_or_cls__ is changed
     # (because changing __fn_or_cls__ can change the set of parameters that
@@ -308,52 +304,50 @@ def _ast_for_changes(diff: fdl_diff.Diff, param_name: str,
     assigns = []
     for change in changes:
       child_path_elt = change.target[-1]
-      child_ast = _ast_for_child(parent_ast, child_path_elt, pyval_to_ast)
+      child_cst = _cst_for_child(parent_cst, child_path_elt, pyval_to_cst)
 
       if isinstance(child_path_elt, daglish.BuildableFnOrCls):
         assert isinstance(change, fdl_diff.ModifyValue)
         assert update_callable is None
-        new_value_ast = pyval_to_ast(change.new_value)
-        update_callable = ast.Expr(
-            value=ast.Call(
-                func=pyval_to_ast(config.update_callable),
-                args=[parent_ast, new_value_ast],
-                keywords=[]))
+        new_value_cst = pyval_to_cst(change.new_value)
+        update_callable = cst.Expr(
+            cst.Call(
+                func=pyval_to_cst(config.update_callable),
+                args=[cst.Arg(parent_cst),
+                      cst.Arg(new_value_cst)]))
 
       elif isinstance(change, fdl_diff.DeleteValue):
-        child_ast.ctx = ast.Del()
-        deletes.append(ast.Delete(targets=[child_ast]))
+        deletes.append(cst.Del(target=child_cst))
 
       elif isinstance(change, fdl_diff.RemoveTag):
         arg_name = change.target[-1].name
         deletes.append(
-            ast.Expr(
-                value=ast.Call(
-                    func=pyval_to_ast(config.remove_tag),
+            cst.Expr(
+                cst.Call(
+                    func=pyval_to_cst(config.remove_tag),
                     args=[
-                        parent_ast,
-                        pyval_to_ast(arg_name),
-                        pyval_to_ast(change.tag)
-                    ],
-                    keywords=[])))
+                        cst.Arg(parent_cst),
+                        cst.Arg(pyval_to_cst(arg_name)),
+                        cst.Arg(pyval_to_cst(change.tag))
+                    ])))
 
       elif isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
-        child_ast.ctx = ast.Store()
-        new_value_ast = pyval_to_ast(change.new_value)
-        assigns.append(ast.Assign(targets=[child_ast], value=new_value_ast))
+        new_value_cst = pyval_to_cst(change.new_value)
+        assigns.append(
+            cst.Assign(
+                targets=[cst.AssignTarget(child_cst)], value=new_value_cst))
 
       elif isinstance(change, fdl_diff.AddTag):
         arg_name = change.target[-1].name
         assigns.append(
-            ast.Expr(
-                value=ast.Call(
-                    func=pyval_to_ast(config.add_tag),
+            cst.Expr(
+                value=cst.Call(
+                    func=pyval_to_cst(config.add_tag),
                     args=[
-                        parent_ast,
-                        pyval_to_ast(arg_name),
-                        pyval_to_ast(change.tag)
-                    ],
-                    keywords=[])))
+                        cst.Arg(parent_cst),
+                        cst.Arg(pyval_to_cst(arg_name)),
+                        cst.Arg(pyval_to_cst(change.tag))
+                    ])))
 
       else:
         raise ValueError(f'Unsupported DiffOperation {type(change)}')
@@ -363,46 +357,39 @@ def _ast_for_changes(diff: fdl_diff.Diff, param_name: str,
       body.append(update_callable)
     body.extend(assigns)
 
-  return body
+  return [cst.SimpleStatementLine([stmt]) for stmt in body]
 
 
-def _ast_for_child(parent_ast: ast.AST, child_path_elt: daglish.PathElement,
-                   pyval_to_ast: PyValToAstFunc) -> ast.AST:
-  """Returns an AST expression that can be used to access a child of a parent.
+def _cst_for_child(parent_cst: cst.CSTNode, child_path_elt: daglish.PathElement,
+                   pyval_to_cst: PyValToCstFunc) -> cst.CSTNode:
+  """Returns a CST expression that can be used to access a child of a parent.
 
   Args:
-    parent_ast: AST expression for the parent object.
+    parent_cst: CST expression for the parent object.
     child_path_elt: A PathElement specifying a child of the parent.
-    pyval_to_ast: A function used to convert Python values to AST.
+    pyval_to_cst: A function used to convert Python values to CST.
   """
   if isinstance(child_path_elt, daglish.Attr):
-    return ast.Attribute(
-        value=parent_ast, attr=child_path_elt.name, ctx=ast.Load())
+    return cst.Attribute(value=parent_cst, attr=cst.Name(child_path_elt.name))
   elif isinstance(child_path_elt, daglish.Index):
-    index_ast = pyval_to_ast(child_path_elt.index)
-    return ast.Subscript(value=parent_ast, slice=index_ast, ctx=ast.Load())
+    index_cst = pyval_to_cst(child_path_elt.index)
+    return cst.Subscript(
+        value=parent_cst,
+        slice=[cst.SubscriptElement(slice=cst.Index(index_cst))])
   elif isinstance(child_path_elt, daglish.Key):
-    key_ast = pyval_to_ast(child_path_elt.key)
-    return ast.Subscript(value=parent_ast, slice=key_ast, ctx=ast.Load())
+    key_cst = pyval_to_cst(child_path_elt.key)
+    return cst.Subscript(
+        value=parent_cst,
+        slice=[cst.SubscriptElement(slice=cst.Index(key_cst))])
   else:
     raise ValueError(f'Unsupported PathElement {type(child_path_elt)}')
 
 
-def _ast_for_path(name: str, path: daglish.Path):
-  """Converts a `daglish.Path` to an `ast.AST` expression."""
-  node = ast.Name(id=name, ctx=ast.Load())
+def _cst_for_path(name: str, path: daglish.Path, pyval_to_cst: PyValToCstFunc):
+  """Converts a `daglish.Path` to an `cst.CSTNode` expression."""
+  node = cst.Name(name)
   for path_elt in path:
-    if isinstance(path_elt, daglish.Index):
-      node = ast.Subscript(
-          value=node, slice=ast.Constant(path_elt.index), ctx=ast.Load())
-    elif isinstance(path_elt, daglish.Key):
-      assert isinstance(path_elt.key, (int, str, bool))
-      node = ast.Subscript(
-          value=node, slice=ast.Constant(path_elt.key), ctx=ast.Load())
-    elif isinstance(path_elt, daglish.Attr):
-      node = ast.Attribute(value=node, attr=path_elt.name, ctx=ast.Load())
-    else:
-      raise ValueError(f'Unsupported PathElement {path_elt}')
+    node = _cst_for_child(node, path_elt, pyval_to_cst)
   return node
 
 
@@ -428,22 +415,21 @@ def _path_to_name(path: daglish.Path) -> str:
 
 
 def _convert_reference(value, convert_child, param_name, moved_value_names,
-                       new_shared_value_names) -> ast.AST:
-  """Converts a `Reference` to an AST expression."""
-  del convert_child  # Unused.
+                       new_shared_value_names) -> cst.CSTNode:
+  """Converts a `Reference` to a CST expression."""
   if value.root == 'old':
     if value.target in moved_value_names:
-      return ast.Name(moved_value_names[value.target], ctx=ast.Load())
+      return cst.Name(moved_value_names[value.target])
     else:
-      return _ast_for_path(param_name, value.target)
+      return _cst_for_path(param_name, value.target, convert_child)
   else:
     assert isinstance(value.target[0], daglish.Index)
     var_name = new_shared_value_names[value.target[0].index]
-    return _ast_for_path(var_name, value.target[1:])
+    return _cst_for_path(var_name, value.target[1:], convert_child)
 
 
-def _convert_module(value, convert_child, import_manager) -> ast.AST:
-  """Converts a Module to AST, using an ImportManager."""
+def _convert_module(value, convert_child, import_manager) -> cst.CSTNode:
+  """Converts a Module to CST, using an ImportManager."""
   del convert_child  # Unused.
   name = import_manager.add_by_name(value.__name__)
-  return py_val_to_ast_converter.dotted_name_to_ast(name)
+  return py_val_to_cst_converter.dotted_name_to_cst(name)
