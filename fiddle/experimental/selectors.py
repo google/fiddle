@@ -22,6 +22,7 @@ imperatively.
 
 import abc
 import copy
+import dataclasses
 from typing import Any, Callable, Iterator, Optional, Set, Type, Union
 
 from fiddle import config
@@ -50,15 +51,6 @@ class Selection(metaclass=abc.ABCMeta):
     """
     raise NotImplementedError()
 
-  def __setattr__(self, name: str, value: Any) -> None:
-    """Shorthand to set a single value.
-
-    Args:
-      name: Name of the attribute to set.
-      value: Value to set on all matching nodes.
-    """
-    self.set(name=value)
-
   @abc.abstractmethod
   def set(self, **kwargs) -> None:
     """Sets attributes on nodes matching this selection.
@@ -81,6 +73,7 @@ class Selection(metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
 
+@dataclasses.dataclass(frozen=True)
 class NodeSelection(Selection):
   """Represents a selection of nodes.
 
@@ -96,19 +89,6 @@ class NodeSelection(Selection):
   fn_or_cls: Optional[FnOrClass]
   match_subclasses: bool
   buildable_type: Type[config.Buildable]
-
-  def __init__(
-      self,
-      cfg: config.Buildable,
-      fn_or_cls: Optional[FnOrClass] = None,
-      *,
-      match_subclasses: bool = True,
-      buildable_type: Type[config.Buildable] = config.Buildable,
-  ):
-    object.__setattr__(self, "cfg", cfg)
-    object.__setattr__(self, "fn_or_cls", fn_or_cls)
-    object.__setattr__(self, "match_subclasses", match_subclasses)
-    object.__setattr__(self, "buildable_type", buildable_type)
 
   def _matches(self, node: config.Buildable) -> bool:
     """Helper for __iter__ function, determining if a node matches."""
@@ -158,16 +138,6 @@ class NodeSelection(Selection):
     """
     return self._iter_helper(self.cfg, set())
 
-  def __setattr__(self, name: str, value: Any) -> None:
-    """Shorthand to set a single value.
-
-    Args:
-      name: Name of the attribute to set.
-      value: Value to set on all matching nodes.
-    """
-    for matching in self:
-      setattr(matching, name, value)
-
   def replace(self, value, deepcopy: bool = False) -> None:
     raise NotImplementedError(
         "replace() is not implemented for node selections yet.")
@@ -195,15 +165,12 @@ class NodeSelection(Selection):
       yield getattr(matching, name)
 
 
+@dataclasses.dataclass(frozen=True)
 class TagSelection(Selection):
   """Represents a selection of fields tagged by a given tag."""
 
   cfg: config.Buildable
   tag: tag_type.TagType
-
-  def __init__(self, cfg: config.Buildable, tag: tag_type.TagType):
-    object.__setattr__(self, "cfg", cfg)
-    object.__setattr__(self, "tag", tag)
 
   def __iter__(self) -> Iterator[Any]:
     """Yields all values for the selected tag."""

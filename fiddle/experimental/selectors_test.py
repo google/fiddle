@@ -186,15 +186,6 @@ class SelectionTest(absltest.TestCase):
     # The shared kernel init node is only visited once.
     self.assertLen(list(selectors.select(cfg, fake_init_fn)), 1)
 
-  def test_setattr(self):
-    cfg = encoder_decoder_config()
-    selectors.select(cfg, Attention).dtype = "override_dtype"
-    self.assertEqual(cfg.encoder.attention.dtype, "override_dtype")
-    self.assertEqual(cfg.decoder.self_attention.dtype, "override_dtype")
-    self.assertEqual(cfg.decoder.encoder_decoder_attention.dtype,
-                     "override_dtype")
-    self.assertEqual(cfg.encoder.mlp.dtype, "float32")
-
   def test_set(self):
     cfg = encoder_decoder_config()
     selectors.select(cfg, Attention).set(
