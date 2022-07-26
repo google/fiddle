@@ -326,7 +326,7 @@ class TaggingTest(absltest.TestCase):
     foo_cfg.bar = RedTag.new()
     foo_cfg.qux = "abc"
 
-    selectors.select(foo_cfg, tag=RedTag).set(value=5)
+    selectors.select(foo_cfg, tag=RedTag).replace(value=5)
     foo_cfg = tagging.materialize_tags(foo_cfg)
     self.assertEqual(foo_cfg.bar, 5)
     self.assertIsInstance(foo_cfg.bar, int)
@@ -368,7 +368,7 @@ class TestWithSelectorMock(TaggingTest):
     super().setUp()
 
     def new_set_impl(cfg, tag, value):
-      selectors.select(cfg, tag=tag).set(value=value)
+      selectors.select(cfg, tag=tag).replace(value=value)
 
     self.mock_set = mock.patch.object(tagging, "set_tagged", new_set_impl)
     self.mock_set.start()

@@ -16,7 +16,8 @@
 """Tests for selectors."""
 
 import dataclasses
-from typing import Any
+import typing
+from typing import Any, List
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -67,6 +68,18 @@ class FakeEncoderDecoder:
   decoder: FakeDecoder
 
 
+class AnyInitializerTag(fdl.Tag):
+  """Base tag class."""
+
+
+class KernelInitializerTag(AnyInitializerTag):
+  """Sub-tag class for the kernel initializer."""
+
+
+class BiasInitializerTag(AnyInitializerTag):
+  """Sub-tag class for the bias initializer."""
+
+
 def encoder_decoder_config() -> fdl.Config[FakeEncoderDecoder]:
   # This config node would usually not be shared, but is here so that we can
   # test how seen nodes are only visited once for efficiency.
@@ -86,11 +99,54 @@ def encoder_decoder_config() -> fdl.Config[FakeEncoderDecoder]:
   return fdl.Config(FakeEncoderDecoder, encoder_cfg, decoder_cfg)
 
 
+# The next few classes are similar to the example from the colabs, but without
+# Flax.
+
+
+@dataclasses.dataclass
+class AddRange:
+  start: int
+  stop: int
+  dtype: Any
+
+  def __call__(self, x):
+    return [a + b for a, b in zip(x, range(self.start, self.stop))]
+
+
+@dataclasses.dataclass
+class AddConstant:
+  value: Any
+  dtype: Any
+
+  def __call__(self, x):
+    return x + self.value
+
+
+@dataclasses.dataclass
+class Sequential:
+  submodules: List[Any]
+
+  def __call__(self, x):
+    for module in self.submodules:
+      x = module(x)
+    return x
+
+
+class ActivationDType(fdl.Tag):
+  """The requested data-type for module outputs."""
+
+
+def colab_example_base_config() -> fdl.Config[Sequential]:
+  add_range = fdl.Config(AddRange, 0, 4, ActivationDType.new(default="float32"))
+  add_const = fdl.Config(AddConstant, 1, ActivationDType.new(default="float32"))
+  return fdl.Config(Sequential, submodules=[add_range, add_const])
+
+
 class SelectionTest(absltest.TestCase):
 
   def test_matches_everything(self):
     cfg = encoder_decoder_config()
-    sel = selectors.select(cfg)
+    sel = typing.cast(selectors.NodeSelection, selectors.select(cfg))
     self.assertTrue(sel._matches(cfg.encoder))
     self.assertTrue(sel._matches(cfg.encoder.attention))
     self.assertTrue(sel._matches(cfg.encoder.mlp))
@@ -101,7 +157,7 @@ class SelectionTest(absltest.TestCase):
 
   def test_matches_based_on_type(self):
     cfg = encoder_decoder_config()
-    sel = selectors.select(cfg, Attention)
+    sel = typing.cast(selectors.NodeSelection, selectors.select(cfg, Attention))
     self.assertFalse(sel._matches(cfg.encoder))
     self.assertTrue(sel._matches(cfg.encoder.attention))
     self.assertFalse(sel._matches(cfg.encoder.mlp))
@@ -153,6 +209,37 @@ class SelectionTest(absltest.TestCase):
     attention_kernels = list(
         selectors.select(cfg, Attention).get("kernel_init"))
     self.assertCountEqual(["kernel1", "kernel1", "kernel2"], attention_kernels)
+
+  def test_select_tag_subclasses(self):
+    config = fdl.Config(Attention, dtype="float32")
+    fdl.add_tag(config, "kernel_init", KernelInitializerTag)
+    fdl.add_tag(config, "bias_init", BiasInitializerTag)
+
+    selectors.select(config, tag=KernelInitializerTag).replace(value=4)
+    selectors.select(config, tag=BiasInitializerTag).replace(value=1)
+    self.assertEqual(fdl.build(config), Attention("float32", 4, 1))
+    self.assertEqual(
+        list(selectors.select(config, tag=KernelInitializerTag)), [4])
+    self.assertEqual(
+        list(selectors.select(config, tag=BiasInitializerTag)), [1])
+
+    selectors.select(config, tag=AnyInitializerTag).replace(value=2)
+    self.assertEqual(fdl.build(config), Attention("float32", 2, 2))
+
+  def test_colab_example(self):
+
+    class FakeInt32:
+      pass
+
+    cfg = colab_example_base_config()
+    selectors.select(cfg, tag=ActivationDType).replace(value=FakeInt32())
+
+  def test_unsupported_select_arg_combinations(self):
+    cfg = encoder_decoder_config()
+    with self.assertRaises(NotImplementedError):
+      selectors.select(cfg, fn_or_cls=Attention, tag=ActivationDType)
+    with self.assertRaises(NotImplementedError):
+      selectors.select(cfg, tag=ActivationDType, match_subclasses=False)
 
 
 if __name__ == "__main__":

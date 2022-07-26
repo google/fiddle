@@ -326,7 +326,7 @@ def set_tags(cfg: config.Buildable):
           '`fdl.Tag` and using 2 instances with the same module and name '
           'in the configuration.')
     selectors.select(
-        cfg, tag=matching_tags[0]).set(value=ast.literal_eval(value))
+        cfg, tag=matching_tags[0]).replace(value=ast.literal_eval(value))
 
 
 def apply_fiddlers_to(cfg: config.Buildable,
