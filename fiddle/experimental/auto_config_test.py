@@ -277,16 +277,20 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(SampleClass(5, 6), instance.my_fn(5))
 
   def test_staticmethod_not_on_top(self):
-    with self.assertRaisesRegex(
-        TypeError,
-        'Please order the decorators such that `@staticmethod` is on top'):
 
-      class MyClass:  # pylint: disable=unused-variable
+    class MyClass:  # pylint: disable=unused-variable
 
-        @auto_config.auto_config
-        @staticmethod
-        def my_fn(x, y):
-          return SampleClass(x, y)
+      @auto_config.auto_config
+      @staticmethod
+      def my_fn(x, y):
+        return SampleClass(x, y)
+
+    instance = MyClass()
+    cfg = instance.my_fn.as_buildable(x=3, y=5)
+
+    self.assertEqual(SampleClass, cfg.__fn_or_cls__)
+    self.assertEqual(3, cfg.arg1)
+    self.assertEqual(5, cfg.arg2)
 
   def test_classmethod(self):
 
@@ -315,16 +319,27 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(1.0, cfg.z)
 
   def test_classmethod_not_on_top(self):
-    with self.assertRaisesRegex(
-        TypeError,
-        'Please order the decorators such that `@classmethod` is on top'):
 
-      class MyClass:  # pylint: disable=unused-variable
+    class MyClass:  # pylint: disable=unused-variable
 
-        @auto_config.auto_config
-        @classmethod
-        def my_fn(cls, x, y):
-          return SampleClass(x, y)
+      def __init__(self, x=None, y=None):
+        self.x = x
+        self.y = y
+
+      @auto_config.auto_config
+      @classmethod
+      def my_fn(cls, x, y):
+        return cls(x, y)
+
+    instance = MyClass()
+    cfg = instance.my_fn.as_buildable(x=3, y=5)
+
+    self.assertEqual(MyClass, cfg.__fn_or_cls__)
+
+    obj = building.build(cfg)
+
+    self.assertEqual(3, obj.x)
+    self.assertEqual(5, obj.y)
 
   def test_function_metadata(self):
 

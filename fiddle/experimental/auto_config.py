@@ -388,10 +388,7 @@ def auto_config(
 
   def make_auto_config(fn):
     if isinstance(fn, (staticmethod, classmethod)):
-      raise TypeError(
-          f'Please order the decorators such that `@{type(fn).__name__}` is on '
-          'top (as the outermost decorator). Example:\n'
-          f'@{type(fn).__name__}\n@auto_config\ndef my_fn():\n  ...')
+      return type(fn)(make_auto_config(fn.__func__))
 
     if not inspect.isfunction(fn):
       raise ValueError('`auto_config` is only compatible with functions, '
