@@ -378,8 +378,11 @@ class Serialization:
     """
     # Maps object ids to their key in the _objects map.
     self._memo: Dict[int, str] = {}
-    # Maps object key to the object's representation.
+    # Maps object key to the object's serialized representation.
     self._objects: Dict[str, Any] = {}
+    # Maintains references to (unserialized) referenced values. These are only
+    # retained to avoid id reuse when creating temporary metadata objects.
+    self._ref_values: List[Any] = []
     # Counts the number of times each object in _objects is referenced.
     self._refcounts = collections.defaultdict(int)
     # The root value being serialized.
@@ -521,8 +524,10 @@ class Serialization:
 
     if daglish.is_memoizable(value) and output[_TYPE_KEY] != _PYREF_TYPE:
       name = self._unique_name(value)
+      assert name not in self._objects
       self._memo[id(value)] = name
       self._objects[name] = output
+      self._ref_values.append(value)
       return self._ref(name)
     else:
       return output
