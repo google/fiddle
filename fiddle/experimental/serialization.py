@@ -32,7 +32,7 @@ import json
 import re
 import sys
 import types
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Type
 
 from fiddle import config
 from fiddle.experimental import daglish
@@ -114,6 +114,39 @@ class IdentityElement(daglish.PathElement):
 _traverser_registry = daglish.NodeTraverserRegistry()
 register_node_traverser = _traverser_registry.register_node_traverser
 
+
+def _flatten_standard_object(instance):
+  keys = tuple(instance.__dict__.keys())
+  return instance.__dict__.values(), (type(instance), keys)
+
+
+def _unflatten_standard_object(values, metadata):
+  object_type, dict_keys = metadata
+  instance = object.__new__(object_type)
+  instance.__dict__.update(zip(dict_keys, values))
+  return instance
+
+
+def register_dict_based_object(object_type: Type[Any]):
+  """Registers serialization support for the given (dict-based) `object_type`.
+
+  This adds serialization support for "dict-based" Python objects, where here
+  dict-based means that we can simply serialize the `object_type.__dict__`
+  attribute, and on deserialization create a new empty instance of `object_type`
+  and restore its `__dict__` contents. If this behavior is insufficient or
+  incorrect for a given type, more explicit handling using
+  `register_node_traverser` will be required to support serialization.
+
+  Args:
+    object_type: The type to register serialization support for.
+  """
+  register_node_traverser(
+      object_type,
+      flatten_fn=_flatten_standard_object,
+      unflatten_fn=_unflatten_standard_object,
+      path_elements_fn=lambda x: tuple(daglish.Attr(k) for k in x.__dict__))
+
+
 for set_type in (set, frozenset):
   register_node_traverser(
       set_type,
@@ -129,7 +162,7 @@ register_node_traverser(
 )
 
 
-def find_node_traverser(node_type):
+def find_node_traverser(node_type: Type[Any]):
   """Returns a node traverser for `node_type`.
 
   This first looks in the serialization-specific registry. If no traverser is
