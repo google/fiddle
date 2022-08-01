@@ -827,17 +827,20 @@ class ConfigTest(absltest.TestCase):
     self.assertLen(cfg.__argument_history__['arg1'], 2)
     self.assertLen(cfg.__argument_history__['arg2'], 1)
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][0].param_name)
-    self.assertEqual('arg1_value', cfg.__argument_history__['arg1'][0].value)
+    self.assertEqual('arg1_value',
+                     cfg.__argument_history__['arg1'][0].new_value)
     self.assertRegex(
         str(cfg.__argument_history__['arg1'][0].location),
         r'config_test.py:\d+:test_history_tracking')
     self.assertEqual('arg2', cfg.__argument_history__['arg2'][0].param_name)
-    self.assertEqual('arg2_value', cfg.__argument_history__['arg2'][0].value)
+    self.assertEqual('arg2_value',
+                     cfg.__argument_history__['arg2'][0].new_value)
     self.assertRegex(
         str(cfg.__argument_history__['arg2'][0].location),
         r'config_test.py:\d+:test_history_tracking')
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][1].param_name)
-    self.assertEqual(history.DELETED, cfg.__argument_history__['arg1'][1].value)
+    self.assertEqual(history.DELETED,
+                     cfg.__argument_history__['arg1'][1].new_value)
     self.assertRegex(
         str(cfg.__argument_history__['arg1'][1].location),
         r'config_test.py:\d+:test_history_tracking')

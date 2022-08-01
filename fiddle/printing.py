@@ -252,15 +252,23 @@ def _make_per_leaf_history_text(path: _Path,
   assert param_history, 'param_history should never be empty.'
 
   def make_previous_text(entry: history.HistoryEntry) -> str:
-    value = _format_value(entry.value, raw_value_repr=raw_value_repr)
+    value = _format_value(entry.new_value, raw_value_repr=raw_value_repr)
     return f'  - previously: {value} @ {entry.location}'
 
-  if len(param_history) > 1:
-    past = '\n'.join(map(make_previous_text, reversed(param_history[:-1])))
+  # TODO: Add support for printing tags changes.
+  value_history = [
+      entry for entry in param_history
+      if entry.kind == history.ChangeKind.NEW_VALUE
+  ]
+  if len(value_history) > 1:
+    value_updates = [
+        make_previous_text(entry) for entry in reversed(value_history[:-1])
+    ]
+    past = '\n'.join(value_updates)
     past = '\n' + past  # prefix with a newline.
   else:
     past = ''
   current_value = _format_value(
-      param_history[-1].value, raw_value_repr=raw_value_repr)
-  current = f'{current_value} @ {param_history[-1].location}'
+      value_history[-1].new_value, raw_value_repr=raw_value_repr)
+  current = f'{current_value} @ {value_history[-1].location}'
   return f'{_path_to_str(path)} = {current}{past}'

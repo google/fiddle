@@ -17,6 +17,15 @@
 
 from absl.testing import absltest
 from fiddle import history
+from fiddle import tagging
+
+
+class SampleTag(tagging.Tag):
+  """A sample tag."""
+
+
+class AdditonalTag(tagging.Tag):
+  """An extra tag."""
 
 
 class HistoryTest(absltest.TestCase):
@@ -32,29 +41,39 @@ class HistoryTest(absltest.TestCase):
     self.assertEqual(str(location), "my_other_file.py:321:make_config")
 
   def test_entry_simple(self):
-    entry = history.entry("x", 1)
+    entry = history.new_value("x", 1)
     self.assertEqual(entry.param_name, "x")
-    self.assertEqual(entry.value, 1)
+    self.assertEqual(entry.kind, history.ChangeKind.NEW_VALUE)
+    self.assertEqual(entry.new_value, 1)
 
   def test_entry_deletion(self):
-    entry = history.entry("y", history.DELETED)
+    entry = history.deleted_value("y")
     self.assertEqual(entry.param_name, "y")
-    self.assertEqual(entry.value, history.DELETED)
+    self.assertEqual(entry.kind, history.ChangeKind.NEW_VALUE)
+    self.assertEqual(entry.new_value, history.DELETED)
+
+  def test_updating_tags(self):
+    tag_set = {SampleTag, AdditonalTag}
+    entry = history.update_tags("z", tag_set)
+    self.assertEqual(entry.param_name, "z")
+    self.assertEqual(entry.kind, history.ChangeKind.UPDATE_TAGS)
+    self.assertIsNot(tag_set, entry.new_value)  # Must not be the same!
+    self.assertEqual(frozenset(tag_set), entry.new_value)
 
   def test_location_provider(self):
-    entry = history.entry("x", 123)
+    entry = history.new_value("x", 123)
     self.assertRegex(entry.location.filename, "history_test.py")
     self.assertEqual(entry.location.function_name, "test_location_provider")
 
     self.assertEqual(entry.param_name, "x")
-    self.assertEqual(entry.value, 123)
+    self.assertEqual(entry.new_value, 123)
 
   def test_custom_location_provider(self):
-    e1 = history.entry("x", 1)
+    e1 = history.new_value("x", 1)
     with history.custom_location(
         lambda: history.Location("other.py", 123, "foo")):
-      e2 = history.entry("y", 2)
-    e3 = history.entry("z", 3)
+      e2 = history.new_value("y", 2)
+    e3 = history.new_value("z", 3)
 
     self.assertRegex(e1.location.filename, "history_test.py")
     self.assertEqual(e2.location.filename, "other.py")
@@ -66,6 +85,9 @@ class HistoryTest(absltest.TestCase):
     self.assertEqual(e1.location.function_name, "test_custom_location_provider")
     self.assertEqual(e2.location.function_name, "foo")
     self.assertEqual(e3.location.function_name, "test_custom_location_provider")
+
+  def test_deleted_repr(self):
+    self.assertEqual(repr(history.DELETED), "DELETED")
 
 
 if __name__ == "__main__":

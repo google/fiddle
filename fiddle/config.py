@@ -99,7 +99,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
                           for param in signature.parameters.values())
     arg_history = collections.defaultdict(list)
     arg_history['__fn_or_cls__'].append(
-        history.entry('__fn_or_cls__', fn_or_cls))
+        history.new_value('__fn_or_cls__', fn_or_cls))
     super().__setattr__('__argument_history__', arg_history)
     super().__setattr__('__argument_tags__', collections.defaultdict(set))
     super().__setattr__('_has_var_keyword', has_var_keyword)
@@ -214,13 +214,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     self.__validate_param_name__(name)
     self.__arguments__[name] = value
-    self.__argument_history__[name].append(history.entry(name, value))
+    self.__argument_history__[name].append(history.new_value(name, value))
 
   def __delattr__(self, name):
     """Unsets parameter `name`."""
     try:
       del self.__arguments__[name]
-      entry = history.entry(name, history.DELETED)
+      entry = history.deleted_value(name)
       self.__argument_history__[name].append(entry)
     except KeyError:
       err = AttributeError(f"No parameter '{name}' has been set on {self!r}")
@@ -541,7 +541,7 @@ def update_callable(buildable: Buildable,
   object.__setattr__(buildable, '__signature__', signature)
   object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
   buildable.__argument_history__['__fn_or_cls__'].append(
-      history.entry('__fn_or_cls__', new_callable))
+      history.new_value('__fn_or_cls__', new_callable))
 
 
 def assign(buildable: Buildable, **kwargs):
@@ -576,14 +576,18 @@ def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
   """Tags `name` with `tag` in `buildable`."""
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].add(tag)
+  buildable.__argument_history__[argument].append(
+      history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
-def set_tags(builable: Buildable, argument: str,
+def set_tags(buildable: Buildable, argument: str,
              tags: Collection[tag_type.TagType]) -> None:
   """Sets tags for a parameter in `buildable`, overriding existing tags."""
-  clear_tags(builable, argument)
+  clear_tags(buildable, argument)
   for tag in tags:
-    add_tag(builable, argument, tag)
+    add_tag(buildable, argument, tag)
+  buildable.__argument_history__[argument].append(
+      history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
 def remove_tag(buildable: Buildable, argument: str,
@@ -596,12 +600,16 @@ def remove_tag(buildable: Buildable, argument: str,
         f'{tag} not set on {argument}; current tags: {field_tag_set}.')
   # TODO: Track in history?
   field_tag_set.remove(tag)
+  buildable.__argument_history__[argument].append(
+      history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
 def clear_tags(buildable: Buildable, argument: str) -> None:
   """Removes all tags from a named argument of a Buildable."""
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].clear()
+  buildable.__argument_history__[argument].append(
+      history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
 def get_tags(buildable: Buildable,
