@@ -18,8 +18,7 @@
 import dataclasses
 
 from absl.testing import absltest
-from fiddle import building
-from fiddle import config
+import fiddle as fdl
 from fiddle.experimental import autofill
 
 
@@ -58,34 +57,34 @@ class StringTypeAnnotations:
 class AutoFillTest(absltest.TestCase):
 
   def test_nothing_to_fill(self):
-    cfg = config.Config(Child)
+    cfg = fdl.Config(Child)
     autofill.autofill(cfg)  # No changes expected.
 
-    self.assertEqual(cfg, config.Config(Child))
+    self.assertEqual(cfg, fdl.Config(Child))
 
   def test_simple_autofill(self):
-    cfg = config.Config(ParentDC)
+    cfg = fdl.Config(ParentDC)
 
     self.assertFalse(hasattr(cfg, 'child1'))
     self.assertFalse(hasattr(cfg, 'child2'))
 
     autofill.autofill(cfg)
 
-    self.assertIsInstance(cfg.child1, config.Config)
+    self.assertIsInstance(cfg.child1, fdl.Config)
     self.assertEqual(cfg.child1.__fn_or_cls__, Child)
-    self.assertIsInstance(cfg.child2, config.Config)
+    self.assertIsInstance(cfg.child2, fdl.Config)
     self.assertEqual(cfg.child2.__fn_or_cls__, ChildDC)
 
   def test_autofill_with_string_annotations(self):
-    cfg = config.Config(StringTypeAnnotations)
+    cfg = fdl.Config(StringTypeAnnotations)
     self.assertFalse(hasattr(cfg, 'x'))
     self.assertFalse(hasattr(cfg, 'y'))
 
     autofill.autofill(cfg)
 
-    self.assertIsInstance(cfg.x, config.Config)
+    self.assertIsInstance(cfg.x, fdl.Config)
     self.assertEqual(cfg.x.__fn_or_cls__, Child)
-    self.assertIsInstance(cfg.y, config.Config)
+    self.assertIsInstance(cfg.y, fdl.Config)
     self.assertEqual(cfg.y.__fn_or_cls__, ChildDC)
 
   def test_recursive_autofill(self):
@@ -95,16 +94,16 @@ class AutoFillTest(absltest.TestCase):
       def __init__(self, parent: ParentDC):
         self.parent = parent
 
-    cfg = config.Config(Grandparent)
+    cfg = fdl.Config(Grandparent)
     self.assertFalse(hasattr(cfg, 'parent'))
 
     autofill.autofill(cfg)
 
-    self.assertIsInstance(cfg.parent, config.Config)
+    self.assertIsInstance(cfg.parent, fdl.Config)
     self.assertEqual(cfg.parent.__fn_or_cls__, ParentDC)
-    self.assertIsInstance(cfg.parent.child1, config.Config)
+    self.assertIsInstance(cfg.parent.child1, fdl.Config)
     self.assertEqual(cfg.parent.child1.__fn_or_cls__, Child)
-    self.assertIsInstance(cfg.parent.child2, config.Config)
+    self.assertIsInstance(cfg.parent.child2, fdl.Config)
     self.assertEqual(cfg.parent.child2.__fn_or_cls__, ChildDC)
 
   def test_skip_if_no_annotation(self):
@@ -115,24 +114,24 @@ class AutoFillTest(absltest.TestCase):
         self.child = child
         self.other_thing = other_thing
 
-    cfg = config.Config(Parent)
+    cfg = fdl.Config(Parent)
 
     self.assertFalse(hasattr(cfg, 'child'))
     self.assertFalse(hasattr(cfg, 'other_thing'))
 
     autofill.autofill(cfg)
 
-    self.assertIsInstance(cfg.child, config.Config)
+    self.assertIsInstance(cfg.child, fdl.Config)
     self.assertFalse(hasattr(cfg, 'other_thing'))
 
   def test_skip_if_set(self):
-    cfg = config.Config(ParentDC)
-    cfg.child1 = config.Config(ChildDC)  # Switch type.
+    cfg = fdl.Config(ParentDC)
+    cfg.child1 = fdl.Config(ChildDC)  # Switch type.
     autofill.autofill(cfg)
 
-    self.assertIsInstance(cfg.child1, config.Config)
+    self.assertIsInstance(cfg.child1, fdl.Config)
     self.assertEqual(cfg.child1.__fn_or_cls__, ChildDC)
-    self.assertIsInstance(cfg.child2, config.Config)
+    self.assertIsInstance(cfg.child2, fdl.Config)
     self.assertEqual(cfg.child2.__fn_or_cls__, ChildDC)
 
   def test_skip_if_default(self):
@@ -142,14 +141,14 @@ class AutoFillTest(absltest.TestCase):
       child1: Child
       child2: ChildDC = ChildDC(a=-1, b='static')
 
-    cfg = config.Config(Defaulted)
+    cfg = fdl.Config(Defaulted)
     autofill.autofill(cfg)
 
-    self.assertIsInstance(cfg.child1, config.Config)
+    self.assertIsInstance(cfg.child1, fdl.Config)
     self.assertIsInstance(cfg.child2, ChildDC)  # Not a config instance!
 
     cfg.child1.x = 42
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
 
     self.assertEqual(-1, obj.child2.a)
     self.assertEqual('static', obj.child2.b)
@@ -159,7 +158,7 @@ class AutoFillTest(absltest.TestCase):
     def test_fn(a: int, b: Child, c: ParentDC, *args: ChildDC, **kwargs: Child):  # pylint: disable=unused-argument
       return locals()
 
-    cfg = config.Config(test_fn)
+    cfg = fdl.Config(test_fn)
 
     self.assertFalse(hasattr(cfg, 'a'))
     self.assertFalse(hasattr(cfg, 'b'))
@@ -178,7 +177,7 @@ class AutoFillTest(absltest.TestCase):
     cfg.a = 42
     cfg.c.child2.a = 'a'
     cfg.c.child2.b = 'b'
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
 
     self.assertEqual(42, obj['a'])
     self.assertIsInstance(obj['c'], ParentDC)

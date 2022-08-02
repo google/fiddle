@@ -21,8 +21,6 @@ import textwrap
 from typing import Any
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle import config
-from fiddle import tagging
 from fiddle import testing
 from fiddle.experimental import daglish
 from fiddle.experimental import diff
@@ -56,11 +54,11 @@ def basic_fn(arg1, arg2, kwarg1=0, kwarg2=None):
   return {'a': arg1 + arg2, 'b': arg2 + kwarg1, 'c': kwarg2}
 
 
-class GreenTag(tagging.Tag):
+class GreenTag(fdl.Tag):
   """Fiddle tag for testing."""
 
 
-class BlueTag(tagging.Tag):
+class BlueTag(fdl.Tag):
   """Fiddle tag for testing."""
 
 
@@ -497,10 +495,10 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
   def test_modify_tags(self):
     old = fdl.Config(SimpleClass, x=1, y=2, z=3)
     new = fdl.Config(SimpleClass, x=1, y=2, z=3)
-    config.add_tag(old, 'x', BlueTag)
-    config.add_tag(old, 'y', BlueTag)
-    config.add_tag(new, 'y', GreenTag)
-    config.add_tag(new, 'z', BlueTag)
+    fdl.add_tag(old, 'x', BlueTag)
+    fdl.add_tag(old, 'y', BlueTag)
+    fdl.add_tag(new, 'y', GreenTag)
+    fdl.add_tag(new, 'z', BlueTag)
     self.check_diff(
         old, new, {
             diff.RemoveTag(parse_path('.x'), BlueTag),

@@ -24,8 +24,7 @@ from typing import Any
 from absl.testing import absltest
 from absl.testing import parameterized
 
-from fiddle import building
-from fiddle import config
+import fiddle as fdl
 from fiddle.experimental import auto_config
 from fiddle.experimental import autobuilders as ab
 
@@ -47,8 +46,8 @@ class SampleClass:
     pass
 
 
-def explicit_config_building_fn(x: int) -> config.Config:
-  return config.Config(basic_fn, 5, kwarg=x)
+def explicit_config_building_fn(x: int) -> fdl.Config:
+  return fdl.Config(basic_fn, 5, kwarg=x)
 
 
 def pass_through(arg):
@@ -62,7 +61,7 @@ def _line_number():
 class AutoConfigTest(parameterized.TestCase):
 
   def test_create_basic_config(self):
-    expected_config = config.Config(SampleClass, 1, arg2=2)
+    expected_config = fdl.Config(SampleClass, 1, arg2=2)
 
     @auto_config.auto_config
     def test_class_config():
@@ -72,7 +71,7 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(SampleClass(1, 2), test_class_config())
 
   def test_create_basic_config_parents(self):
-    expected_config = config.Config(SampleClass, 1, arg2=2)
+    expected_config = fdl.Config(SampleClass, 1, arg2=2)
 
     @auto_config.auto_config()  # Note the parenthesis!
     def test_class_config():
@@ -82,7 +81,7 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(SampleClass(1, 2), test_class_config())
 
   def test_create_basic_partial(self):
-    expected_config = config.Partial(basic_fn, 1, kwarg='kwarg')
+    expected_config = fdl.Partial(basic_fn, 1, kwarg='kwarg')
 
     @auto_config.auto_config
     def test_fn_config():
@@ -91,7 +90,7 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_create_config_with_args(self):
-    expected_config = config.Config(SampleClass, 'positional', arg2='default')
+    expected_config = fdl.Config(SampleClass, 'positional', arg2='default')
 
     @auto_config.auto_config
     def test_class_config(arg1, arg2='default'):
@@ -103,7 +102,7 @@ class AutoConfigTest(parameterized.TestCase):
         SampleClass('positional', 'default'), test_class_config('positional'))
 
   def test_create_config_with_kwonly_args(self):
-    expected_config = config.Config(SampleClass, 'positional', arg2='default')
+    expected_config = fdl.Config(SampleClass, 'positional', arg2='default')
 
     @auto_config.auto_config
     def test_class_config(arg1, *, arg2='default'):
@@ -115,8 +114,8 @@ class AutoConfigTest(parameterized.TestCase):
         SampleClass('positional', 'default'), test_class_config('positional'))
 
   def test_calling_auto_config(self):
-    expected_config = config.Config(
-        basic_fn, 1, kwarg=config.Config(SampleClass, 1, 2))
+    expected_config = fdl.Config(
+        basic_fn, 1, kwarg=fdl.Config(SampleClass, 1, 2))
 
     @auto_config.auto_config
     def test_class_config():
@@ -133,8 +132,8 @@ class AutoConfigTest(parameterized.TestCase):
     }, test_fn_config())
 
   def test_nested_calls(self):
-    expected_config = config.Config(
-        SampleClass, 1, arg2=config.Config(basic_fn, 2, 'kwarg'))
+    expected_config = fdl.Config(
+        SampleClass, 1, arg2=fdl.Config(basic_fn, 2, 'kwarg'))
 
     @auto_config.auto_config
     def test_class_config():
@@ -148,8 +147,8 @@ class AutoConfigTest(parameterized.TestCase):
         }), test_class_config())
 
   def test_calling_explicit_function(self):
-    expected_config = config.Config(
-        SampleClass, 1, arg2=config.Config(basic_fn, 5, 10))
+    expected_config = fdl.Config(
+        SampleClass, 1, arg2=fdl.Config(basic_fn, 5, 10))
 
     @auto_config.auto_config
     def test_nested_call():
@@ -159,7 +158,7 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_reference_nonlocal(self):
     nonlocal_var = 3
-    expected_config = config.Config(basic_fn, 1, kwarg=nonlocal_var)
+    expected_config = fdl.Config(basic_fn, 1, kwarg=nonlocal_var)
 
     @auto_config.auto_config
     def test_fn_config():
@@ -168,7 +167,7 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(expected_config, test_fn_config.as_buildable())
 
   def test_calling_builtins(self):
-    expected_config = config.Config(SampleClass, [0, 1, 2], ['a', 'b'])
+    expected_config = fdl.Config(SampleClass, [0, 1, 2], ['a', 'b'])
 
     @auto_config.auto_config
     def test_config():
@@ -189,13 +188,13 @@ class AutoConfigTest(parameterized.TestCase):
     test_class = SampleClass(1, 2)
     self.assertFalse(auto_config._is_auto_config_eligible(test_class.method))
     # Buildable subclasses.
-    self.assertFalse(auto_config._is_auto_config_eligible(config.Config))
-    self.assertFalse(auto_config._is_auto_config_eligible(config.Partial))
+    self.assertFalse(auto_config._is_auto_config_eligible(fdl.Config))
+    self.assertFalse(auto_config._is_auto_config_eligible(fdl.Partial))
     # Auto-config annotations are not eligible, and this case is tested in
     # `test_calling_auto_config` above.
 
   def test_autobuilders_in_auto_config(self):
-    expected_config = config.Config(
+    expected_config = fdl.Config(
         basic_fn, arg=ab.config(SampleClass, require_skeleton=False))
 
     @auto_config.auto_config
@@ -211,9 +210,9 @@ class AutoConfigTest(parameterized.TestCase):
 
   def test_return_structure(self):
     expected_config = {
-        'test_key1': config.Config(SampleClass, 1, arg2=2),
-        'test_key2': [config.Config(SampleClass, 3, 4), 5],
-        'test_key3': (config.Partial(pass_through, 'arg'), 6),
+        'test_key1': fdl.Config(SampleClass, 1, arg2=2),
+        'test_key2': [fdl.Config(SampleClass, 3, 4), 5],
+        'test_key3': (fdl.Partial(pass_through, 'arg'), 6),
     }
 
     @auto_config.auto_config
@@ -249,12 +248,12 @@ class AutoConfigTest(parameterized.TestCase):
         return SampleClass(2, 1)
 
     self.assertEqual(
-        config.Config(SampleClass, 2, 1), MyClass.my_fn.as_buildable())
+        fdl.Config(SampleClass, 2, 1), MyClass.my_fn.as_buildable())
     self.assertEqual(SampleClass(2, 1), MyClass.my_fn())
 
     instance = MyClass()
     self.assertEqual(
-        config.Config(SampleClass, 2, 1), instance.my_fn.as_buildable())
+        fdl.Config(SampleClass, 2, 1), instance.my_fn.as_buildable())
     self.assertEqual(SampleClass(2, 1), instance.my_fn())
 
   def test_staticmethod_arguments(self):
@@ -267,13 +266,13 @@ class AutoConfigTest(parameterized.TestCase):
         return SampleClass(x, x + 1)
 
     self.assertEqual(
-        config.Config(SampleClass, 5, 6), MyClass.my_fn.as_buildable(5))
+        fdl.Config(SampleClass, 5, 6), MyClass.my_fn.as_buildable(5))
     self.assertEqual(SampleClass(5, 6), MyClass.my_fn(5))
 
     instance = MyClass()
 
     self.assertEqual(
-        config.Config(SampleClass, 5, 6), instance.my_fn.as_buildable(5))
+        fdl.Config(SampleClass, 5, 6), instance.my_fn.as_buildable(5))
     self.assertEqual(SampleClass(5, 6), instance.my_fn(5))
 
   def test_staticmethod_not_on_top(self):
@@ -336,7 +335,7 @@ class AutoConfigTest(parameterized.TestCase):
 
     self.assertEqual(MyClass, cfg.__fn_or_cls__)
 
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
 
     self.assertEqual(3, obj.x)
     self.assertEqual(5, obj.y)
@@ -387,8 +386,8 @@ class AutoConfigTest(parameterized.TestCase):
 
     build_config_fn = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable
-    self.assertEqual('true branch', building.build(build_config_fn(True)))
-    self.assertEqual('false branch', building.build(build_config_fn(False)))
+    self.assertEqual('true branch', fdl.build(build_config_fn(True)))
+    self.assertEqual('false branch', fdl.build(build_config_fn(False)))
 
   def test_control_flow_for(self):
 
@@ -403,8 +402,8 @@ class AutoConfigTest(parameterized.TestCase):
         r'Control flow \(For\) is unsupported by auto_config\.'):
       auto_config.auto_config(test_config)
 
-    expected_config = config.Config(
-        pass_through, [config.Config(SampleClass, i, i) for i in range(3)])
+    expected_config = fdl.Config(
+        pass_through, [fdl.Config(SampleClass, i, i) for i in range(3)])
     actual_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
     self.assertEqual(expected_config, actual_config)
@@ -424,7 +423,7 @@ class AutoConfigTest(parameterized.TestCase):
 
     pass_through_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
-    self.assertEqual(0, building.build(pass_through_config))
+    self.assertEqual(0, fdl.build(pass_through_config))
 
   @parameterized.parameters(
       (lambda: pass_through([i + 1 for i in [0, 1, 2]]), 'ListComp'),
@@ -441,7 +440,7 @@ class AutoConfigTest(parameterized.TestCase):
 
     pass_through_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
-    self.assertCountEqual([1, 2, 3], building.build(pass_through_config))
+    self.assertCountEqual([1, 2, 3], fdl.build(pass_through_config))
 
   def test_allow_control_flow_decorator(self):
 
@@ -449,7 +448,7 @@ class AutoConfigTest(parameterized.TestCase):
     def test_config():
       return pass_through([i + 1 for i in range(3)])
 
-    self.assertEqual([1, 2, 3], building.build(test_config.as_buildable()))
+    self.assertEqual([1, 2, 3], fdl.build(test_config.as_buildable()))
 
   def test_disallow_try(self):
 
