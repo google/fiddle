@@ -18,6 +18,9 @@
 Please see tagging.py for information about tagging APIs.
 """
 
+import dataclasses
+from typing import Any, Collection
+
 # This module is separate so that we can import it from config.py, but then
 # import config.py from tagging.py (and include user-facing APIs there).
 
@@ -61,3 +64,12 @@ class TagType(type):
 
   def __repr__(cls) -> str:  # pylint: disable=invalid-repr-returned
     return cls.name
+
+
+UnsetValue = object()
+
+
+@dataclasses.dataclass(frozen=True)
+class AddingTags:
+  tags: Collection[TagType]
+  value: Any = UnsetValue

@@ -211,8 +211,16 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __setattr__(self, name: str, value: Any):
     """Sets parameter `name` to `value`."""
-
     self.__validate_param_name__(name)
+
+    if isinstance(value, tag_type.AddingTags):
+      for tag in value.tags:
+        add_tag(self, name, tag)
+      if value.value is tag_type.UnsetValue:
+        return
+      else:
+        value = value.value
+
     self.__arguments__[name] = value
     self.__argument_history__[name].append(history.new_value(name, value))
 
