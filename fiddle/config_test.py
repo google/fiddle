@@ -25,6 +25,7 @@ from absl.testing import absltest
 from fiddle import building
 from fiddle import config
 from fiddle import history
+from fiddle import tag_type
 from fiddle import tagging
 from fiddle.experimental import daglish
 
@@ -637,6 +638,19 @@ class ConfigTest(absltest.TestCase):
     config.add_tag(cfg, 'arg1', Tag2)
     config.set_tags(cfg, 'arg1', {Tag2})
     self.assertEqual(frozenset([Tag2]), config.get_tags(cfg, 'arg1'))
+
+  def test_adding_tags(self):
+    cfg = config.Config(SampleClass)
+    cfg.arg1 = 5
+    cfg.arg1 = tag_type.AddingTags(tags=(Tag1, Tag2))
+
+    self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(cfg, 'arg1'))
+    self.assertEqual(5, cfg.arg1)
+
+    cfg.arg2 = tag_type.AddingTags(tags=(Tag2,), value=42)
+
+    self.assertEqual(frozenset([Tag2]), config.get_tags(cfg, 'arg2'))
+    self.assertEqual(42, cfg.arg2)
 
   def test_flatten_unflatten_tags(self):
     cfg = config.Config(SampleClass)
