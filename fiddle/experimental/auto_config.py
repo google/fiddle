@@ -35,6 +35,9 @@ from fiddle import config
 from fiddle.experimental import daglish
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
+_CLOSURE_WRAPPER_ID = '__auto_config_closure_wrapper__'
+_EMPTY_ARGUMENTS = ast.arguments(
+    posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])
 _BUILTINS = frozenset([
     builtin for builtin in builtins.__dict__.values()
     if inspect.isroutine(builtin) or inspect.isclass(builtin)
@@ -312,6 +315,97 @@ def _contains_buildable(structure):
   return contains_buildable
 
 
+def _wrap_ast_for_fn_with_closure_vars(
+    module: ast.Module,
+    fn: types.FunctionType,
+) -> ast.Module:
+  """Wraps `module.body` in a function that defines closure variables for `fn`.
+
+  If `fn` has any free variables (i.e., it's `__code__.co_freevars` is not
+  empty), we want to make sure that compiling its AST (assumed to be in the body
+  of `module`) will create the same set of free variables in the resulting code
+  object. However, by default this won't happen, since we would be compiling
+  `fn`'s AST in the absence of its original context (e.g., just compiling a
+  nested function, and not the containing one).
+
+  To work around this issue, this function wraps `module.body` in another
+  `FunctionDef` that defines dummy variables corresponding to `fn`'s free
+  variables. This causes the subsequent compile step to create the right set of
+  free variables, and allows us to use `fn.__closure__` directly when creating a
+  new function object via `types.FunctionType`.
+
+  Effectively, this wrapping looks like the following Python code:
+
+      def __auto_config_closure_wrapper__():
+        closure_var_1 = None
+        closure_var_2 = None
+        ...
+
+        def fn(...):  # Or some expression involving a lambda.
+          ...  # Contains references to the closure variables.
+
+  Args:
+    module: An `ast.Module` object whose body contains the function definition
+      for `fn` (e.g., as an `ast.FunctionDef` or `ast.Lambda`).
+    fn: The function to create dummy closure variables for (assumed to
+      correspond to the body of `module`).
+
+  Returns:
+    A new `ast.Module` containing an additional wrapper `ast.FunctionDef` that
+    defines dummy closure variables.
+  """
+  ast_name = lambda name: ast.Name(id=name, ctx=ast.Store())
+  ast_none = ast.Constant(value=None)
+  closure_var_definitions = [
+      ast.Assign(targets=[ast_name(var_name)], value=ast_none)
+      for var_name in fn.__code__.co_freevars
+  ]
+
+  wrapper_module = ast.Module(
+      body=[
+          ast.FunctionDef(
+              name=_CLOSURE_WRAPPER_ID,
+              args=_EMPTY_ARGUMENTS,
+              body=[
+                  *closure_var_definitions,
+                  *module.body,
+              ],
+              decorator_list=[])
+      ],
+      type_ignores=[],
+  )
+  wrapper_module = ast.fix_missing_locations(wrapper_module)
+  return wrapper_module
+
+
+def _find_function_code(code: types.CodeType, fn_name: str):
+  """Finds the code object within `code` corresponding to `fn_name`."""
+  code = [
+      const for const in code.co_consts
+      if inspect.iscode(const) and const.co_name == fn_name
+  ]
+  assert len(code) == 1, f"Couldn't find function code for {fn_name!r}."
+  return code[0]
+
+
+def _unwrap_code_for_fn(code: types.CodeType, fn: types.FunctionType):
+  """Unwraps `code` to find the code object for `fn`.
+
+  This function assumes `code` is the result of compiling an `ast.Module`
+  returned by `_wrap_node_for_fn_with_closure_vars`.
+
+  Args:
+    code: A code object containing code for `fn`.
+    fn: The function to find a code object for within `code`.
+
+  Returns:
+    The code object corresponding to `fn`.
+  """
+  code = _find_function_code(code, _CLOSURE_WRAPPER_ID)
+  code = _find_function_code(code, fn.__name__)
+  return code
+
+
 def auto_config(
     fn=None,
     experimental_allow_control_flow=False
@@ -419,35 +513,30 @@ def auto_config(
     node = node_transformer.visit(node)
     node = ast.fix_missing_locations(node)
     node = ast.increment_lineno(node, line_offset)
+    assert isinstance(node, ast.Module)
 
+    # In order to allow us to use the original function closure below when
+    # constructing a new function object, we have to nest our modified AST
+    # within an outer `FunctionDef` that defines variables corresponding to the
+    # free variables in `fn`.
+    node = _wrap_ast_for_fn_with_closure_vars(node, fn)
     # Compile the modified AST, and then find the function code object within
-    # the returned module-level code object. Generally, the function is present
-    # at `code.co_consts[0]`, but the comprehension below finds it by name.
-    # Assuming compilation was successful, the function should really be there,
-    # so an assert is used to verify that it was found.
+    # the returned module-level code object.
     code = compile(node, inspect.getsourcefile(fn), 'exec')
-    code = [
-        const for const in code.co_consts  # pytype: disable=attribute-error
-        if inspect.iscode(const) and const.co_name == fn.__name__
-    ]
-    assert len(code) == 1, "Couldn't find modified function code."
-    code = code[0]
+    code = _unwrap_code_for_fn(code, fn)
 
-    # Make sure that the proper globals and closure variables are available to
-    # the newly created function, and also add in `auto_config_call_handler`,
-    # which is referenced from the modified AST via the `_CALL_HANDLER_ID` (see
-    # `ast.Name` node in `_AutoConfigNodeTransformer.visit_Call()`).
-    closure_vars = inspect.getclosurevars(fn)
-    scope = {
+    # Make sure that the proper globals are available to the newly created
+    # function, and also add in `auto_config_call_handler`, which is referenced
+    # from the modified AST via the `_CALL_HANDLER_ID` (see `ast.Name` node in
+    # `_AutoConfigNodeTransformer.visit_Call()`).
+    globals_ = {
         **fn.__globals__,
-        **closure_vars.globals,
-        **closure_vars.nonlocals,
         _CALL_HANDLER_ID: auto_config_call_handler,
     }
 
     # Then, create a function from the compiled function code object, providing
-    # the scope.
-    auto_config_fn = types.FunctionType(code, scope)
+    # the globals and the original function's closure.
+    auto_config_fn = types.FunctionType(code, globals_, closure=fn.__closure__)
     auto_config_fn.__defaults__ = fn.__defaults__
     auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
 

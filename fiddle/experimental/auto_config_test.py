@@ -43,7 +43,7 @@ class SampleClass:
   arg2: Any
 
   def method(self):
-    pass
+    return 42
 
 
 def explicit_config_building_fn(x: int) -> fdl.Config:
@@ -165,6 +165,26 @@ class AutoConfigTest(parameterized.TestCase):
       return basic_fn(1, nonlocal_var)
 
     self.assertEqual(expected_config, test_fn_config.as_buildable())
+
+  def test_closures_in_multi_level_nesting(self):
+    var_level_0 = 0
+
+    def outer():
+      var_level_1 = 1
+
+      @auto_config.auto_config
+      def inner():
+        var_level_2 = 2
+        return pass_through((var_level_0, var_level_1, var_level_2))
+
+      return inner
+
+    inner_fn = outer()
+    cfg = inner_fn.as_buildable()
+    expected_result = (0, 1, 2)
+    self.assertEqual(cfg.arg, expected_result)
+    self.assertEqual(expected_result, inner_fn())
+    self.assertEqual(expected_result, fdl.build(cfg))
 
   def test_calling_builtins(self):
     expected_config = fdl.Config(SampleClass, [0, 1, 2], ['a', 'b'])
@@ -291,6 +311,22 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(3, cfg.arg1)
     self.assertEqual(5, cfg.arg2)
 
+  def test_staticmethod_ctor(self):
+
+    @dataclasses.dataclass(frozen=True)
+    class ClassWithStaticmethodCtor:
+      a: int
+      b: float
+
+      @staticmethod
+      @auto_config.auto_config
+      def staticmethod_init(b=1.0):
+        return ClassWithStaticmethodCtor(1, b)
+
+    cfg = ClassWithStaticmethodCtor.staticmethod_init.as_buildable(2.0)
+    self.assertEqual(cfg.a, 1)
+    self.assertEqual(cfg.b, 2.0)
+
   def test_classmethod(self):
 
     @dataclasses.dataclass
@@ -339,6 +375,23 @@ class AutoConfigTest(parameterized.TestCase):
 
     self.assertEqual(3, obj.x)
     self.assertEqual(5, obj.y)
+
+  def test_call_super(self):
+
+    class MyClass(SampleClass):  # pylint: disable=unused-variable
+
+      def __init__(self):
+        super().__init__(1, 2)
+
+      @auto_config.auto_config
+      def my_fn(self, x):
+        return basic_fn(x, kwarg=super().method())
+
+    instance = MyClass()
+    cfg = instance.my_fn.as_buildable('a')
+    self.assertEqual(cfg.__fn_or_cls__, basic_fn)
+    self.assertEqual(cfg.arg, 'a')
+    self.assertEqual(cfg.kwarg, 42)
 
   def test_function_metadata(self):
 
