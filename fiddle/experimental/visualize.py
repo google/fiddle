@@ -21,10 +21,12 @@ having a few helper functions for trimming them for interactive demos and such
 can be valuable.
 """
 import copy
+import inspect
 from typing import Any, Dict, Iterable, List
 
 from fiddle import config
 from fiddle import graphviz
+from fiddle.experimental import daglish
 import tree
 
 
@@ -71,6 +73,33 @@ def trimmed(cfg: config.Buildable,
   """
 
   return copy.deepcopy(cfg, {id(sub_cfg): Trimmed() for sub_cfg in trim})
+
+
+def with_defaults_trimmed(cfg: config.Buildable) -> config.Buildable:
+  """Trims arguments that match their default values.
+
+  Args:
+    cfg: Root buildable object.
+
+  Returns:
+    Copy of the Buildable with args matching defaults removed.
+  """
+
+  # TODO: Remove args matching dataclasses' default_factory too.
+  def traverse_fn(_, value):
+    new_value = (yield)
+    if isinstance(value, config.Buildable):
+      for name, attr_value in list(new_value.__arguments__.items()):
+        param = value.__signature__.parameters.get(name, None)
+        if (param is not None and
+            param.kind != inspect.Parameter.VAR_KEYWORD and
+            param.default == attr_value):
+          delattr(new_value, name)
+      return new_value
+    else:
+      return new_value
+
+  return daglish.memoized_traverse(traverse_fn, cfg)
 
 
 def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:
