@@ -702,6 +702,49 @@ class InlineTest(test_util.TestCase):
 
     self.assertEqual(inline_expected_config, actual_config)
 
+  def test_inline_inline(self):
+
+    @auto_config.auto_config(experimental_always_inline=False)
+    def make_library_type(x: int, y: str) -> SampleClass:
+      """A function that forms a configuration API boundary.
+
+      These functions are often vended by libraries.
+
+      Args:
+       x: A sample argument to be configured.
+       y: An additional argument to be configured.
+
+      Returns:
+        An instance of the sample class configured per the policy encapsulated
+        by this function.
+      """
+      return SampleClass(arg1=x + 1, arg2='Hello ' + y)
+
+    @auto_config.auto_config
+    def make_experiment():
+      thing1 = basic_fn(arg=5)
+      thing2 = make_library_type(5, 'world')
+      auto_config.inline(thing2)
+      return SampleClass(thing1, thing2)
+
+    expected_config = fdl.Config(
+        SampleClass,
+        arg1=fdl.Config(basic_fn, arg=5),
+        arg2=fdl.Config(SampleClass, 6, 'Hello world'))
+
+    actual_config = make_experiment.as_buildable()
+    self.assertEqual(expected_config, actual_config,
+                     f'\nexpected: {expected_config}\nactual: {actual_config}')
+
+    # Test regular python mode.
+    expected_experiment = SampleClass(
+        arg1={
+            'arg': 5,
+            'kwarg': 'test'
+        },
+        arg2=SampleClass(arg1=6, arg2='Hello world'))
+    self.assertEqual(expected_experiment, make_experiment())
+
   # TODO: Investigate fixing this.
   @absltest.skip('Cannot inline a function that returns a partial currently.')
   def test_inlined_func_returns_partial(self):
