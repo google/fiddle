@@ -506,7 +506,10 @@ class ConfigTest(absltest.TestCase):
 
   def test_deep_copy_partials(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
-    fn_config = fdl.Config(basic_fn, arg1=class_partial(), arg2=class_partial())
+    fn_config = fdl.Config(
+        basic_fn,
+        arg1=fdl.Config(class_partial),
+        arg2=fdl.Config(class_partial))
     self.assertIsNot(fn_config.arg1, fn_config.arg2)
     fn_config_copy = copy.deepcopy(fn_config)
     self.assertIsNot(fn_config_copy.arg1, fn_config_copy.arg2)
@@ -727,9 +730,9 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 4)
 
-  def test_call_partial(self):
+  def test_convert_partial(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
-    class_config = class_partial('new_arg1', kwarg1='new_kwarg1')
+    class_config = fdl.Config(class_partial, 'new_arg1', kwarg1='new_kwarg1')
     class_config.arg2 = 'new_arg2'
     self.assertEqual(class_partial.arg2, 'arg2')
     instance = fdl.build(class_config)
@@ -737,9 +740,10 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(instance.arg2, 'new_arg2')
     self.assertEqual(instance.kwarg1, 'new_kwarg1')
 
-  def test_call_partial_nested(self):
+  def test_convert_partial_nested(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
-    class_config = fdl.Config(SampleClass, class_partial(), class_partial())
+    class_config = fdl.Config(SampleClass, fdl.Config(class_partial),
+                              fdl.Config(class_partial))
     instance = fdl.build(class_config)
     self.assertEqual(instance.arg1.arg1, 'arg1')
     self.assertEqual(instance.arg1.arg2, 'arg2')

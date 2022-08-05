@@ -479,20 +479,6 @@ class Partial(Generic[T], Buildable[T]):
     """
     return functools.partial(self.__fn_or_cls__, *args, **kwargs)
 
-  def __call__(self, *args, **kwargs):
-    """Converts this `Partial` into a `Config`, with optional overrides.
-
-    Args:
-      *args: Positional arguments to configure for `self.__fn_or_cls__`.
-      **kwargs: Keyword arguments to configure for `self.__fn_or_cls__`.
-
-    Returns:
-      A `Config` instance copied from this `Partial`. All arguments are copied
-      from this `Partial` instance, and arguments may additionally be
-      (re)configured by passing `args` or `kwargs`.
-    """
-    return Config(self, *args, **kwargs)
-
 
 def update_callable(buildable: Buildable,
                     new_callable: TypeOrCallableProducingT):
