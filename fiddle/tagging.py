@@ -231,7 +231,7 @@ def list_tags(
 
 
 def materialize_tags(buildable: config.Buildable,
-                     tags: Optional[Set[TagType]] = None):
+                     tags: Optional[Set[TagType]] = None) -> config.Buildable:
   """Materialize tagged fields with assigned values or default values.
 
   Converts:
