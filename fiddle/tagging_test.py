@@ -340,7 +340,7 @@ class TaggingTest(absltest.TestCase):
     self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
     self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
-  def test_materialize_tags_keeps_tag_in_tags_list(self):
+  def test_materialize_tags_materializes_tag_in_tags_list(self):
     foo_cfg = fdl.Config(Foo)
     foo_cfg.bar = RedTag.new(5)
     foo_cfg.qux = "abc"
