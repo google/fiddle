@@ -24,6 +24,7 @@ will yield same object graph as the original function.
 
 import ast
 import builtins
+import contextlib
 import dataclasses
 import functools
 import inspect
@@ -31,7 +32,9 @@ import textwrap
 import types
 from typing import Any, Callable
 
+from fiddle import building
 from fiddle import config
+from fiddle import tagging
 from fiddle.experimental import daglish
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
@@ -42,6 +45,7 @@ _BUILTINS = frozenset([
     builtin for builtin in builtins.__dict__.values()
     if inspect.isroutine(builtin) or inspect.isclass(builtin)
 ])
+_DEBUG_MODE = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -69,7 +73,10 @@ class AutoConfig:
         object.__setattr__(self, name, value)
 
   def __call__(self, *args, **kwargs) -> Any:
-    return self.func(*args, **kwargs)
+    if _DEBUG_MODE:
+      return self.func(*args, **kwargs)
+    else:
+      return building.build(self.as_buildable(*args, **kwargs))
 
   def as_buildable(self, *args, **kwargs) -> config.Buildable:
     return self.buildable_func(*args, **kwargs)
@@ -112,6 +119,21 @@ def _returns_buildable(signature: inspect.Signature) -> bool:
           issubclass(signature.return_annotation, config.Buildable))
 
 
+def _is_tag_new_method(fn_or_cls):
+  """Returns True if fn_or_cls is `T.new`, where T is any subclass of Tag."""
+  return (isinstance(fn_or_cls, types.MethodType) and
+          fn_or_cls.__func__ is tagging.Tag.new.__func__ and  # pytype: disable=attribute-error
+          issubclass(fn_or_cls.__self__, tagging.Tag))
+
+
+def _is_tag_manipulation_function(fn_or_cls):
+  tag_manipulation_functions = [
+      config.add_tag, config.set_tags, config.remove_tag, config.clear_tags,
+      config.get_tags
+  ]
+  return any(fn_or_cls is tag_fn for tag_fn in tag_manipulation_functions)
+
+
 def _is_auto_config_eligible(fn_or_cls):
   """Helper to determine if `fn_or_cls` is eligible for auto-config."""
   try:
@@ -143,7 +165,10 @@ def _is_auto_config_eligible(fn_or_cls):
       # It's not an `auto_config`ed function...
       not hasattr(fn_or_cls, 'as_buildable') and
       # It's not a function returning a `fdl.Buildable`...
-      not _returns_buildable(signature)
+      not _returns_buildable(signature) and
+      # It's not a Fiddle tagging function
+      not _is_tag_new_method(fn_or_cls) and
+      not _is_tag_manipulation_function(fn_or_cls)
   )  # pyformat: disable
 
 
@@ -561,3 +586,31 @@ def auto_config(
     return make_auto_config
   else:
     return make_auto_config(fn)
+
+
+@contextlib.contextmanager
+def debug_auto_config():
+  """Context manager that enables debugging mode for auto_config.
+
+  Normally, calling an auto_config'ed function `fn(*args, **kwargs)` is
+  equivalent to calling `fdl.build(fn.as_buildable(*args, **kwargs))`.  I.e.,
+  the auto_config'ed function will first construct a `Buildable` for the
+  result, and will then build that result.
+
+  This context manager enables a "debugging mode", where `fn(*args, **kwargs)`
+  simply delegates to the underlying function `fn.func(*args, **kwargs)`.  If
+  the function has different behavior in normal mode and debugging mode, then
+  it's probably using features that are not supported by auto_config (such as
+  running code with side effects).
+
+  Note: Fiddle tagging functions, such as `fdl.set_tag` and `MyTag.new`, are
+  not supported in debugging mode.
+
+  Yields:
+    None.
+  """
+  global _DEBUG_MODE
+  original_value = _DEBUG_MODE
+  _DEBUG_MODE = True
+  yield
+  _DEBUG_MODE = original_value

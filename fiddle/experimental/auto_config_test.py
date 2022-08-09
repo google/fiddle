@@ -25,6 +25,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 import fiddle as fdl
+from fiddle import testing
 from fiddle.experimental import auto_config
 from fiddle.experimental import autobuilders as ab
 
@@ -46,6 +47,14 @@ class SampleClass:
     return 42
 
 
+class TestTag(fdl.Tag):
+  """Sample Tag used for tests."""
+
+
+class TestTag2(fdl.Tag):
+  """Sample Tag used for tests."""
+
+
 def explicit_config_building_fn(x: int) -> fdl.Config:
   return fdl.Config(basic_fn, 5, kwarg=x)
 
@@ -58,7 +67,7 @@ def _line_number():
   return sys._getframe(1).f_lineno
 
 
-class AutoConfigTest(parameterized.TestCase):
+class AutoConfigTest(testing.TestCase, parameterized.TestCase):
 
   def test_create_basic_config(self):
     expected_config = fdl.Config(SampleClass, 1, arg2=2)
@@ -604,6 +613,118 @@ class AutoConfigTest(parameterized.TestCase):
         auto_config.UnsupportedLanguageConstructError,
         r'Async function definitions are not supported by auto_config\.'):
       auto_config.auto_config(test_config)
+
+  def test_tag_new(self):
+
+    @auto_config.auto_config
+    def fn():
+      return SampleClass(4, TestTag.new(5))
+
+    with self.subTest('dunder_call'):
+      self.assertEqual(fn(), SampleClass(4, 5))
+
+    with self.subTest('as_buildable'):
+      self.assertDagEqual(fn.as_buildable(),
+                          fdl.Config(SampleClass, 4, TestTag.new(5)))
+
+  def test_tag_new_without_default(self):
+
+    @auto_config.auto_config
+    def fn():
+      return SampleClass(4, TestTag.new())
+
+    with self.subTest('dunder_call'):
+      with self.assertRaisesRegex(
+          ValueError, 'Expected all `TaggedValue`s to be replaced via '
+          r'fdl.set_tagged\(\) calls, but one was not set\.'):
+        fn()
+
+    with self.subTest('as_buildable'):
+      self.assertDagEqual(fn.as_buildable(),
+                          fdl.Config(SampleClass, 4, TestTag.new()))
+
+  def test_add_tag(self):
+
+    @auto_config.auto_config
+    def fn():
+      x = SampleClass(4, 5)
+      fdl.add_tag(x, 'arg1', TestTag)
+      return x
+
+    with self.subTest('dunder_call'):
+      self.assertEqual(fn(), SampleClass(4, 5))
+
+    with self.subTest('as_buildable'):
+      expected_cfg = fdl.Config(SampleClass, 4, 5)
+      fdl.add_tag(expected_cfg, 'arg1', TestTag)
+      self.assertDagEqual(fn.as_buildable(), expected_cfg)
+
+  def test_tag_manipulations(self):
+    # Tests all 5 tag-manipulation functions (add, set, remove, clear, get).
+
+    @auto_config.auto_config
+    def inner_config():
+      result = SampleClass(basic_fn(1, 2), 3)
+      fdl.add_tag(result, 'arg1', TestTag)
+      fdl.set_tags(result.arg1, 'arg', [TestTag, TestTag2])
+      fdl.add_tag(result.arg1, 'kwarg', TestTag)
+      fdl.add_tag(result.arg1, 'kwarg', TestTag2)
+      return result
+
+    @auto_config.auto_config
+    def outer_config():
+      result = inner_config()
+      # Modify the tags that were assigned in inner_config.
+      fdl.set_tags(result, 'arg2', fdl.get_tags(result, 'arg1'))
+      fdl.clear_tags(result, 'arg1')
+      fdl.remove_tag(result.arg1, 'kwarg', TestTag)
+      return result
+
+    with self.subTest('inner_config.dunder_call'):
+      self.assertEqual(inner_config(), SampleClass(basic_fn(1, 2), 3))
+
+    with self.subTest('outer_config.dunder_call'):
+      self.assertEqual(outer_config(), SampleClass(basic_fn(1, 2), 3))
+
+    with self.subTest('inner_config.as_buildable'):
+      cfg = inner_config.as_buildable()
+      expected = fdl.Config(SampleClass, fdl.Config(basic_fn, 1, 2), 3)
+      fdl.set_tags(expected, 'arg1', [TestTag])
+      fdl.set_tags(expected.arg1, 'arg', [TestTag, TestTag2])
+      fdl.set_tags(expected.arg1, 'kwarg', [TestTag, TestTag2])
+      self.assertDagEqual(cfg, expected)
+
+    with self.subTest('outer_config.as_buildable'):
+      cfg = outer_config.as_buildable()
+      expected = fdl.Config(SampleClass, fdl.Config(basic_fn, 1, 2), 3)
+      fdl.set_tags(expected, 'arg1', [])
+      fdl.set_tags(expected, 'arg2', [TestTag])
+      fdl.set_tags(expected.arg1, 'arg', [TestTag, TestTag2])
+      fdl.set_tags(expected.arg1, 'kwarg', [TestTag2])
+      self.assertDagEqual(cfg, expected)
+
+  def test_debug_mode(self):
+
+    def sort_list(x):  # Function with a side-effect.
+      x.sort()
+
+    @auto_config.auto_config
+    def fn():
+      lst = [3, 2, 1]
+      sort_list(lst)  # Function only gets exectued in debug mode.
+      result = SampleClass(lst, None)
+      return result
+
+    with self.subTest('debug_mode'):
+      with auto_config.debug_auto_config():
+        self.assertEqual(fn(), SampleClass([1, 2, 3], None))
+
+    with self.subTest('dunder_call'):
+      self.assertEqual(fn(), SampleClass([3, 2, 1], None))
+
+    with self.subTest('as_buildable'):
+      self.assertDagEqual(fn.as_buildable(),
+                          fdl.Config(SampleClass, [3, 2, 1], None))
 
 
 if __name__ == '__main__':
