@@ -558,17 +558,30 @@ def assign(buildable: Buildable, **kwargs):
     setattr(buildable, name, value)
 
 
-def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
+# In order to allow `fdl.add_tag` etc. to type-check properly when called inside
+# of auto_config, we need to annotate their first argument as `Any`. Since we
+# don't have compile-time type checking for this arg, we check it at runtime.
+def _type_check_buildable(fn_name, buildable):
+  """Raises an exception if `buildable` is not a `Buildable."""
+  if not isinstance(buildable, Buildable):
+    raise TypeError(f'{fn_name} expected `buildable` to be a Buildable,'
+                    f' got {buildable!r} of type {type(buildable)}.')
+
+
+def add_tag(buildable: Union[Buildable, Any], argument: str,
+            tag: tag_type.TagType) -> None:
   """Tags `name` with `tag` in `buildable`."""
+  _type_check_buildable('add_tag', buildable)
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].add(tag)
   buildable.__argument_history__[argument].append(
       history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
-def set_tags(buildable: Buildable, argument: str,
+def set_tags(buildable: Union[Buildable, Any], argument: str,
              tags: Collection[tag_type.TagType]) -> None:
   """Sets tags for a parameter in `buildable`, overriding existing tags."""
+  _type_check_buildable('set_tags', buildable)
   clear_tags(buildable, argument)
   for tag in tags:
     add_tag(buildable, argument, tag)
@@ -576,9 +589,10 @@ def set_tags(buildable: Buildable, argument: str,
       history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
-def remove_tag(buildable: Buildable, argument: str,
+def remove_tag(buildable: Union[Buildable, Any], argument: str,
                tag: tag_type.TagType) -> None:
   """Removes a given tag from a named argument of a Buildable."""
+  _type_check_buildable('remove_tag', buildable)
   buildable.__validate_param_name__(argument)
   field_tag_set = buildable.__argument_tags__[argument]
   if tag not in field_tag_set:
@@ -590,14 +604,16 @@ def remove_tag(buildable: Buildable, argument: str,
       history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
-def clear_tags(buildable: Buildable, argument: str) -> None:
+def clear_tags(buildable: Union[Buildable, Any], argument: str) -> None:
   """Removes all tags from a named argument of a Buildable."""
+  _type_check_buildable('clear_tags', buildable)
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].clear()
   buildable.__argument_history__[argument].append(
       history.update_tags(argument, buildable.__argument_tags__[argument]))
 
 
-def get_tags(buildable: Buildable,
+def get_tags(buildable: Union[Buildable, Any],
              argument: str) -> FrozenSet[tag_type.TagType]:
+  _type_check_buildable('get_tags', buildable)
   return frozenset(buildable.__argument_tags__[argument])

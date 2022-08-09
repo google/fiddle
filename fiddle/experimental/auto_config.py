@@ -32,6 +32,7 @@ import types
 from typing import Any, Callable
 
 from fiddle import config
+from fiddle import tagging
 from fiddle.experimental import daglish
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
@@ -112,6 +113,21 @@ def _returns_buildable(signature: inspect.Signature) -> bool:
           issubclass(signature.return_annotation, config.Buildable))
 
 
+def _is_tag_new_method(fn_or_cls):
+  """Returns True if fn_or_cls is `T.new`, where T is any subclass of Tag."""
+  return (isinstance(fn_or_cls, types.MethodType) and
+          fn_or_cls.__func__ is tagging.Tag.new.__func__ and  # pytype: disable=attribute-error
+          issubclass(fn_or_cls.__self__, tagging.Tag))
+
+
+def _is_tag_manipulation_function(fn_or_cls):
+  tag_manipulation_functions = [
+      config.add_tag, config.set_tags, config.remove_tag, config.clear_tags,
+      config.get_tags
+  ]
+  return any(fn_or_cls is tag_fn for tag_fn in tag_manipulation_functions)
+
+
 def _is_auto_config_eligible(fn_or_cls):
   """Helper to determine if `fn_or_cls` is eligible for auto-config."""
   try:
@@ -143,12 +159,15 @@ def _is_auto_config_eligible(fn_or_cls):
       # It's not an `auto_config`ed function...
       not hasattr(fn_or_cls, 'as_buildable') and
       # It's not a function returning a `fdl.Buildable`...
-      not _returns_buildable(signature)
+      not _returns_buildable(signature) and
+      # It's not a Fiddle tagging function
+      not _is_tag_new_method(fn_or_cls) and
+      not _is_tag_manipulation_function(fn_or_cls)
   )  # pyformat: disable
 
 
-def auto_config_call_handler(fn_or_cls, *args, **kwargs):
-  """Handles calls in auto_config'ed functions.
+def as_buildable_call_handler(fn_or_cls, *args, **kwargs):
+  """Handles calls in auto_config'ed functions when run with `as_buildable`.
 
   This intercepts calls in an auto-configed function, and determines whether the
   called `fn_or_cls` should be wrapped in a `Config` or `Partial`. If
@@ -175,6 +194,53 @@ def auto_config_call_handler(fn_or_cls, *args, **kwargs):
   if hasattr(fn_or_cls, 'as_buildable'):
     return fn_or_cls.as_buildable(*args, **kwargs)
 
+  return fn_or_cls(*args, **kwargs)
+
+
+def dunder_call_handler(fn_or_cls, *args, **kwargs):
+  """Handles calls in auto_config'ed functions when run with `__call__`.
+
+  This intercepts calls, and if the callable is `Tag.new` or is a tag
+  manipulation function (such as `fdl.add_tag`), then it transforms it to
+  a no-op, as follows:
+
+    * `SomeTag.new(<val>)`: returns `<val>`.  (Raises an exception if <val>
+      is not specified.)
+    * `fdl.add_tag`, `fdl.set_tags`, `fdl.remove_tag`, and `fdl.clear_tags`:
+      return None.
+    * `fdl.get_tags`: returns an empty `frozenset`.
+
+  Otherwise, the callable is called directly and its result is returned.
+
+  Args:
+    fn_or_cls: The function or class being called.
+    *args: The positional arguments with which `fn_or_cls` is being called.
+    **kwargs: The keyword arguments with which `fn_or_cls` is being called.
+
+  Returns:
+    The result of the intercepted tagging call (if `fn_or_cls` is a tagging
+    function), or the result of calling `fn_or_cls` with the provided arguments.
+  """
+
+  def tag_new(default=tagging.NO_VALUE):
+    if default is tagging.NO_VALUE:
+      tag_name = fn_or_cls.__self__.__qualname__  # pytype: disable=attribute-error
+      raise ValueError(f'`{tag_name}.new` requires a default value when '
+                       f'used inside auto_config.')
+    return default
+
+  if _is_tag_new_method(fn_or_cls):
+    return tag_new(*args, **kwargs)
+
+  overrides = {
+      config.add_tag: lambda buildable, argument, tag: None,
+      config.set_tags: lambda buildable, argument, tags: None,
+      config.remove_tag: lambda buildable, argument, tag: None,
+      config.clear_tags: lambda buildable, argument: None,
+      config.get_tags: lambda buildable, argument: frozenset(),
+  }
+
+  fn_or_cls = overrides.get(fn_or_cls, fn_or_cls)
   return fn_or_cls(*args, **kwargs)
 
 
@@ -480,14 +546,7 @@ def auto_config(
     containing the rewritten function.
   """
 
-  def make_auto_config(fn):
-    if isinstance(fn, (staticmethod, classmethod)):
-      return type(fn)(make_auto_config(fn.__func__))
-
-    if not inspect.isfunction(fn):
-      raise ValueError('`auto_config` is only compatible with functions, '
-                       '`@classmethod`s, and `@staticmethod`s.')
-
+  def make_fn_with_intercepted_call(fn, call_handler):
     # Get the source code of the function, and remove any indentation which
     # would cause parsing issues when creating the AST (indentation generally is
     # present for nested functions or class methods).
@@ -506,7 +565,7 @@ def auto_config(
         allow_control_flow=experimental_allow_control_flow)
 
     # Parse the AST, and modify it by intercepting all `Call`s with the
-    # `auto_config_call_handler`. Finally, ensure line numbers and code
+    # `call_handler`. Finally, ensure line numbers and code
     # locations match up with the original function, to make errors
     # interpretable.
     node = ast.parse(source)
@@ -526,25 +585,40 @@ def auto_config(
     code = _unwrap_code_for_fn(code, fn)
 
     # Make sure that the proper globals are available to the newly created
-    # function, and also add in `auto_config_call_handler`, which is referenced
+    # function, and also add in `call_handler`, which is referenced
     # from the modified AST via the `_CALL_HANDLER_ID` (see `ast.Name` node in
     # `_AutoConfigNodeTransformer.visit_Call()`).
     globals_ = {
         **fn.__globals__,
-        _CALL_HANDLER_ID: auto_config_call_handler,
+        _CALL_HANDLER_ID: call_handler,
     }
 
     # Then, create a function from the compiled function code object, providing
     # the globals and the original function's closure.
-    auto_config_fn = types.FunctionType(code, globals_, closure=fn.__closure__)
-    auto_config_fn.__defaults__ = fn.__defaults__
-    auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
+    wrapper_fn = types.FunctionType(code, globals_, closure=fn.__closure__)
+    wrapper_fn.__defaults__ = fn.__defaults__
+    wrapper_fn.__kwdefaults__ = fn.__kwdefaults__
 
-    # Finally we wrap the rewritten function to perform additional error
-    # checking and enforce that the output contains a `fdl.Buildable`.
-    @functools.wraps(auto_config_fn)
+    functools.update_wrapper(wrapper_fn, fn)
+    return wrapper_fn
+
+  def make_auto_config(fn):
+    if isinstance(fn, (staticmethod, classmethod)):
+      return type(fn)(make_auto_config(fn.__func__))
+
+    if not inspect.isfunction(fn):
+      raise ValueError('`auto_config` is only compatible with functions, '
+                       '`@classmethod`s, and `@staticmethod`s.')
+
+    dunder_call_fn = make_fn_with_intercepted_call(fn, dunder_call_handler)
+    as_buildable_fn = make_fn_with_intercepted_call(fn,
+                                                    as_buildable_call_handler)
+
+    # Wrap the rewritten function to perform additional error checking and
+    # enforce that the output contains a `fdl.Buildable`.
+    @functools.wraps(as_buildable_fn)
     def as_buildable(*args, **kwargs):
-      output = auto_config_fn(*args, **kwargs)  # pylint: disable=not-callable
+      output = as_buildable_fn(*args, **kwargs)  # pylint: disable=not-callable
       if not _contains_buildable(output):
         raise TypeError(
             f'The `auto_config` rewritten version of `{fn.__qualname__}` '
@@ -554,7 +628,7 @@ def auto_config(
             'supported container (list, tuple, dict) containing one.')
       return output
 
-    return AutoConfig(fn, as_buildable)
+    return AutoConfig(dunder_call_fn, as_buildable)
 
   # Decorator with empty parenthesis.
   if fn is None:
