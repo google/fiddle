@@ -230,8 +230,12 @@ def list_tags(
   return frozenset(tags)
 
 
-def materialize_tags(buildable: config.Buildable,
-                     tags: Optional[Set[TagType]] = None) -> config.Buildable:
+# Any subclass of buildable.
+AnyBuildable = TypeVar('AnyBuildable', bound=config.Buildable)
+
+
+def materialize_tags(buildable: AnyBuildable,
+                     tags: Optional[Set[TagType]] = None) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
 
   Converts:
