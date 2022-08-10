@@ -59,8 +59,9 @@ with the value.
 
 from __future__ import annotations
 
+import collections
 import inspect
-from typing import Any, Collection, FrozenSet, Generic, Optional, Set, TypeVar, Union
+from typing import Any, Collection, FrozenSet, Generic, Optional, TypeVar, Union
 
 from fiddle import config
 from fiddle import tag_type
@@ -234,8 +235,9 @@ def list_tags(
 AnyBuildable = TypeVar('AnyBuildable', bound=config.Buildable)
 
 
-def materialize_tags(buildable: AnyBuildable,
-                     tags: Optional[Set[TagType]] = None) -> AnyBuildable:
+def materialize_tags(
+    buildable: AnyBuildable,
+    tags: Optional[collections.abc.Set[TagType]] = None) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
 
   Converts:
