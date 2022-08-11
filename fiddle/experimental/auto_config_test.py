@@ -27,6 +27,7 @@ from absl.testing import parameterized
 import fiddle as fdl
 from fiddle.experimental import auto_config
 from fiddle.experimental import autobuilders as ab
+from fiddle.testing import test_util
 
 
 def basic_fn(arg, kwarg='test'):
@@ -117,7 +118,7 @@ class AutoConfigTest(parameterized.TestCase):
     expected_config = fdl.Config(
         basic_fn, 1, kwarg=fdl.Config(SampleClass, 1, 2))
 
-    @auto_config.auto_config
+    @auto_config.auto_config(experimental_always_inline=True)
     def test_class_config():
       return SampleClass(1, arg2=2)
 
@@ -604,6 +605,118 @@ class AutoConfigTest(parameterized.TestCase):
         auto_config.UnsupportedLanguageConstructError,
         r'Async function definitions are not supported by auto_config\.'):
       auto_config.auto_config(test_config)
+
+
+class InlineTest(test_util.TestCase):
+
+  def test_simple(self):
+
+    @auto_config.auto_config
+    def my_fn(x: int, y: str):
+      return SampleClass(basic_fn(x), y)
+
+    cfg = fdl.Config(my_fn, x=4, y='y')
+    orig = fdl.build(cfg)
+    auto_config.inline(cfg)
+
+    self.assertEqual(SampleClass, cfg.__fn_or_cls__)
+    self.assertEqual(cfg.arg2, 'y')
+    self.assertIsInstance(cfg.arg1, fdl.Config)
+    self.assertEqual(basic_fn, cfg.arg1.__fn_or_cls__)
+    self.assertEqual(4, cfg.arg1.arg)
+    self.assertEqual(orig, fdl.build(cfg))
+
+  def test_bound_auto_config(self):
+
+    @dataclasses.dataclass
+    class AutoConfigClass:
+      x: Any
+      y: Any
+
+      @classmethod
+      @auto_config.auto_config
+      def default(cls, z):
+        return cls(z, z + 2)
+
+    cfg = fdl.Config(AutoConfigClass.default, z=5)
+    orig = fdl.build(cfg)
+    auto_config.inline(cfg)
+
+    self.assertEqual(AutoConfigClass, cfg.__fn_or_cls__)
+    self.assertEqual(cfg.x, 5)
+    self.assertEqual(cfg.y, 7)
+    self.assertEqual(orig, fdl.build(cfg))
+
+  def test_inlining_nested_config(self):
+
+    @auto_config.auto_config(experimental_always_inline=False)
+    def make_library_type(x: int, y: str) -> SampleClass:
+      """A function that forms a configuration API boundary.
+
+      These functions are often vended by libraries.
+
+      Args:
+       x: A sample argument to be configured.
+       y: An additional argument to be configured.
+
+      Returns:
+        An instance of the sample class configured per the policy encapsulated
+        by this function.
+      """
+      return SampleClass(arg1=x + 1, arg2='Hello ' + y)
+
+    @auto_config.auto_config
+    def make_experiment():
+      thing1 = basic_fn(arg=5)
+      thing2 = make_library_type(5, 'world')
+      return SampleClass(thing1, thing2)
+
+    expected_config = fdl.Config(
+        SampleClass,
+        arg1=fdl.Config(basic_fn, arg=5),
+        arg2=fdl.Config(make_library_type, 5, 'world'))
+
+    actual_config = make_experiment.as_buildable()
+    self.assertEqual(expected_config, actual_config)
+
+    auto_config.inline(actual_config.arg2)
+
+    inline_expected_config = fdl.Config(
+        SampleClass,
+        arg1=fdl.Config(basic_fn, arg=5),
+        arg2=fdl.Config(SampleClass, 6, 'Hello world'))
+
+    self.assertEqual(inline_expected_config, actual_config)
+
+  # TODO: Investigate fixing this.
+  @absltest.skip('Cannot inline a function that returns a partial currently.')
+  def test_inlined_func_returns_partial(self):
+
+    @auto_config.auto_config
+    def my_fn(x: int):
+      return functools.partial(SampleClass, arg1=x)
+
+    cfg = fdl.Config(my_fn, x=2)
+    auto_config.inline(cfg)
+    expected = fdl.Partial(SampleClass, arg1=2)
+
+    self.assertDagEqual(cfg, expected)
+    self.assertEqual(fdl.build(cfg)(4), SampleClass(2, 4))
+
+  @absltest.skip('Cannot inline a function that returns a non-buildable.')
+  def test_inlined_func_returns_list(self):
+
+    @auto_config.auto_config
+    def my_fn(x: int):
+      return [SampleClass(x, x), SampleClass(x + 1, x + 2)]
+
+    cfg = fdl.Config(my_fn, x=2)
+    auto_config.inline(cfg)
+
+  def test_no_unexpected_attributes(self):
+    sample_config = fdl.Config(SampleClass)
+    expected = auto_config._buildable_internals_keys + ('__argument_history__',)
+    self.assertEqual(set(expected), set(sample_config.__dict__.keys()))
 
 
 if __name__ == '__main__':

@@ -29,7 +29,7 @@ import functools
 import inspect
 import textwrap
 import types
-from typing import Any, Callable
+from typing import Any, Callable, cast, Optional, Union
 
 from fiddle import config
 from fiddle.experimental import daglish
@@ -55,6 +55,7 @@ class AutoConfig:
   """
   func: Callable[..., Any]
   buildable_func: Callable[..., config.Buildable]
+  always_inline: bool
 
   def __post_init__(self):
     # Must copy-over to correctly implement "functools.wraps"-like
@@ -104,6 +105,10 @@ class _BoundAutoConfig:
     ac: AutoConfig = self.auto_config  # pytype: disable=annotation-type-mismatch
     return ac.buildable_func(self.obj, *args, **kwargs)
 
+  @property
+  def always_inline(self) -> bool:
+    return self.auto_config.always_inline
+
 
 def _returns_buildable(signature: inspect.Signature) -> bool:
   """Returns True iff the return annotation is a subclass of config.Buildable."""
@@ -129,6 +134,10 @@ def _is_auto_config_eligible(fn_or_cls):
   is_buildable = (
       inspect.isclass(fn_or_cls) and issubclass(fn_or_cls, config.Buildable))
 
+  is_inlineable_auto_config = (
+      isinstance(fn_or_cls, (AutoConfig, _BoundAutoConfig)) and
+      cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline)
+
   return (
       # We can find a signature...
       signature is not None and
@@ -140,8 +149,8 @@ def _is_auto_config_eligible(fn_or_cls):
       not is_buildable and
       # It's not a method...
       not inspect.ismethod(fn_or_cls) and
-      # It's not an `auto_config`ed function...
-      not hasattr(fn_or_cls, 'as_buildable') and
+      # It's not an `auto_config`ed function (or is an api_boundary)...
+      not is_inlineable_auto_config and
       # It's not a function returning a `fdl.Buildable`...
       not _returns_buildable(signature)
   )  # pyformat: disable
@@ -408,7 +417,9 @@ def _unwrap_code_for_fn(code: types.CodeType, fn: types.FunctionType):
 
 def auto_config(
     fn=None,
-    experimental_allow_control_flow=False
+    *,
+    experimental_allow_control_flow=False,
+    experimental_always_inline: Optional[bool] = None,
 ) -> Any:  # TODO: More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
@@ -474,11 +485,17 @@ def auto_config(
     experimental_allow_control_flow: Whether to allow control flow constructs in
       `fn`. By default, control flow constructs will cause an
       `UnsupportedLanguageConstructError` to be thrown.
+    experimental_always_inline: If true, this function (when called in an
+      `auto_config` context) will always be `inline`'d in-place. See the
+      documentation on `inline` for an example. The default (if unspecified) is
+      currently `False`, but this may change in the future.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
     containing the rewritten function.
   """
+  if experimental_always_inline is None:
+    experimental_always_inline = False
 
   def make_auto_config(fn):
     if isinstance(fn, (staticmethod, classmethod)):
@@ -554,10 +571,106 @@ def auto_config(
             'supported container (list, tuple, dict) containing one.')
       return output
 
-    return AutoConfig(fn, as_buildable)
+    return AutoConfig(
+        fn, as_buildable, always_inline=experimental_always_inline)
 
   # Decorator with empty parenthesis.
   if fn is None:
     return make_auto_config
   else:
     return make_auto_config(fn)
+
+
+def is_auto_config(function_object: Any) -> bool:
+  return isinstance(function_object, (AutoConfig, _BoundAutoConfig))
+
+
+def inline(buildable: config.Config):
+  """Converts `buildable` of an `auto_config` function into a DAG of Buildables.
+
+  `inline` updates `buildable` in place to preserve aliasing within a larger
+  Fiddle configuration. If you would like to leave `buildable` unmodified, make
+  a shallow copy (`copy.copy`) before calling `inline`.
+
+  Example:
+
+  ```py
+  # shared/input_pipelines.py
+  @auto_config(experimental_api_boundary=True)
+  def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
+    file_path = '/base_path/'+name
+    augmentation = 'my_augmentation_routine'
+    # ...
+    return InputPipeline(file_path, augmentation, ...)
+
+  # config/main.py
+  @auto_config
+  def make_experiment():
+    data = make_input_pipeline('normal_dataset', batch_size)
+    model = ...
+    return Experiment(data, model)
+
+  # experiment_configuration.py
+  def make_experiment():
+    config = make_experiment.as_buildable()
+    config.data.name = 'advanced_dataset'
+    # config.data.augmentation = 'custom_augmentation'  # Not configurable!!!
+    # return fdl.build(config)                          # Works like normal.
+    auto_config.inline(config.data)
+    print(config.data.file_path)         # Prints: '/base_path/advanced_dataset'
+    config.data.augmentation = 'custom_augmentation'    # Now exposed.
+    experiment = fdl.build(config)                      # Works like normal.
+    return experiment
+  ```
+
+  Args:
+    buildable: The buildable of an `auto_config`'d function to replace with the
+      root of a Fiddle DAG that corresponds to it.
+
+  Raises:
+    ValueError: If `buildable` is not a `Config`, or if `buildable` doesn't
+      correspond to an auto_config'd function.
+  """
+  if not isinstance(buildable, config.Config):
+    raise ValueError('Cannot `inline` non-Config buildables; '
+                     f'{type(buildable)} is not compatible.')
+  if not is_auto_config(buildable.__fn_or_cls__):
+    raise ValueError('Cannot `inline` a non-auto_config function; '
+                     f'`{buildable.__fn_or_cls__}` is not compatible.')
+  # Evaluate the `as_buildable` interpretation.
+  auto_config_fn = cast(Union[AutoConfig, _BoundAutoConfig],
+                        buildable.__fn_or_cls__)
+  tmp_config = auto_config_fn.as_buildable(**buildable.__arguments__)
+  if not isinstance(tmp_config, config.Buildable):
+    raise ValueError('You cannot currently inline functions that do not return '
+                     '`fdl.Buildable`s.')
+
+  _move_buildable_internals(source=tmp_config, destination=buildable)
+
+
+_buildable_internals_keys = ('__fn_or_cls__', '__signature__', '__arguments__',
+                             '_has_var_keyword', '__argument_tags__')
+
+
+def _move_buildable_internals(*, source: config.Buildable,
+                              destination: config.Buildable):
+  """Changes the internals of `destination` to be equivalent to `source`.
+
+  Currently, this results in aliasing behavior, but this should not be relied
+  upon. All the internals of `source` are aliased into `destination` except
+  `__argument_history__`.
+
+  Args:
+    source: The source configuration to pull internals from.
+    destination: One of the buildables to swap.
+  """
+  if type(source) is not type(destination):
+    # TODO: Relax this constraint such that both types merely need to be
+    # buildable's.
+    raise TypeError(f'types must match exactly: {type(source)} vs '
+                    f'{type(destination)}.')
+
+  # Update in-place using object.__setattr__ to bypass argument checking.
+  for attr in _buildable_internals_keys:
+    object.__setattr__(destination, attr, getattr(source, attr))
+  # TODO: Figure out what to do with `argument_history`.
