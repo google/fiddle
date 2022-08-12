@@ -17,9 +17,11 @@
 
 import dataclasses
 import types
+from typing import Any, Dict
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle.experimental import auto_config
 from fiddle.experimental import dataclasses as fdl_dc
 
 
@@ -37,6 +39,40 @@ class ATaggedType:
   tagged: str = fdl_dc.field(tags=SampleTag, default='tagged')
   double_tagged: str = fdl_dc.field(
       tags=(AdditionalTag, SampleTag), default_factory=lambda: 'other_field')
+
+  @classmethod
+  @auto_config.auto_config
+  def defaults(cls):
+    return cls(untagged='untagged_foo')
+
+
+def test_fn():
+  return 1
+
+
+@auto_config.auto_config
+def nested_structure():
+  return {'foo': [test_fn(), (2, 3)]}
+
+
+@dataclasses.dataclass
+class AnAutoconfigType:
+  tagged: ATaggedType = dataclasses.field(
+      # metadata=fdl_dc.create_metadata((),
+      #                                 auto_config_factory=ATaggedType.defaults),
+      default_factory=ATaggedType.defaults)
+  another_default: Dict[str, Any] = dataclasses.field(
+      # metadata=fdl_dc.create_metadata((),
+      #                                 auto_config_factory=ATaggedType.defaults),
+      default_factory=nested_structure)
+
+
+@dataclasses.dataclass
+class AncestorType:
+  # We might want to make this more compact.
+  child: AnAutoconfigType = fdl_dc.field(
+      auto_config_factory=auto_config.AutoConfig(
+          AnAutoconfigType, lambda: fdl.Config(AnAutoconfigType), True))
 
 
 class DataclassesTest(absltest.TestCase):
@@ -58,6 +94,31 @@ class DataclassesTest(absltest.TestCase):
 
     self.assertIn('something', constructed_field.metadata)
     self.assertEqual(4, constructed_field.metadata['something'])
+
+  def test_auto_config_basic_equality(self):
+    self.assertEqual(
+        fdl.build(fdl.Config(AnAutoconfigType)), AnAutoconfigType())
+    self.assertEqual(fdl.build(fdl.Config(AncestorType)), AncestorType())
+
+  def test_auto_config_override_equality(self):
+    self.assertEqual(
+        fdl.build(fdl.Config(AnAutoconfigType, another_default={3: 4})),
+        AnAutoconfigType(another_default={3: 4}))
+
+  def test_auto_config_field_init(self):
+    config = fdl.Config(AnAutoconfigType)
+    config.another_default['foo'][1] += (4,)
+    obj = fdl.build(config)
+    self.assertEqual(obj.another_default, {'foo': [1, (2, 3, 4)]})
+
+  # def test_invalid_definition_with_defaults(self):
+  #   with self.assertRaises(TypeError):
+  #     fdl_dc.field(auto_config_factory=nested_structure, default=4)
+  #   with self.assertRaises(TypeError):
+  #     fdl_dc.field(
+  #         auto_config_factory=nested_structure, default_factory=lambda: 4)
+  #   with self.assertRaises(TypeError):
+  #     fdl_dc.field(auto_config_factory=lambda: 4)
 
 
 if __name__ == '__main__':
