@@ -124,6 +124,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         if metadata:
           for tag in metadata.tags:
             add_tag(self, field.name, tag)
+          if metadata.auto_config_factory and field.name not in arguments:
+            setattr(self, field.name,
+                    metadata.auto_config_factory.as_buildable())
 
     for name, value in arguments.items():
       setattr(self, name, value)
