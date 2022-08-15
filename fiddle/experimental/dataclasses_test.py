@@ -17,9 +17,11 @@
 
 import dataclasses
 import types
+from typing import Any, Dict
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle.experimental import auto_config
 from fiddle.experimental import dataclasses as fdl_dc
 
 
@@ -37,6 +39,41 @@ class ATaggedType:
   tagged: str = fdl_dc.field(tags=SampleTag, default='tagged')
   double_tagged: str = fdl_dc.field(
       tags=(AdditionalTag, SampleTag), default_factory=lambda: 'other_field')
+
+  @classmethod
+  @auto_config.auto_config
+  def default(cls):  # pytype: disable=not-callable
+    return cls(untagged='untagged_foo')
+
+
+def test_fn():
+  return 1
+
+
+@auto_config.auto_config
+def nested_structure():
+  return {'foo': [test_fn(), (2, 3)]}
+
+
+@dataclasses.dataclass
+class AnAutoconfigType:
+  tagged_type: ATaggedType = fdl_dc.field(default_factory=ATaggedType.default)
+  another_default: Dict[str,
+                        Any] = fdl_dc.field(default_factory=nested_structure)
+
+  # We need this for `AncestorType` below, but we might be able to make
+  # `auto_config.auto_config(AnAutoconfigType)` work in the future.
+  @classmethod
+  @auto_config.auto_config
+  def default(cls):  # pytype: disable=not-callable
+    return cls()
+
+
+@dataclasses.dataclass
+class AncestorType:
+  # We might want to make this more compact.
+  child: AnAutoconfigType = fdl_dc.field(
+      default_factory=AnAutoconfigType.default)
 
 
 class DataclassesTest(absltest.TestCase):
@@ -58,6 +95,68 @@ class DataclassesTest(absltest.TestCase):
 
     self.assertIn('something', constructed_field.metadata)
     self.assertEqual(4, constructed_field.metadata['something'])
+
+  def test_auto_config_basic_equality(self):
+    self.assertEqual(
+        fdl.build(fdl.Config(AnAutoconfigType)), AnAutoconfigType())
+    self.assertEqual(fdl.build(fdl.Config(AncestorType)), AncestorType())
+
+  def test_name_set_in_both_cases(self):
+    # A slightly more concrete test of the above.
+    self.assertEqual(
+        fdl.build(fdl.Config(AnAutoconfigType)).tagged_type.untagged,
+        'untagged_foo')
+    self.assertEqual(AnAutoconfigType().tagged_type.untagged, 'untagged_foo')
+
+  def test_auto_config_override_equality(self):
+    self.assertEqual(
+        AnAutoconfigType(another_default={
+            '3': 4
+        }).another_default, {'3': 4})
+    self.assertEqual(
+        fdl.build(fdl.Config(AnAutoconfigType, another_default={'3': 4})),
+        AnAutoconfigType(another_default={'3': 4}))
+
+  def test_auto_config_field_init(self):
+    config = fdl.Config(AnAutoconfigType)
+    config.another_default['foo'][1] += (4,)
+    obj = fdl.build(config)
+    self.assertEqual(obj.another_default, {'foo': [1, (2, 3, 4)]})
+
+  def test_mandatory_fields(self):
+
+    @dataclasses.dataclass
+    class TwoMandatoryFieldsDataclass:
+      foo: int = fdl_dc.field(tags=SampleTag)
+      bar: int
+
+    instance = TwoMandatoryFieldsDataclass(3, 4)
+    self.assertEqual(instance.foo, 3)
+    self.assertEqual(instance.bar, 4)
+
+    # Currently, this causes a runtime error, but not a static type checking
+    # error. If static type checking is improved, this test case can be removed.
+    with self.assertRaises(TypeError):
+
+      @dataclasses.dataclass
+      class InvalidDataclass:  # pylint: disable=unused-variable
+        foo: Dict[str, Any] = fdl_dc.field(
+            tags=SampleTag, default_factory=nested_structure)
+        bar: int
+
+  def test_check_auto_config_flag(self):
+    with self.assertRaisesRegex(ValueError, r'default_factory.*AutoConfig'):
+
+      @dataclasses.dataclass
+      class InvalidMissingDefaultFactory:  # pylint: disable=unused-variable
+        foo: int = fdl_dc.field(check_auto_config_factory=True)
+
+    with self.assertRaisesRegex(ValueError, r'default_factory.*AutoConfig'):
+
+      @dataclasses.dataclass
+      class InvalidNonAutoconfigFactory:  # pylint: disable=unused-variable
+        foo: int = fdl_dc.field(
+            default_factory=lambda: 4, check_auto_config_factory=True)
 
 
 if __name__ == '__main__':

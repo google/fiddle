@@ -25,12 +25,16 @@ rest of Fiddle.
 
 import dataclasses
 import types
-from typing import Any, Collection, Mapping, Optional, Union
+from typing import Any, Callable, Collection, Mapping, Optional, Union, TypeVar
 
 from fiddle import tag_type
 
 TagOrTags = Union[tag_type.TagType, Collection[tag_type.TagType]]
 _FIDDLE_DATACLASS_METADATA_KEY = object()
+
+# In order to avoid a circular dependency, we just use Any as a proxy for
+# auto_config.AutoConfig.
+AutoConfig = Any
 
 
 # TODO: Add kw_only=True when available.
@@ -40,22 +44,38 @@ class FieldMetadata:
 
   Attributes:
     tags: A collection of tags to attach to the field.
+    auto_config_factory: An auto_config function to use as a factory, in both
+      normal and config-generating modes.
   """
   tags: Collection[tag_type.TagType] = ()
+  auto_config_factory: Optional[AutoConfig] = None
   # TODO: Add additional metadata types here (value validation rules,
-  # autofill / auto_config settings, etc).
+  # autofill settings, etc).
+
+
+_T = TypeVar("_T")
 
 
 def field(*,
-          tags: Optional[TagOrTags] = None,
-          metadata: Optional[Mapping[Any, Any]] = None,
-          **kwargs) -> Union[dataclasses.Field[Any], Any]:
+          tags: TagOrTags = (),
+          metadata: Mapping[Any, Any] = types.MappingProxyType({}),
+          default_factory: Optional[Callable[[], _T]] = None,
+          check_auto_config_factory: bool = False,
+          **kwargs) -> _T:
   """A wrapper around dataclasses.field to add optional Fiddle metadata.
 
   Args:
     tags: One or more tags to attach to the `fdl.Buildable`'s argument
       corresponding to the field.
     metadata: Any additional metadata to include.
+    default_factory: The dataclass `default_factory`; if it is an `auto_config`
+      function, then its `as_buildable` method will be used to instantiate
+      sub-configuration. If the this function is a reasonable auto_config
+      function, then we should still have the property that
+      `fdl.build(fdl.Config(MyDataclass)) == MyDataclass()`, since the
+      configuration generated should be equal to the default_factory invocation.
+    check_auto_config_factory: Flag to ensure `default_factory` is an
+      auto_config function. This will also error if `default_factory` is unset.
     **kwargs: All other kwargs are passed to `dataclasses.field`; see the
       documentation on `dataclasses.field` for valid arguments.
 
@@ -68,10 +88,21 @@ def field(*,
   if isinstance(tags, tag_type.TagType):
     tags = (tags,)
 
-  metadata: Mapping[Any, Any] = types.MappingProxyType(metadata or {})
-  metadata = {
-      **metadata, _FIDDLE_DATACLASS_METADATA_KEY: FieldMetadata(tags=tags)
-  }
+  auto_config_factory = None
+  if default_factory is not None:
+    # Note: A rudimentary type check here, to avoid circular imports.
+    if hasattr(default_factory, "as_buildable"):
+      auto_config_factory = default_factory
+    kwargs["default_factory"] = default_factory
+
+  if check_auto_config_factory:
+    if auto_config_factory is None:
+      raise ValueError("Expected default_factory to be an AutoConfig object, "
+                       f"but got {default_factory}.")
+
+  fiddle_metadata = FieldMetadata(
+      tags=tags, auto_config_factory=auto_config_factory)
+  metadata = {**metadata, _FIDDLE_DATACLASS_METADATA_KEY: fiddle_metadata}
   return dataclasses.field(metadata=metadata, **kwargs)
 
 
