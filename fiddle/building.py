@@ -17,11 +17,15 @@
 import contextlib
 import threading
 
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, TypeVar, Tuple, overload
 
 from fiddle import config
 from fiddle import tagging
 from fiddle.experimental import daglish
+
+
+T = TypeVar('T')
+CallableProducingT = Callable[..., T]
 
 
 class _BuildGuardState(threading.local):
@@ -49,6 +53,11 @@ def _in_build():
 
 class BuildError(ValueError):
   """Error raised when building a Config fails."""
+  buildable: config.Buildable
+  path_from_config_root: str
+  original_error: Exception
+  args: Tuple[Any, ...]
+  kwargs: Dict[str, Any]
 
   def __init__(
       self,
@@ -65,12 +74,48 @@ class BuildError(ValueError):
     self.args = args
     self.kwargs = kwargs
 
-  def __str__(self):
+  def __str__(self) -> str:
     fn_or_cls_name = self.buildable.__fn_or_cls__.__qualname__
     return (f'Failed to construct or call {fn_or_cls_name} '
             f'(at {self.path_from_config_root}) with arguments\n'
             f'    args: {self.args}\n'
             f'    kwargs: {self.kwargs}')
+
+
+# Define typing overload for `build(Partial[T])`
+@overload
+def build(buildable: config.Partial[T]) -> CallableProducingT:
+  ...
+
+
+# Define typing overload for `build(Partial)`
+@overload
+def build(buildable: config.Partial) -> Callable[..., Any]:
+  ...
+
+
+# Define typing overload for `build(Config[T])`
+@overload
+def build(buildable: config.Config[T]) -> T:
+  ...
+
+
+# Define typing overload for `build(Config)`
+@overload
+def build(buildable: config.Config) -> Any:
+  ...
+
+
+# Define typing overload for `build(Buildable)`
+@overload
+def build(buildable: config.Buildable) -> Any:
+  ...
+
+
+# Define typing overload for nested structures.
+@overload
+def build(buildable: Any) -> Any:
+  ...
 
 
 # This is a free function instead of a method on the `Buildable` object in order
