@@ -65,9 +65,8 @@ from typing import Any, Collection, FrozenSet, Generic, Optional, TypeVar, Union
 
 from fiddle import config
 from fiddle import tag_type
-from fiddle.experimental import daglish
+from fiddle.experimental import daglish_traversal
 from fiddle.experimental import serialization
-import tree
 
 TagType = tag_type.TagType
 
@@ -178,17 +177,17 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     value: Value to set for all parameters tagged with `tag`.
   """
 
-  def map_fn(unused_all_paths, node_value):
-    # Recurses, but ignores returned value, because we are mutating the
-    # config instead of returning a modified copy.
-    yield
+  def traverse(node_value, state=None):
+    state = state or daglish_traversal.MemoizedTraversal.begin(
+        traverse, node_value)
     if isinstance(node_value, config.Buildable):
       for key, tags in node_value.__argument_tags__.items():
         if any(issubclass(t, tag) for t in tags):
           setattr(node_value, key, value)
-    return node_value
+    if state.is_traversable(node_value):
+      state.flattened_map_children(node_value)
 
-  daglish.memoized_traverse(map_fn, root)
+  traverse(root)
 
 
 def list_tags(
@@ -207,17 +206,13 @@ def list_tags(
   """
   tags = set()
 
-  def _inner(node: config.Buildable):
-    for node_tags in node.__argument_tags__.values():
-      tags.update(node_tags)
-
-    def map_fn(leaf):
-      if isinstance(leaf, config.Buildable):
-        _inner(leaf)
-      return leaf
-
-    # TODO: Use something other than map for efficiency.
-    tree.map_structure(map_fn, node.__arguments__)
+  def _inner(value, state=None):
+    state = state or daglish_traversal.MemoizedTraversal.begin(_inner, value)
+    if isinstance(value, config.Buildable):
+      for node_tags in value.__argument_tags__.values():
+        tags.update(node_tags)
+    if state.is_traversable(value):
+      state.flattened_map_children(value)
 
   _inner(root)
 
@@ -240,6 +235,9 @@ def materialize_tags(
     tags: Optional[collections.abc.Set[TagType]] = None) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
 
+  TODO: Consider supporting tags directly on Config objects, e.g.
+  by removing those tags.
+
   Converts:
   ```foo.bar.baz = MyCustomTag.new(4096)```
 
@@ -259,11 +257,13 @@ def materialize_tags(
     A new `fdl.Buildable` with its tags replaced by their values.
   """
 
-  def traverse_fn(unused_all_paths: daglish.Paths, value):
-    value = yield
+  def transform(value, state: Optional[daglish_traversal.State] = None):
+    state = state or daglish_traversal.MemoizedTraversal.begin(transform, value)
+    value = state.map_children(value)
     if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):
-      value = value.value
-    return value
+      return value.value
+    else:
+      return value
 
-  return daglish.memoized_traverse(traverse_fn, buildable)
+  return transform(buildable)
