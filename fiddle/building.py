@@ -17,12 +17,12 @@
 import contextlib
 import threading
 
-from typing import Any, Callable, Dict, TypeVar, Tuple, overload
+from typing import Any, Callable, Dict, Optional, TypeVar, Tuple, overload
 
 from fiddle import config
 from fiddle import tagging
 from fiddle.experimental import daglish
-
+from fiddle.experimental import daglish_traversal
 
 T = TypeVar('T')
 CallableProducingT = Callable[..., T]
@@ -118,6 +118,25 @@ def build(buildable: Any) -> Any:
   ...
 
 
+def _build(value: Any, state: Optional[daglish_traversal.State] = None) -> Any:
+  """Inner method / implementation of build()."""
+  state = state or daglish_traversal.MemoizedTraversal.begin(_build, value)
+
+  if isinstance(value, config.Buildable):
+    sub_traversal = state.flattened_map_children(value)
+    metadata: config.BuildableTraverserMetadata = sub_traversal.metadata
+    arguments = metadata.arguments(sub_traversal.values)
+    try:
+      return value.__build__(**arguments)
+    except tagging.TaggedValueNotFilledError:
+      raise
+    except Exception as e:
+      path_str = '<root>' + daglish.path_str(state.current_path)
+      raise BuildError(value, path_str, e, (), arguments) from e
+  else:
+    return state.map_children(value)
+
+
 # This is a free function instead of a method on the `Buildable` object in order
 # to avoid potential naming collisions (e.g., if a function or class has a
 # parameter named `build`).
@@ -147,29 +166,5 @@ def build(buildable):
   Returns:
     The built version of `buildable`.
   """
-  memo = {}
-
-  # The implementation here performs explicit recursion instead of using
-  # `daglish.memoized_traverse` in order to avoid unnecessary unflattening of
-  # `Buildable`s (which can cause errors for certain `Buildable` subclasses).
-  def traverse(value):
-    if id(value) not in memo:
-      if isinstance(value, config.Buildable):
-        arguments = daglish.map_children(traverse, value.__arguments__)
-        try:
-          memo[id(value)] = value.__build__(**arguments)
-        except tagging.TaggedValueNotFilledError:
-          raise
-        except Exception as e:
-          paths = daglish.collect_paths_by_id(buildable, memoizable_only=True)
-          path_str = '<root>' + daglish.path_str(paths[id(value)][0])
-          raise BuildError(value, path_str, e, (), arguments) from e
-      elif daglish.is_traversable_type(type(value)):
-        memo[id(value)] = daglish.map_children(traverse, value)
-      else:
-        memo[id(value)] = value
-
-    return memo[id(value)]
-
   with _in_build():
-    return traverse(buildable)
+    return _build(buildable)
