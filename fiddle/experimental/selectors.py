@@ -23,12 +23,11 @@ imperatively.
 import abc
 import copy
 import dataclasses
-from typing import Any, Callable, Iterator, Optional, Set, Type, Union
+from typing import Any, Callable, Iterator, Optional, Type, Union
 
 from fiddle import config
 from fiddle import tag_type
-from fiddle.experimental import daglish
-import tree
+from fiddle.experimental import daglish_traversal
 
 # Maybe DRY up with type declaration in autobuilders.py?
 FnOrClass = Union[Callable[..., Any], Type[Any]]
@@ -73,6 +72,16 @@ class Selection(metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
 
+def _memoized_walk_leaves_first(value, state=None):
+  """Yields all values (memoized) from a configuration DAG."""
+  state = state or daglish_traversal.MemoizedTraversal.begin(
+      _memoized_walk_leaves_first, value)
+  if state.is_traversable(value):
+    for sub_result in state.flattened_map_children(value).values:
+      yield from sub_result
+  yield value
+
+
 @dataclasses.dataclass(frozen=True)
 class NodeSelection(Selection):
   """Represents a selection of nodes.
@@ -115,28 +124,15 @@ class NodeSelection(Selection):
 
     return True
 
-  def _iter_helper(self, node: config.Buildable, seen: Set[int]):
-    """Helper for __iter__ function below, keeping track of seen nodes."""
-    if id(node) in seen:
-      return
-    seen.add(id(node))
-
-    if self._matches(node):
-      yield node
-
-    for leaf in tree.flatten(node.__arguments__):
-      if isinstance(leaf, config.Buildable):
-        yield from self._iter_helper(leaf, seen)
-
   def __iter__(self) -> Iterator[config.Buildable]:
-    """Returns all selected nodes.
+    """Yields all selected nodes.
 
     Nodes that are reachable via multiple paths are yielded only once.
-
-    Returns:
-      config.Buildable nodes matching this selection.
     """
-    return self._iter_helper(self.cfg, set())
+
+    for value in _memoized_walk_leaves_first(self.cfg):
+      if self._matches(value):
+        yield value
 
   def replace(self, value, deepcopy: bool = False) -> None:
     raise NotImplementedError(
@@ -174,29 +170,21 @@ class TagSelection(Selection):
 
   def __iter__(self) -> Iterator[Any]:
     """Yields all values for the selected tag."""
-    all_values = []
 
-    def traverse_fn(unused_all_paths, old_value):
-      if isinstance(old_value, config.Buildable):
-        for name, tags in old_value.__argument_tags__.items():
+    for value in _memoized_walk_leaves_first(self.cfg):
+      if isinstance(value, config.Buildable):
+        for name, tags in value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
-            all_values.append(getattr(old_value, name))
-      return (yield)
-
-    daglish.memoized_traverse(traverse_fn, self.cfg)
-    return iter(all_values)
+            yield getattr(value, name)
 
   def replace(self, value: Any, deepcopy: bool = False) -> None:
 
-    def traverse_fn(unused_path, old_value):
-      if isinstance(old_value, config.Buildable):
-        for name, tags in old_value.__argument_tags__.items():
+    for node_value in _memoized_walk_leaves_first(self.cfg):
+      if isinstance(node_value, config.Buildable):
+        for name, tags in node_value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
             to_set = value if not deepcopy else copy.deepcopy(value)
-            setattr(old_value, name, to_set)
-      return (yield)
-
-    daglish.traverse_with_path(traverse_fn, self.cfg)
+            setattr(node_value, name, to_set)
 
   def get(self, name: str) -> Iterator[Any]:
     raise NotImplementedError(

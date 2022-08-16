@@ -144,6 +144,16 @@ def colab_example_base_config() -> fdl.Config[Sequential]:
 
 class SelectionTest(absltest.TestCase):
 
+  def test_unsupported_select_arg_combinations(self):
+    cfg = encoder_decoder_config()
+    with self.assertRaises(NotImplementedError):
+      selectors.select(cfg, fn_or_cls=Attention, tag=ActivationDType)
+    with self.assertRaises(NotImplementedError):
+      selectors.select(cfg, tag=ActivationDType, match_subclasses=False)
+
+
+class NodeSelectionTest(absltest.TestCase):
+
   def test_matches_everything(self):
     cfg = encoder_decoder_config()
     sel = typing.cast(selectors.NodeSelection, selectors.select(cfg))
@@ -201,6 +211,19 @@ class SelectionTest(absltest.TestCase):
         selectors.select(cfg, Attention).get("kernel_init"))
     self.assertCountEqual(["kernel1", "kernel1", "kernel2"], attention_kernels)
 
+
+class TagSelectionTest(absltest.TestCase):
+
+  def test_iter_values(self):
+    config = encoder_decoder_config()
+    fdl.add_tag(config.encoder.attention, "kernel_init", KernelInitializerTag)
+    config.encoder.attention.kernel_init = "test_init_fn"
+    self.assertEqual(
+        list(selectors.select(config, tag=KernelInitializerTag)),
+        ["test_init_fn"])
+    self.assertEqual(
+        list(selectors.select(config, tag=AnyInitializerTag)), ["test_init_fn"])
+
   def test_select_tag_subclasses(self):
     config = fdl.Config(Attention, dtype="float32")
     fdl.add_tag(config, "kernel_init", KernelInitializerTag)
@@ -225,12 +248,16 @@ class SelectionTest(absltest.TestCase):
     cfg = colab_example_base_config()
     selectors.select(cfg, tag=ActivationDType).replace(value=FakeInt32())
 
-  def test_unsupported_select_arg_combinations(self):
-    cfg = encoder_decoder_config()
-    with self.assertRaises(NotImplementedError):
-      selectors.select(cfg, fn_or_cls=Attention, tag=ActivationDType)
-    with self.assertRaises(NotImplementedError):
-      selectors.select(cfg, tag=ActivationDType, match_subclasses=False)
+  def test_replace_doesnt_infinitely_recurse(self):
+    """Tests that replace() works when the tag is in the replacement."""
+    config = fdl.Config(Attention, dtype="float32")
+    fdl.add_tag(config, "kernel_init", KernelInitializerTag)
+    config.bias_init = 2
+
+    selectors.select(
+        config, tag=KernelInitializerTag).replace(
+            value=KernelInitializerTag.new("actual_value"))
+    self.assertEqual(fdl.build(config), Attention("float32", "actual_value", 2))
 
 
 if __name__ == "__main__":
