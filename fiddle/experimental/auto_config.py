@@ -110,6 +110,9 @@ class _BoundAutoConfig:
     return self.auto_config.always_inline
 
 
+AutoConfigFn = Union[AutoConfig, _BoundAutoConfig]
+
+
 def _returns_buildable(signature: inspect.Signature) -> bool:
   """Returns True iff the return annotation is a subclass of config.Buildable."""
   return (signature.return_annotation is not signature.empty and
