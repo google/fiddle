@@ -495,7 +495,7 @@ def auto_config(
     containing the rewritten function.
   """
   if experimental_always_inline is None:
-    experimental_always_inline = False
+    experimental_always_inline = True
 
   def make_auto_config(fn):
     if isinstance(fn, (staticmethod, classmethod)):

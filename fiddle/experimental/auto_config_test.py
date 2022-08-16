@@ -647,6 +647,20 @@ class InlineTest(test_util.TestCase):
     self.assertEqual(cfg.y, 7)
     self.assertEqual(orig, fdl.build(cfg))
 
+  def test_always_inline_default_is_true(self):
+
+    @auto_config.auto_config
+    def inlined_fn():
+      return SampleClass(arg1=1, arg2=2)
+
+    @auto_config.auto_config
+    def calling_fn():
+      return inlined_fn()
+
+    expected_config = fdl.Config(SampleClass, arg1=1, arg2=2)
+    actual_config = calling_fn.as_buildable()
+    self.assertEqual(expected_config, actual_config)
+
   def test_inlining_nested_config(self):
 
     @auto_config.auto_config(experimental_always_inline=False)
