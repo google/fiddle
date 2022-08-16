@@ -110,7 +110,9 @@ class NamedTupleType:
   pass
 
 
-PathElementsFn = Callable[[Any], Tuple[PathElement]]
+# This has the same type as Path, but different semantic meaning.
+PathElements = Tuple[PathElement, ...]
+PathElementsFn = Callable[[Any], PathElements]
 FlattenFn = Callable[[Any], Tuple[Tuple[Any, ...], Any]]
 UnflattenFn = Callable[[Iterable[Any], Any], Any]
 
