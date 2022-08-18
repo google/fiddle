@@ -26,8 +26,8 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable
 
 from fiddle import history
 from fiddle import tag_type
+from fiddle._src import field_metadata
 from fiddle.experimental import daglish
-from fiddle.experimental import dataclasses as fdl_dc
 
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
@@ -120,10 +120,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if dataclasses.is_dataclass(self.__fn_or_cls__):
       fields = dataclasses.fields(self.__fn_or_cls__)
       for field in fields:
-        metadata = fdl_dc.field_metadata(field)
+        metadata = field_metadata.field_metadata(field)
         if metadata:
           for tag in metadata.tags:
             add_tag(self, field.name, tag)
+          if (metadata.buildable_initializer and field.name not in arguments):
+            setattr(self, field.name, metadata.buildable_initializer())
 
     for name, value in arguments.items():
       setattr(self, name, value)

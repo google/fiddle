@@ -28,31 +28,27 @@ import types
 from typing import Any, Collection, Mapping, Optional, Union
 
 from fiddle import tag_type
+from fiddle._src import field_metadata
+from fiddle.experimental import auto_config
 
 TagOrTags = Union[tag_type.TagType, Collection[tag_type.TagType]]
-_FIDDLE_DATACLASS_METADATA_KEY = object()
 
-
-# TODO: Add kw_only=True when available.
-@dataclasses.dataclass(frozen=True)
-class FieldMetadata:
-  """Fiddle-specific metadata that can be attached to each dataclasses.Field.
-
-  Attributes:
-    tags: A collection of tags to attach to the field.
-  """
-  tags: Collection[tag_type.TagType] = ()
-  # TODO: Add additional metadata types here (value validation rules,
-  # autofill / auto_config settings, etc).
+FieldMetadata = field_metadata.FieldMetadata
 
 
 def field(*,
-          tags: Optional[TagOrTags] = None,
+          default_factory: Any = dataclasses.MISSING,
+          tags: Optional[TagOrTags] = tuple(),
           metadata: Optional[Mapping[Any, Any]] = None,
           **kwargs) -> Union[dataclasses.Field[Any], Any]:
   """A wrapper around dataclasses.field to add optional Fiddle metadata.
 
   Args:
+    default_factory: This has the same meaning as
+      `dataclasses.fields.default_factory`, with the addition that if it's an
+      `@auto_config`'d function, then the `as_buildable` will be used to
+      initalize this field when creating a `fdl.Buildable` for the enclosing
+      type.
     tags: One or more tags to attach to the `fdl.Buildable`'s argument
       corresponding to the field.
     metadata: Any additional metadata to include.
@@ -68,16 +64,16 @@ def field(*,
   if isinstance(tags, tag_type.TagType):
     tags = (tags,)
 
+  buildable_initializer = (
+      default_factory.as_buildable
+      if auto_config.is_auto_config(default_factory) else None)
+
   metadata: Mapping[Any, Any] = types.MappingProxyType(metadata or {})
+  # pylint: disable=protected-access
   metadata = {
-      **metadata, _FIDDLE_DATACLASS_METADATA_KEY: FieldMetadata(tags=tags)
+      **metadata, field_metadata._FIDDLE_DATACLASS_METADATA_KEY:
+          FieldMetadata(tags=tags, buildable_initializer=buildable_initializer)
   }
-  return dataclasses.field(metadata=metadata, **kwargs)
-
-
-def field_metadata(
-    field_object: dataclasses.Field[Any]) -> Optional[FieldMetadata]:
-  """Retrieves the Fiddle-specific metadata (if present) on `field`."""
-  # Note: `field_object` is named as such, and not `field` to avoid shadowing
-  # the `field` symbol (function) defined above.
-  return field_object.metadata.get(_FIDDLE_DATACLASS_METADATA_KEY)
+  # pylint: enable=protected-access
+  return dataclasses.field(
+      default_factory=default_factory, metadata=metadata, **kwargs)
