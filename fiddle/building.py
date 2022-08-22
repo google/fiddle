@@ -20,7 +20,7 @@ import threading
 from typing import Any, Callable, Dict, Optional, TypeVar, Tuple, overload
 
 from fiddle import config
-from fiddle import tagging
+from fiddle import tag_type
 from fiddle.experimental import daglish
 from fiddle.experimental import daglish_traversal
 
@@ -128,7 +128,7 @@ def _build(value: Any, state: Optional[daglish_traversal.State] = None) -> Any:
     arguments = metadata.arguments(sub_traversal.values)
     try:
       return value.__build__(**arguments)
-    except tagging.TaggedValueNotFilledError:
+    except tag_type.TaggedValueNotFilledError:
       raise
     except Exception as e:
       path_str = '<root>' + daglish.path_str(state.current_path)
@@ -166,5 +166,6 @@ def build(buildable):
   Returns:
     The built version of `buildable`.
   """
+
   with _in_build():
     return _build(buildable)

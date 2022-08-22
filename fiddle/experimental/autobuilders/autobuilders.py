@@ -71,7 +71,7 @@ import dataclasses
 import inspect
 from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
 
-import fiddle as fdl
+from fiddle import config as config_lib
 import typing_extensions
 
 S = TypeVar("S")
@@ -82,13 +82,13 @@ FnOrCls = Union[Type[S], Callable[..., S]]
 
 class SkeletonFn(Generic[S], typing_extensions.Protocol):
 
-  def __call__(self, cfg: fdl.Config[S]) -> None:
+  def __call__(self, cfg: config_lib.Config[S]) -> None:
     pass
 
 
 class ValidatorFn(Generic[S], typing_extensions.Protocol):
 
-  def __call__(self, cfg: fdl.Config[S]) -> None:
+  def __call__(self, cfg: config_lib.Config[S]) -> None:
     pass
 
 
@@ -156,7 +156,7 @@ class Registry:
 
   def config(self,
              fn_or_cls: FnOrCls[T],
-             require_skeleton: bool = True) -> fdl.Config[T]:
+             require_skeleton: bool = True) -> config_lib.Config[T]:
     """Creates a configuration instance of a given function or class.
 
     Args:
@@ -172,7 +172,7 @@ class Registry:
       KeyError: If there is no skeleton registered for the given class, and
         require_skeleton is True (the default).
     """
-    base_config = fdl.Config(fn_or_cls)
+    base_config = config_lib.Config(fn_or_cls)
     entry = self.table[fn_or_cls]
     if entry.skeleton_fn is None:
       if require_skeleton:
@@ -283,7 +283,7 @@ class Registry:
       else:
         arg_to_type[name] = parameter.annotation
 
-    def arg_type_skeleton(cfg: fdl.Config):
+    def arg_type_skeleton(cfg: config_lib.Config):
       for name, type_to_configure in arg_to_type.items():
         setattr(
             cfg, name,

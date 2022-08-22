@@ -33,6 +33,7 @@ from typing import Any, Callable, cast, Optional, Union
 
 from fiddle import building
 from fiddle import config
+from fiddle.experimental import auto_config_policy
 from fiddle.experimental import daglish
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
@@ -119,76 +120,6 @@ def _returns_buildable(signature: inspect.Signature) -> bool:
   return (signature.return_annotation is not signature.empty and
           inspect.isclass(signature.return_annotation) and
           issubclass(signature.return_annotation, config.Buildable))
-
-
-def _is_auto_config_eligible(fn_or_cls):
-  """Helper to determine if `fn_or_cls` is eligible for auto-config."""
-  try:
-    signature = inspect.signature(fn_or_cls)
-  except ValueError:
-    signature = None
-
-  try:
-    _ = hash(fn_or_cls)
-  except TypeError:
-    has_hash = False
-  else:
-    has_hash = True
-
-  is_buildable = (
-      inspect.isclass(fn_or_cls) and issubclass(fn_or_cls, config.Buildable))
-
-  is_inlineable_auto_config = (
-      isinstance(fn_or_cls, (AutoConfig, _BoundAutoConfig)) and
-      cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline)
-
-  return (
-      # We can find a signature...
-      signature is not None and
-      # It's not a builtin function...
-      not inspect.isbuiltin(fn_or_cls) and
-      # It's not a builtin type like range()...
-      (has_hash and fn_or_cls not in _BUILTINS) and
-      # It's not a `fdl.Buildable` already...
-      not is_buildable and
-      # It's not a method...
-      not inspect.ismethod(fn_or_cls) and
-      # It's not an `auto_config`ed function (or is an api_boundary)...
-      not is_inlineable_auto_config and
-      # It's not a function returning a `fdl.Buildable`...
-      not _returns_buildable(signature)
-  )  # pyformat: disable
-
-
-def auto_config_call_handler(fn_or_cls, *args, **kwargs):
-  """Handles calls in auto_config'ed functions.
-
-  This intercepts calls in an auto-configed function, and determines whether the
-  called `fn_or_cls` should be wrapped in a `Config` or `Partial`. If
-  `fn_or_cls` is `functools.partial`, the call will instead be converted into a
-  call to Fiddle's `Partial`. If it is "auto-config eligible" (see
-  `_is_auto_config_eligible`), then a `Config` will be create for `fn_or_cls`
-  with the provided arguments. Otherwise, `fn_or_cls` is called directly.
-
-  Args:
-    fn_or_cls: The function or class being called.
-    *args: The positional arguments with which `fn_or_cls` is being called.
-    **kwargs: The keyword arguments with which `fn_or_cls` is being called.
-
-  Returns:
-    Depending on `fn_or_cls`, either `Partial`, a `Config`, or the result of
-    calling `fn_or_cls` with the provided arguments.
-  """
-  if fn_or_cls is functools.partial:
-    return config.Partial(args[0], *args[1:], **kwargs)
-
-  if _is_auto_config_eligible(fn_or_cls):
-    return config.Config(fn_or_cls, *args, **kwargs)
-
-  if hasattr(fn_or_cls, 'as_buildable'):
-    return fn_or_cls.as_buildable(*args, **kwargs)
-
-  return fn_or_cls(*args, **kwargs)
 
 
 class UnsupportedLanguageConstructError(SyntaxError):
@@ -424,6 +355,7 @@ def auto_config(
     *,
     experimental_allow_control_flow=False,
     experimental_always_inline: Optional[bool] = None,
+    experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,  # pylint: disable=line-too-long
 ) -> Any:  # TODO: More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
@@ -493,6 +425,11 @@ def auto_config(
       `auto_config` context) will always be `inline`'d in-place. See the
       documentation on `inline` for an example. The default (if unspecified) is
       currently `False`, but this may change in the future.
+    experimental_exemption_policy: An optional policy to control which function
+      calls within the body of `fn` should be turned into `fdl.Config`s and
+      which ones should simply be executed normally during the `as_buildable`
+      interpretation of `fn`. This predicate should return `True` if the given
+      callable should be exempted from auto-configuration.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
@@ -500,6 +437,41 @@ def auto_config(
   """
   if experimental_always_inline is None:
     experimental_always_inline = True
+
+  if experimental_exemption_policy is None:
+    experimental_exemption_policy = auto_config_policy.latest
+
+  def auto_config_call_handler(fn_or_cls, *args, **kwargs):
+    """Handles calls in auto_config'ed functions.
+
+    This intercepts calls in an auto-configed function, and determines whether
+    the called `fn_or_cls` should be wrapped in a `Config` or `Partial`. If
+    `fn_or_cls` is `functools.partial`, the call will instead be converted into
+    a call to Fiddle's `Partial`. If it is "auto-config eligible" (see
+    `experimental_custom_call_policy`), then a `Config` will be create for
+    `fn_or_cls` with the provided arguments. Otherwise, `fn_or_cls` is called
+    directly.
+
+    Args:
+      fn_or_cls: The function or class being called.
+      *args: The positional arguments with which `fn_or_cls` is being called.
+      **kwargs: The keyword arguments with which `fn_or_cls` is being called.
+
+    Returns:
+      Depending on `fn_or_cls`, either `Partial`, a `Config`, or the result of
+      calling `fn_or_cls` with the provided arguments.
+    """
+    if (is_auto_config(fn_or_cls) and
+        cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline):
+      return fn_or_cls.as_buildable(*args, **kwargs)
+
+    if fn_or_cls is functools.partial:
+      return config.Partial(args[0], *args[1:], **kwargs)
+
+    if experimental_exemption_policy(fn_or_cls):
+      return fn_or_cls(*args, **kwargs)
+
+    return config.Config(fn_or_cls, *args, **kwargs)
 
   def make_auto_config(fn):
     if isinstance(fn, (staticmethod, classmethod)):

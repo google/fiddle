@@ -26,6 +26,7 @@ from absl.testing import parameterized
 
 import fiddle as fdl
 from fiddle.experimental import auto_config
+from fiddle.experimental import auto_config_policy
 from fiddle.experimental import autobuilders as ab
 from fiddle.testing import test_util
 
@@ -200,18 +201,18 @@ class AutoConfigTest(parameterized.TestCase):
   def test_auto_config_eligibility(self):
     # Some common types that have no signature.
     for builtin_type in (range, dict):
-      self.assertFalse(auto_config._is_auto_config_eligible(builtin_type))
+      self.assertTrue(auto_config_policy.v1(builtin_type))
     # Some common builtins.
     for builtin in (list, tuple, sum, any, all, iter):
-      self.assertFalse(auto_config._is_auto_config_eligible(builtin))
-    self.assertFalse(auto_config._is_auto_config_eligible([].append))
-    self.assertFalse(auto_config._is_auto_config_eligible({}.keys))
+      self.assertTrue(auto_config_policy.v1(builtin))
+    self.assertTrue(auto_config_policy.v1([].append))
+    self.assertTrue(auto_config_policy.v1({}.keys))
     # A method.
     test_class = SampleClass(1, 2)
-    self.assertFalse(auto_config._is_auto_config_eligible(test_class.method))
+    self.assertFalse(auto_config_policy.v1(test_class.method))
     # Buildable subclasses.
-    self.assertFalse(auto_config._is_auto_config_eligible(fdl.Config))
-    self.assertFalse(auto_config._is_auto_config_eligible(fdl.Partial))
+    self.assertTrue(auto_config_policy.v1(fdl.Config))
+    self.assertTrue(auto_config_policy.v1(fdl.Partial))
     # Auto-config annotations are not eligible, and this case is tested in
     # `test_calling_auto_config` above.
 
@@ -393,7 +394,32 @@ class AutoConfigTest(parameterized.TestCase):
     cfg = instance.my_fn.as_buildable('a')
     self.assertEqual(cfg.__fn_or_cls__, basic_fn)
     self.assertEqual(cfg.arg, 'a')
-    self.assertEqual(cfg.kwarg, 42)
+    self.assertEqual(cfg.kwarg, fdl.Config(super(MyClass, instance).method))
+
+  def test_custom_policy(self):
+
+    def make_list(max_value):
+      return list(range(max_value))
+
+    def custom_policy(fn):
+      if fn is make_list:
+        return True
+      return auto_config_policy.v1(fn)
+
+    def make_sample(max_value):
+      return SampleClass(arg1=make_list(max_value), arg2=None)
+
+    with_policy = auto_config.auto_config(
+        experimental_exemption_policy=custom_policy)(
+            make_sample)
+    without_policy = auto_config.auto_config(make_sample)
+
+    expected_without_policy = fdl.Config(SampleClass, fdl.Config(make_list, 5),
+                                         None)
+    expected_with_policy = fdl.Config(SampleClass, list(range(5)), None)
+
+    self.assertEqual(with_policy.as_buildable(5), expected_with_policy)
+    self.assertEqual(without_policy.as_buildable(5), expected_without_policy)
 
   def test_function_metadata(self):
 

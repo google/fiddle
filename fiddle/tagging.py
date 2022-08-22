@@ -61,18 +61,17 @@ from __future__ import annotations
 
 import collections
 import inspect
+import typing
 from typing import Any, Collection, FrozenSet, Generic, Optional, TypeVar, Union
 
 from fiddle import config
 from fiddle import tag_type
+from fiddle.experimental import auto_config
 from fiddle.experimental import daglish_traversal
 from fiddle.experimental import serialization
 
 TagType = tag_type.TagType
-
-
-class TaggedValueNotFilledError(ValueError):
-  """A TaggedValue was not filled when build() was called."""
+TaggedValueNotFilledError = tag_type.TaggedValueNotFilledError
 
 
 class _NoValue:
@@ -119,6 +118,11 @@ class Tag(metaclass=TagType):
       A TaggedValue tagged with the tag `cls`.
     """
     return TaggedValue(tags=(cls,), default=default)
+
+  if not typing.TYPE_CHECKING:
+    new = classmethod(
+        auto_config.AutoConfig(
+            func=new.__func__, buildable_func=new.__func__, always_inline=True))
 
 
 T = TypeVar('T')
