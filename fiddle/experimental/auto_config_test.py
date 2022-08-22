@@ -47,6 +47,7 @@ class SampleClass:
     return 42
 
 
+@auto_config.auto_unconfig(experimental_always_inline=True)
 def explicit_config_building_fn(x: int) -> fdl.Config:
   return fdl.Config(basic_fn, 5, kwarg=x)
 
@@ -605,6 +606,83 @@ class AutoConfigTest(parameterized.TestCase):
         auto_config.UnsupportedLanguageConstructError,
         r'Async function definitions are not supported by auto_config\.'):
       auto_config.auto_config(test_config)
+
+
+class AutoUnconfigTest(absltest.TestCase):
+
+  def test_simple_inline(self):
+
+    @auto_config.auto_unconfig(experimental_always_inline=True)
+    def simple(x: int) -> fdl.Config[SampleClass]:
+      cfg = fdl.Config(SampleClass)
+      cfg.arg1 = x
+      cfg.arg2 = str(x)
+      return cfg
+
+    @auto_config.auto_config
+    def parent():
+      return SampleClass(arg1=simple(42), arg2=5)
+
+    expected = fdl.Config(
+        SampleClass, arg1=fdl.Config(SampleClass, 42, '42'), arg2=5)
+
+    self.assertEqual(expected, parent.as_buildable())
+
+  def test_simple_not_inline(self):
+
+    @auto_config.auto_unconfig(experimental_always_inline=False)
+    def simple(x: int) -> fdl.Config[SampleClass]:
+      cfg = fdl.Config(SampleClass)
+      cfg.arg1 = x
+      cfg.arg2 = str(x)
+      return cfg
+
+    @auto_config.auto_config
+    def parent():
+      return SampleClass(arg1=simple(42), arg2=5)
+
+    expected = fdl.Config(SampleClass, arg1=fdl.Config(simple, 42), arg2=5)
+
+    self.assertEqual(expected, parent.as_buildable())
+
+  def test_python_execution(self):
+
+    @auto_config.auto_unconfig
+    def simple(x: int) -> fdl.Config[SampleClass]:
+      cfg = fdl.Config(SampleClass)
+      cfg.arg1 = x
+      cfg.arg2 = str(x)
+      return cfg
+
+    @auto_config.auto_config
+    def parent():
+      return SampleClass(arg1=simple(42), arg2=5)
+
+    expected = SampleClass(arg1=SampleClass(42, '42'), arg2=5)
+
+    self.assertEqual(expected, parent())
+
+  def test_nested_python_execution(self):
+
+    @auto_config.auto_unconfig
+    def simple(x: int) -> fdl.Config[SampleClass]:
+      cfg = fdl.Config(SampleClass)
+      cfg.arg1 = x
+      cfg.arg2 = str(x)
+      return cfg
+
+    def regular_python_wrapper(x) -> SampleClass:
+      return simple(x - 1)
+
+    @auto_config.auto_unconfig
+    def parent() -> fdl.Config[SampleClass]:
+      cfg = fdl.Config(SampleClass)
+      cfg.arg1 = fdl.Config(regular_python_wrapper, 42)
+      cfg.arg2 = 5
+      return cfg
+
+    expected = SampleClass(SampleClass(41, '41'), 5)
+    self.assertEqual(expected, parent())
 
 
 class InlineTest(test_util.TestCase):

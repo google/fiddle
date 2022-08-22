@@ -31,6 +31,7 @@ import textwrap
 import types
 from typing import Any, Callable, cast, Optional, Union
 
+from fiddle import building
 from fiddle import config
 from fiddle.experimental import daglish
 
@@ -582,6 +583,93 @@ def auto_config(
     return make_auto_config
   else:
     return make_auto_config(fn)
+
+
+def auto_unconfig(
+    fn=None,
+    *,
+    experimental_always_inline: Optional[bool] = None
+) -> Any:  # TODO: More precise return type.
+  """Converts functions that create buildables directly into auto_config form.
+
+  While most of the time, the benefits of an auto_config representation of
+  object configuration and construction are valuable (e.g. static type
+  checking and tooling / refactoring support), sometimes it is more convenient
+  to manipulate buildable objects directly. `auto_unconfig` converts a function
+  that directly manipulates `fdl.Buildable`s (e.g. `fdl.Config`s) into one that
+  looks identically to an `auto_config`'d function, and is fully interoperable
+  with the rest of the `auto_config` ecosystem.
+
+  Example:
+
+  ```py
+  @auto_unconfig
+  def make_experiment_trainer(name: str) -> fdl.Config[MyTrainer]
+    model = make_model.as_buildable(name)
+    select(model, DropOut).set(rate=0.42)  # Full Fiddle API available!
+    dataset = make_dataset.as_buildable()
+    # Build fdl.Config's imperatively.
+    trainer_config = fdl.Config(MyTrainer)
+    trainer_config.model = model
+    trainer_config.train_dataset = dataset
+    trainer_config.skip_eval = True
+    return trainer_config  # Return a `fdl.Buildable`
+
+  # Sample usage within an auto_config'd function.
+  @auto_config
+  def make_driver():
+    return TrainerDriver(
+      trainer=make_experiment_trainer('my_experiment'),
+      checkpointer=CustomCheckpointer())
+
+  # Sample usage outside of auto_config contexts.
+  def main():
+    # Use instantiated objects:
+    trainer = make_experiment_trainer('my_experiment')
+    for example in trainer.train_dataset:
+      print_prediction(trainer.model.predict(example))
+
+    # Or manipulate the configuration before calling `fdl.build`:
+    trainer_config = make_experiment_trainer.as_buildable('my_experiment')
+    trainer_config.skip_eval = False  # Tweak configuration.
+    trainer2 = fdl.build(trainer_config)
+    run_trainer(trainer2)
+  ```
+
+  Args:
+    fn: The function to convert.
+    experimental_always_inline: Whether the output of `fn` should always be
+      inlined into the caller's config.
+
+  Returns:
+    An `AutoConfig` that corresponds to `fn`.
+  """
+
+  if experimental_always_inline is None:
+    experimental_always_inline = True
+
+  def make_unconfig(fn) -> AutoConfig:
+
+    @functools.wraps(fn)
+    def python_implementation(*args, **kwargs):
+      previous = building._state.in_build  # pytype: disable=module-attr # pylint: disable=protected-access
+      building._state.in_build = False  # pytype: disable=module-attr # pylint: disable=protected-access
+      try:
+        cfg = fn(*args, **kwargs)
+        return building.build(cfg)
+      finally:
+        building._state.in_build = previous  # pytype: disable=module-attr # pylint: disable=protected-access
+
+    return AutoConfig(
+        func=python_implementation,
+        buildable_func=fn,
+        always_inline=experimental_always_inline)
+
+  # We use this pattern to support using the decorator with and without
+  # parenthesis.
+  if fn is None:
+    return make_unconfig
+  return make_unconfig(fn)
 
 
 def is_auto_config(function_object: Any) -> bool:
