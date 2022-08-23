@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterable, List
 from fiddle import config
 from fiddle import graphviz
 from fiddle.experimental import daglish
-import tree
+from fiddle.experimental import daglish_traversal
 
 
 def _raise_error():
@@ -108,6 +108,11 @@ def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:
   If a sub-Buildable has multiple paths from the root to it, its depth is the
   *minimum* distance of those paths.
 
+  Furthermore, only Buildable nodes count towards the depth; if a
+  sub-configuration is nested in containers like lists, tuples, or dicts, those
+  do not count. This is because this function is primarily geared towards
+  visualization, and those containers are usually displayed inline.
+
   Args:
     cfg: Root buildable object.
     depth: Depth value.
@@ -118,21 +123,19 @@ def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:
   node_to_depth: Dict[int, int] = {}  # Buildable hash --> min depth.
   id_to_node: Dict[int, config.Buildable] = {}  # Buildable hash --> Buildable.
 
-  def _make_depth_map(node: config.Buildable, curr_depth: int):
-    """Mapper function to generate the `node_to_depth` map."""
-    if id(node) in node_to_depth:
-      node_to_depth[id(node)] = min(node_to_depth[id(node)], curr_depth)
-    else:
-      node_to_depth[id(node)] = curr_depth
-    id_to_node[id(node)] = node
+  def _path_len(path: daglish.Path) -> int:
+    return sum(1 if isinstance(elt, daglish.Attr) else 0 for elt in path)
 
-    def leaf_fn(leaf):
-      if isinstance(leaf, config.Buildable):
-        _make_depth_map(leaf, curr_depth + 1)
+  def traverse(node, state=None) -> None:
+    state = state or daglish_traversal.MemoizedTraversal.begin(traverse, node)
+    if isinstance(node, config.Buildable):
+      all_paths = state.get_all_paths(allow_caching=True)
+      node_to_depth[id(node)] = min(_path_len(path) for path in all_paths)
+      id_to_node[id(node)] = node
+    if state.is_traversable(node):
+      state.flattened_map_children(node)
 
-    tree.map_structure(leaf_fn, node.__arguments__)
-
-  _make_depth_map(cfg, 0)
+  traverse(cfg)
 
   return [
       id_to_node[key]
