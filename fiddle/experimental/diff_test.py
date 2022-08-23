@@ -70,7 +70,10 @@ parse_reference = testing.parse_reference
 @dataclasses.dataclass(frozen=True)
 class UnsupportedPathElement(daglish.PathElement):
   code = property(lambda self: '<unsupported>')
-  follow = lambda self, container: container
+  get_in = lambda self, container: container
+  set_in = lambda self, container, new_value: None
+  delete_in = lambda self, container: None
+  is_in = lambda self, container: None
 
 
 class DiffAlignmentTest(absltest.TestCase):

@@ -19,7 +19,7 @@ import abc
 import collections
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, cast, Dict, Generator, Iterable, List, Optional, Tuple, Type, TypeVar, Union
 
 
 class PathElement(metaclass=abc.ABCMeta):
@@ -32,8 +32,20 @@ class PathElement(metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
   @abc.abstractmethod
-  def follow(self, container) -> Any:
+  def get_in(self, container) -> Any:
     """Returns the element of `container` specified by this path element."""
+
+  @abc.abstractmethod
+  def set_in(self, container, new_value):
+    """Updates the element of `container` specified by this path element."""
+
+  @abc.abstractmethod
+  def delete_in(self, container):
+    """Removes the element of `container` specified by this path element."""
+
+  @abc.abstractmethod
+  def is_in(self, container) -> bool:
+    """Returns true if `container` contains an element corresponding to `self`."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -45,8 +57,24 @@ class Index(PathElement):
   def code(self) -> str:
     return f"[{self.index}]"
 
-  def follow(self, container: Union[List[Any], Tuple[Any, ...]]) -> Any:
+  def get_in(self, container: Union[List[Any], Tuple[Any, ...]]) -> Any:
     return container[self.index]
+
+  def set_in(self, container: Union[List[Any], Tuple[Any, ...]],
+             new_value: Any):
+    if isinstance(container, tuple):
+      raise ValueError(f"Cannot update an immutable type {container!r}.")
+    container = cast(List[Any], container)
+    container[self.index] = new_value
+
+  def delete_in(self, container: Union[List[Any], Tuple[Any, ...]]):
+    if isinstance(container, tuple):
+      raise ValueError(f"Cannot update an immutable type {container!r}.")
+    container = cast(List[Any], container)
+    del container[self.index]
+
+  def is_in(self, container: Union[List[Any], Tuple[Any, ...]]) -> bool:
+    return self.index < len(container)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,8 +86,17 @@ class Key(PathElement):
   def code(self) -> str:
     return f"[{self.key!r}]"
 
-  def follow(self, container: Dict[Any, Any]) -> Any:
+  def get_in(self, container: Dict[Any, Any]) -> Any:
     return container[self.key]
+
+  def set_in(self, container: Dict[Any, Any], new_value: Any):
+    container[self.key] = new_value
+
+  def delete_in(self, container: Dict[Any, Any]):
+    del container[self.key]
+
+  def is_in(self, container: Dict[Any, Any]) -> bool:
+    return self.key in container
 
 
 @dataclasses.dataclass(frozen=True)
@@ -71,8 +108,17 @@ class Attr(PathElement):
   def code(self) -> str:
     return f".{self.name}"
 
-  def follow(self, container: Any) -> Any:
+  def get_in(self, container: Any) -> Any:
     return getattr(container, self.name)
+
+  def set_in(self, container: Any, new_value: Any):
+    setattr(container, self.name, new_value)
+
+  def delete_in(self, container: Any):
+    delattr(container, self.name)
+
+  def is_in(self, container: Any) -> bool:
+    return hasattr(container, self.name)
 
 
 class BuildableAttr(Attr):
@@ -125,6 +171,7 @@ class NodeTraverser:
   flatten: FlattenFn
   unflatten: UnflattenFn
   path_elements: PathElementsFn
+  all_path_elements: PathElementsFn
 
 
 class NodeTraverserRegistry:
@@ -139,6 +186,7 @@ class NodeTraverserRegistry:
       flatten_fn: FlattenFn,
       unflatten_fn: UnflattenFn,
       path_elements_fn: PathElementsFn,
+      all_path_elements_fn: Optional[PathElementsFn] = None,
   ) -> None:
     """Registers a node traverser for `node_type` in the default registry.
 
@@ -156,16 +204,22 @@ class NodeTraverserRegistry:
         flattened values returned by `flatten_fn`. This should accept an
         instance of `node_type`, and return a sequence of `PathElement`s aligned
         with the values returned by `flatten_fn`.
+      all_path_elements_fn: A function that returns `PathElement` instances for
+        all potential paths in a `node_type` including some that may not be
+        included in the result of `flatten_fn`. If None, the `path_elements_fn`
+        is used instead.
     """
     if not isinstance(node_type, type):
       raise TypeError(f"`node_type` ({node_type}) must be a type.")
     if node_type in self._node_traversers:
       raise ValueError(
           f"A node traverser for {node_type} has already been registered.")
+    all_path_elements_fn = all_path_elements_fn or path_elements_fn
     self._node_traversers[node_type] = NodeTraverser(
         flatten=flatten_fn,
         unflatten=unflatten_fn,
         path_elements=path_elements_fn,
+        all_path_elements=all_path_elements_fn,
     )
 
   def find_node_traverser(
@@ -272,7 +326,7 @@ def path_str(path: Path) -> str:
 def follow_path(root: Any, path: Path):
   """Follows the path from a root item to a contained item, and returns it.
 
-  Equivalent to `functools.reduce(lambda v, p: p.follow(v), root, path)`,
+  Equivalent to `functools.reduce(lambda v, p: p.get_in(v), root, path)`,
   but gives better error messages.
 
   Args:
@@ -289,7 +343,7 @@ def follow_path(root: Any, path: Path):
   value = root
   for i, path_elt in enumerate(path):
     try:
-      value = path_elt.follow(value)
+      value = path_elt.get_in(value)
     except (KeyError, IndexError, TypeError, AttributeError) as e:
       raise ValueError(f"{path_elt} is not compatible with "
                        f"root{path_str(path[:i])}={value!r}: {e}") from e

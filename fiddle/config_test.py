@@ -657,6 +657,23 @@ class ConfigTest(absltest.TestCase):
     varargs_config.abc = '123'
     self.assertEqual(['abc', 'arg1', 'kwarg1'], dir(varargs_config))
 
+  def test_all_path_elements(self):
+    c = config.Config(SampleClass, 1)
+    all_paths = c.__all_path_elements__()
+    self.assertEqual(all_paths,
+                     (daglish.Attr('arg1'), daglish.Attr('arg2'),
+                      daglish.Attr('kwarg1'), daglish.Attr('kwarg2')))
+
+  def test_all_path_elements_ordering(self):
+
+    def test_fn(z, y, x=5, **kwargs):  # pylint: disable=unused-argument
+      pass
+
+    c = config.Config(test_fn, y=7, c=8, a=10)
+    self.assertEqual(c.__all_path_elements__(),
+                     (daglish.Attr('z'), daglish.Attr('y'), daglish.Attr('x'),
+                      daglish.Attr('a'), daglish.Attr('c')))
+
   def test_partial_for_classes(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
     pytype_extensions.assert_type(class_partial, fdl.Partial[SampleClass])

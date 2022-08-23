@@ -57,16 +57,16 @@ class PathElementTest(absltest.TestCase):
 
   def test_follow(self):
     x = [[], {}, ()]
-    self.assertIs(daglish.Index(1).follow(x), x[1])
+    self.assertIs(daglish.Index(1).get_in(x), x[1])
 
     y = {"a": [], "b": {}, "c": ()}
-    self.assertIs(daglish.Key("a").follow(y), y["a"])
+    self.assertIs(daglish.Key("a").get_in(y), y["a"])
 
     z = Foo([], {})
-    self.assertIs(daglish.Attr("bar").follow(z), z.bar)
+    self.assertIs(daglish.Attr("bar").get_in(z), z.bar)
 
     cfg = fdl.Config(Foo)
-    self.assertIs(daglish.BuildableFnOrCls().follow(cfg), Foo)
+    self.assertIs(daglish.BuildableFnOrCls().get_in(cfg), Foo)
 
   def test_follow_path(self):
     root = [

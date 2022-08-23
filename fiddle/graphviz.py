@@ -700,7 +700,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
           if isinstance(transformed_value, _ChangedBuildable):
             old_child = transformed_value.arguments[path_elt.name]
           else:
-            old_child = path_elt.follow(transformed_value)
+            old_child = path_elt.get_in(transformed_value)
         child = _ChangedValue(old_child, _NoValue())
         changed_values.append((child, change))
 
