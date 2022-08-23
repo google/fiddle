@@ -41,7 +41,6 @@ setup(
     packages=find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},
     install_requires=[
-        'dm-tree',
         'libcst',
         'typing-extensions',
     ],

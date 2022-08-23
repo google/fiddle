@@ -27,7 +27,6 @@ from fiddle import history
 from fiddle.experimental import daglish
 
 import pytype_extensions
-import tree
 
 
 class Tag1(fdl.Tag):
@@ -413,8 +412,9 @@ class ConfigTest(absltest.TestCase):
     structure = fn_args['arg2']
 
     self.assertIsNot(shared_instance, separate_instance)
-    for leaf in tree.flatten(structure):
-      self.assertIs(leaf, shared_instance)
+    self.assertIs(structure['key1'][0], shared_instance)
+    self.assertIs(structure['key1'][1], shared_instance)
+    self.assertIs(structure['key2'][0], shared_instance)
 
     self.assertEqual(shared_instance.arg1, 'arg1')
     self.assertEqual(separate_instance.arg1, 'separate_arg1')
