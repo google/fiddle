@@ -52,12 +52,7 @@ class MaterializeTest(absltest.TestCase):
     self.assertEqual({'a': 'a'}, cfg.y[0].__arguments__)
     self.assertEqual({}, cfg.y[1].__arguments__)
 
-    materialize.materialize_defaults(cfg, recurse=False)
-    self.assertEqual({'a': 'a'}, cfg.y[0].__arguments__)
-    self.assertEqual({}, cfg.y[1].__arguments__)
-    self.assertEqual('abc', cfg.__arguments__['z'])
-
-    materialize.materialize_defaults(cfg, recurse=True)
+    materialize.materialize_defaults(cfg)
     self.assertEqual({'a': 'a', 'b': 'b'}, cfg.y[0].__arguments__)
     self.assertEqual({'b': 'b'}, cfg.y[1].__arguments__)
     self.assertEqual('abc', cfg.__arguments__['z'])

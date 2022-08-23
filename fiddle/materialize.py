@@ -27,11 +27,11 @@ more hermetic.
 
 from typing import Any
 
-from fiddle import config as buildable
-import tree
+from fiddle import config
+from fiddle.experimental import daglish_traversal
 
 
-def materialize_defaults(config: buildable.Buildable, *, recurse: bool = True):
+def materialize_defaults(value: Any) -> None:
   """Explicitly sets values for defaulted arguments.
 
   Buildable makes a distinction between a defaulted argument that hasn't been
@@ -47,20 +47,16 @@ def materialize_defaults(config: buildable.Buildable, *, recurse: bool = True):
   yet had a value explicitly set.
 
   Args:
-    config: The Buildable to materialize defaults on; materialization occurs in
-      place, and mutates `cfg`. If you would like `cfg` to be unmodified, make a
-      copy first with `copy.deepcopy(cfg)`.
-    recurse: Whether to recurse into the arguments of `cfg` and materialize
-      their defaults too.
+    value: A nested collection which may contain Buildable arguments.
   """
-  for arg in config.__signature__.parameters.values():
-    if arg.default is not arg.empty and arg.name not in config.__arguments__:
-      setattr(config, arg.name, arg.default)
-  if recurse:
-    tree.traverse(_materialize_defaults_traverse_function, config.__arguments__)
 
+  def traverse(node, state=None):
+    state = state or daglish_traversal.MemoizedTraversal.begin(traverse, node)
+    if isinstance(node, config.Buildable):
+      for arg in node.__signature__.parameters.values():
+        if arg.default is not arg.empty and arg.name not in node.__arguments__:
+          setattr(node, arg.name, arg.default)
+    if state.is_traversable(node):
+      state.flattened_map_children(node)
 
-def _materialize_defaults_traverse_function(leaf: Any):
-  """Callback used when traversing a tree in `materialize_config`."""
-  if isinstance(leaf, buildable.Buildable):
-    materialize_defaults(leaf, recurse=True)
+  traverse(value)
