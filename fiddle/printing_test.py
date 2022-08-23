@@ -24,6 +24,7 @@ from absl.testing import absltest
 import fiddle as fdl
 from fiddle import printing
 from fiddle import tagging
+from fiddle.experimental import daglish
 
 
 class SampleTag(tagging.Tag):
@@ -71,6 +72,20 @@ def annotated_kwargs_helper(**kwargs: int):  # pylint: disable=unused-argument
 _local_module_regex = r'(__main__|fiddle\.printing_test)'
 
 
+class PathStrTest(absltest.TestCase):
+
+  def test_empty(self):
+    self.assertEqual(printing._path_str(()), '')
+
+  def test_nested_attr(self):
+    path = (daglish.Attr('foo'), daglish.Attr('bar'))
+    self.assertEqual(printing._path_str(path), 'foo.bar')
+
+  def test_list(self):
+    path = (daglish.Index(0),)
+    self.assertEqual(printing._path_str(path), '[0]')
+
+
 class GetTypeAnnotationTest(absltest.TestCase):
 
   def test_get_type_annotation_root(self):
@@ -84,13 +99,6 @@ class AsStrFlattenedTests(absltest.TestCase):
     expected = re.escape(textwrap.dedent(expected)).replace(
         '__main__', _local_module_regex)
     self.assertRegex(actual, expected)
-
-  def test_path_to_str(self):
-    self.assertEqual(printing._path_to_str(()), '')
-    self.assertEqual(
-        printing._path_to_str((printing._ParamName('x'), 0)), 'x[0]')
-    self.assertEqual(
-        printing._path_to_str((printing._ParamName('a'), 2, 'x')), "a[2]['x']")
 
   def test_simple_printing(self):
     cfg = fdl.Config(fn_x_y, 1, 'abc')
@@ -336,6 +344,7 @@ class HistoryPerLeafParamTests(absltest.TestCase):
     cfg.x[0].y = 'abc'
     cfg.x[0].x = 4
     output = printing.history_per_leaf_parameter(cfg)
+    self.assertTrue(printing._has_nested_builder(cfg.x))
     expected = textwrap.dedent(rf"""
         __fn_or_cls__ = .*fn_x_y .+/printing_test.py:\d+:test_nested_in_collections
         x\[0\].__fn_or_cls__ = .*fn_x_y .+/printing_test.py:\d+:test_nested_in_collections
@@ -382,6 +391,26 @@ class HistoryPerLeafParamTests(absltest.TestCase):
           - previously: 5 .*
         z = 2 @ .*/printing_test.py:\d+:test_materialize_defaults_history
         x = <\[unset\]>""".strip('\n'))
+
+    self.assertRegex(output, expected)
+
+  def test_collection_of_two_buildables_history(self):
+    config_a = fdl.Config(fn_x_y, x=1)
+    config_a.x = 2
+    config_b = fdl.Config(fn_x_y, y=3)
+    config_b.x = 10
+    config_b.y = 4
+    output = printing.history_per_leaf_parameter([config_a, config_b])
+    name = r'.*printing_test.py:\d+:test_collection_of_two_buildables_history'
+    expected = textwrap.dedent(rf"""
+        \[0\].__fn_or_cls__ = <function fn_x_y at .*> @ {name}
+        \[0\].x = 2 @ {name}
+          - previously: 1 @ {name}
+        \[0\].y = <\[unset\]>
+        \[1\].__fn_or_cls__ = <function fn_x_y at .*> @ {name}
+        \[1\].y = 4 @ {name}
+          - previously: 3 @ {name}
+        \[1\].x = 10 @ {name}""".strip('\n'))
     self.assertRegex(output, expected)
 
 

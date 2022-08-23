@@ -18,7 +18,7 @@
 import copy
 import dataclasses
 import inspect
-from typing import Any, Iterator, List, Optional, Sequence, Type, Union
+from typing import Any, Iterator, List, Optional, Type
 
 from fiddle import config
 from fiddle import history
@@ -26,14 +26,6 @@ from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 from fiddle.experimental import daglish
 from fiddle.experimental import daglish_traversal
-import tree
-
-
-@dataclasses.dataclass(frozen=True)
-class _ParamName:
-  """Wrapper for a string to differentiate Buildable param names from dict keys."""
-  __slots__ = ('name',)
-  name: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,31 +43,29 @@ class _UnsetValue:
       return f'<[unset; default: {default_value}]>'
 
 
-_Leaf = Any
-_Path = Sequence[Union[int, str, _ParamName]]
-
-
-def _path_to_str(path: _Path) -> str:
-  """Converts a path to a string representation."""
-  output = ''
-  for item in path:
-    if isinstance(item, _ParamName):
-      if output:
-        output += '.' + item.name
-      else:
-        # First item.
-        output = item.name
-    else:
-      output += f'[{item!r}]'
-  return output
-
-
 def _has_nested_builder(value: Any, state=None) -> bool:
   state = state or daglish_traversal.MemoizedTraversal.begin(
       _has_nested_builder, value)
   return (isinstance(value, config.Buildable) or
           (state.is_traversable(value) and
            any(state.flattened_map_children(value).values)))
+
+
+def _path_str(path: daglish.Path) -> str:
+  """Formats path in a way customized to this file.
+
+  In the future, we may wish to consider a format that is readable for printing
+  more arbitrary collections.
+
+  Args:
+    path: A path, which typically starts with an attribute.
+
+  Returns:
+    String representation of the path.
+  """
+  path_str = daglish.path_str(path)
+  return (path_str[1:]
+          if path and isinstance(path[0], daglish.Attr) else path_str)
 
 
 def _format_value(value: Any, *, raw_value_repr: bool) -> str:
@@ -211,15 +201,12 @@ def as_str_flattened(cfg: config.Buildable,
         # Certain types, such as Union, do not have a __qualname__ attribute.
         type_annotation = f': {line.annotation}'
     value = _format_value(line.value, raw_value_repr=raw_value_repr)
-    path_str = daglish.path_str(line.path)
-    assert path_str.startswith('.'), 'Expected root to be a buildable'
-    path_str = path_str[1:]
-    return f'{path_str}{type_annotation} = {value}'
+    return f'{_path_str(line.path)}{type_annotation} = {value}'
 
   return '\n'.join(map(format_line, generate(cfg)))
 
 
-def history_per_leaf_parameter(cfg: config.Buildable,
+def history_per_leaf_parameter(cfg: Any,
                                *,
                                raw_value_repr: bool = False) -> str:
   """Returns a string representing the history of cfg's leaf params.
@@ -234,7 +221,11 @@ def history_per_leaf_parameter(cfg: config.Buildable,
   (ones that don't contain a reference to another Buildable).
 
   Args:
-    cfg: A buildable to generate a history for.
+    cfg: A buildable, or collection containing buildables, to generate a history
+      for. For non-Buildable collections, either (a) the entire collection will
+      be printed as a history element or (b) only nested Buildable elements will
+      be printed, since we can't store assignment history for normal Python
+      collections like lists/dicts.
     raw_value_repr: If true, use `repr` when string-ifying values, otherwise use
       a customized pretty-printing routine.
 
@@ -246,42 +237,41 @@ def history_per_leaf_parameter(cfg: config.Buildable,
 
 
 def _make_per_leaf_histories_recursive(
-    cfg: config.Buildable,
+    cfg: Any,
     raw_value_repr: bool,
-    path: Optional[_Path] = None,
 ) -> Iterator[str]:
   """Recursively traverses `cfg` and generates per-param history summaries."""
-  for name, param_history in cfg.__argument_history__.items():
-    if path:
-      param_path = tuple(path) + (_ParamName(name),)
-    else:
-      param_path = (_ParamName(name),)
-    children = tree.flatten_with_path(getattr(cfg, name))
-    if _has_nested_builder(children):
-      for child_path, child_leaf in children:
-        full_child_path = param_path + child_path
-        if isinstance(child_leaf, config.Buildable):
-          yield from _make_per_leaf_histories_recursive(child_leaf,
-                                                        raw_value_repr,
-                                                        full_child_path)
+
+  def traverse(value, state=None) -> Iterator[str]:
+    state = state or daglish_traversal.BasicTraversal.begin(traverse, value)
+
+    if isinstance(value, config.Buildable):
+      for name, param_history in value.__argument_history__.items():
+        sub_value = getattr(value, name)
+        if _has_nested_builder(sub_value):
+          yield from state.call(sub_value, daglish.Attr(name))
         else:
-          yield f'{_path_to_str(full_child_path)} = {child_leaf}'
+          path = (*state.current_path, daglish.Attr(name))
+          yield _make_per_leaf_history_text(path, param_history, raw_value_repr)
+
+      # Add in unset fields.
+      unset_fields = sorted(
+          set(value.__signature__.parameters.keys()) -
+          set(value.__argument_history__.keys()))
+      for name in unset_fields:
+        path = (*state.current_path, daglish.Attr(name))
+        yield f'{_path_str(path)} = <[unset]>'
+
+    elif state.is_traversable(value):
+      for sub_result in state.flattened_map_children(value).values:
+        yield from sub_result
     else:
-      yield _make_per_leaf_history_text(param_path, param_history,
-                                        raw_value_repr)
+      yield f'{_path_str(state.current_path)} = {value}'
 
-  unset_fields = sorted(
-      set(cfg.__signature__.parameters.keys()) -
-      set(cfg.__argument_history__.keys()))
-  for name in unset_fields:
-    if path:
-      param_path = tuple(path) + (_ParamName(name),)
-    else:
-      param_path = (_ParamName(name),)
-    yield f'{_path_to_str(param_path)} = <[unset]>'
+  return traverse(cfg)
 
 
-def _make_per_leaf_history_text(path: _Path,
+def _make_per_leaf_history_text(path: daglish.Path,
                                 param_history: List[history.HistoryEntry],
                                 raw_value_repr: bool) -> str:
   """Returns a string representing a parameter's history.
@@ -318,4 +308,4 @@ def _make_per_leaf_history_text(path: _Path,
   current_value = _format_value(
       value_history[-1].new_value, raw_value_repr=raw_value_repr)
   current = f'{current_value} @ {value_history[-1].location}'
-  return f'{_path_to_str(path)} = {current}{past}'
+  return f'{_path_str(path)} = {current}{past}'
