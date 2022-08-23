@@ -71,6 +71,13 @@ def annotated_kwargs_helper(**kwargs: int):  # pylint: disable=unused-argument
 _local_module_regex = r'(__main__|fiddle\.printing_test)'
 
 
+class GetTypeAnnotationTest(absltest.TestCase):
+
+  def test_get_type_annotation_root(self):
+    config = fdl.Config(fn_with_type_annotations)
+    self.assertIsNone(printing._get_annotation(config, ()))
+
+
 class AsStrFlattenedTests(absltest.TestCase):
 
   def check_result(self, actual, expected):
@@ -170,9 +177,7 @@ class AsStrFlattenedTests(absltest.TestCase):
         x['a'].x = <[unset]>
         x['a'].y = <[unset]>
         x['a'].abc = [1, 2, 3]
-        x['b'][0] = 3
-        x['b'][1] = 2
-        x['b'][2] = 1
+        x['b'] = [3, 2, 1]
         y[0].x[0].x = 1
         y[0].x[0].y = 2
         y[0].y = <[unset]>""")

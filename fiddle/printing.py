@@ -15,14 +15,17 @@
 
 """Functions to output representations of `fdl.Buildable`s."""
 
+import copy
 import dataclasses
 import inspect
-from typing import Any, Iterator, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Iterator, List, Optional, Sequence, Type, Union
 
 from fiddle import config
 from fiddle import history
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
+from fiddle.experimental import daglish
+from fiddle.experimental import daglish_traversal
 import tree
 
 
@@ -67,9 +70,12 @@ def _path_to_str(path: _Path) -> str:
   return output
 
 
-def _has_nested_builder(children: Sequence[Tuple[_Path, _Leaf]]) -> bool:
-  return any(
-      isinstance(child, config.Buildable) for unused_path, child in children)
+def _has_nested_builder(value: Any, state=None) -> bool:
+  state = state or daglish_traversal.MemoizedTraversal.begin(
+      _has_nested_builder, value)
+  return (isinstance(value, config.Buildable) or
+          (state.is_traversable(value) and
+           any(state.flattened_map_children(value).values)))
 
 
 def _format_value(value: Any, *, raw_value_repr: bool) -> str:
@@ -97,6 +103,65 @@ class _TaggedValueWrapper:
     return f'{value_repr} {tag_str}'
 
 
+@dataclasses.dataclass(frozen=True)
+class _LeafSetting:
+  """Represents a leaf configuration setting."""
+  path: daglish.Path
+  annotation: Optional[Type[Any]]
+  value: Any
+
+
+def _get_annotation(cfg: config.Buildable,
+                    path: daglish.Path) -> Optional[Type[Any]]:
+  """Gets the type annotation associated with a Daglish path."""
+  if not path or not isinstance(path[-1], daglish.Attr):
+    return None
+  value = cfg
+  for path_element in path[:-1]:
+    value = path_element.follow(value)
+  if isinstance(value, config.Buildable):
+    try:
+      param = value.__signature__.parameters[path[-1].name]
+    except KeyError:
+      # Try to use the kwarg annotation
+      for param in value.__signature__.parameters.values():
+        if param.kind == param.VAR_KEYWORD:
+          return None if param.annotation is param.empty else param.annotation
+      return None  # probably a kwarg
+    return None if param.annotation is param.empty else param.annotation
+
+
+def _rearrange_buildable_args_and_insert_unset_sentinels(
+    value: config.Buildable) -> config.Buildable:
+  """Returns a copy of a Buildable with normalized arguments.
+
+  This normalizes arguments by re-creating the __arguments__ dictionary in the
+  order of the configured function or class' signature. It also inserts "unset"
+  sentinels for values in the signature that don't have a value set.
+
+  Args:
+    value: Buildable to copy and normalize.
+
+  Returns:
+    Copy of `value` with arguments normalized.
+  """
+  # TODO: Consider pulling part of this function into a shared
+  # module, or achieving the same effect by modifying traversal order.
+  value = copy.copy(value)
+  old_arguments = dict(value.__arguments__)
+  new_arguments = {}
+  for param_name, param in value.__signature__.parameters.items():
+    if param.kind in {param.VAR_KEYWORD, param.VAR_POSITIONAL}:
+      continue
+    elif param_name in old_arguments:
+      new_arguments[param_name] = old_arguments.pop(param_name)
+    else:
+      new_arguments[param_name] = _UnsetValue(param)
+  new_arguments.update(old_arguments)  # Add in kwargs, in current order.
+  object.__setattr__(value, '__arguments__', new_arguments)
+  return value
+
+
 def as_str_flattened(cfg: config.Buildable,
                      *,
                      include_types: bool = True,
@@ -116,60 +181,42 @@ def as_str_flattened(cfg: config.Buildable,
   Returns: a string representation of `cfg`.
   """
 
-  def flatten_children(
-      value: Any, annotation: Optional[Type[Any]],
-      path: _Path) -> Iterator[Tuple[_Path, Optional[Type[Any]], _Leaf]]:
-    flattened_children = tree.flatten_with_path(value)
-    if _has_nested_builder(flattened_children):
-      for child_path, leaf in flattened_children:
-        if isinstance(leaf, tagging.TaggedValueCls):
-          yield path + child_path, None, _TaggedValueWrapper(leaf)
-        elif isinstance(leaf, config.Buildable):
-          for subpath, subannotation, actual_leaf in recursive_flatten(leaf):
-            yield path + child_path + subpath, subannotation, actual_leaf
-        else:
-          yield path + child_path, None, leaf
+  def generate(value, state=None) -> Iterator[_LeafSetting]:
+    state = state or daglish_traversal.BasicTraversal.begin(generate, value)
+
+    # Rearrange parameters in signature order, and add "unset" sentinels.
+    if isinstance(value, config.Buildable):
+      value = _rearrange_buildable_args_and_insert_unset_sentinels(value)
+
+    if isinstance(value, tagging.TaggedValueCls):
+      value = _TaggedValueWrapper(value)
+      annotation = _get_annotation(cfg, state.current_path)
+      yield _LeafSetting(state.current_path, annotation, value)
+    elif not _has_nested_builder(value):
+      annotation = _get_annotation(cfg, state.current_path)
+      yield _LeafSetting(state.current_path, annotation, value)
+    elif state.is_traversable(value):
+      for sub_result in state.flattened_map_children(value).values:
+        yield from sub_result
     else:
-      yield path, annotation, value
+      annotation = _get_annotation(cfg, state.current_path)
+      yield _LeafSetting(state.current_path, annotation, value)
 
-  def recursive_flatten(
-      buildable: config.Buildable
-  ) -> Iterator[Tuple[_Path, Optional[Type[Any]], _Leaf]]:
-    signature = buildable.__signature__
-    kwarg_param = None
-    for param_name, param in signature.parameters.items():
-      if param.kind == param.VAR_KEYWORD:
-        kwarg_param = param
-        continue
-      annotation = None if param.annotation is param.empty else param.annotation
-      path = (_ParamName(param_name),)
-      if param_name not in buildable.__arguments__:
-        yield path, annotation, _UnsetValue(param)
-      else:
-        yield from flatten_children(buildable.__arguments__[param_name],
-                                    annotation, path)
-    kwarg_annotation = None
-    if kwarg_param and kwarg_param.annotation is not kwarg_param.empty:
-      kwarg_annotation = kwarg_param.annotation
-    not_yielded_argument_names = (
-        buildable.__arguments__.keys() - signature.parameters.keys())
-    for name in sorted(not_yielded_argument_names):
-      path = (_ParamName(name),)
-      yield from flatten_children(buildable.__arguments__[name],
-                                  kwarg_annotation, path)
-
-  def format_line(line: Tuple[_Path, Optional[Type[Any]], _Leaf]):
+  def format_line(line: _LeafSetting):
     type_annotation = ''
-    if include_types and line[1] is not None:
+    if include_types and line.annotation is not None:
       try:
-        type_annotation = f': {line[1].__qualname__}'
+        type_annotation = f': {line.annotation.__qualname__}'
       except AttributeError:
         # Certain types, such as Union, do not have a __qualname__ attribute.
-        type_annotation = f': {line[1]}'
-    value = _format_value(line[2], raw_value_repr=raw_value_repr)
-    return f'{_path_to_str(line[0])}{type_annotation} = {value}'
+        type_annotation = f': {line.annotation}'
+    value = _format_value(line.value, raw_value_repr=raw_value_repr)
+    path_str = daglish.path_str(line.path)
+    assert path_str.startswith('.'), 'Expected root to be a buildable'
+    path_str = path_str[1:]
+    return f'{path_str}{type_annotation} = {value}'
 
-  return '\n'.join(map(format_line, recursive_flatten(cfg)))
+  return '\n'.join(map(format_line, generate(cfg)))
 
 
 def history_per_leaf_parameter(cfg: config.Buildable,
