@@ -326,7 +326,7 @@ class _GraphvizRenderer:
     style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
     type_font = self.tag('font', point_size=8)
     type_name = config.__class__.__name__
-    fn_or_cls_name = config.__fn_or_cls__.__name__
+    fn_or_cls_name = config.__fn_or_cls__.__qualname__
     title = (
         type_font(html.escape(f'{type_name}:')) + '&nbsp;' +
         html.escape(fn_or_cls_name))

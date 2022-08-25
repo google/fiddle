@@ -99,13 +99,31 @@ class _BoundAutoConfig:
   auto_config: AutoConfig
   obj: Any
 
+  def __getattr__(self, name: str):
+    if name == '__qualname__':
+      # When `obj` is a class, it seems to provide __qualname__, but when it is
+      # an instance, we'll have to read this off the class, if available. If
+      # none of these are available, fall back to `func.__qualname__` instead of
+      # failing.
+      func = self.auto_config.func
+      try:
+        return f'{self.obj.__qualname__}.{func.__name__}'
+      except AttributeError:
+        try:
+          return f'{self.obj.__class__.__qualname__}.{func.__name__}'
+        except AttributeError:
+          return func.__qualname__
+    elif name in ('auto_config', 'obj'):
+      return super().__getattribute__(name)
+    else:
+      # Pass through extra things on the thing we wrapped.
+      return getattr(super().__getattribute__('auto_config'), name)
+
   def __call__(self, *args, **kwargs) -> Any:
-    ac: AutoConfig = self.auto_config  # pytype: disable=annotation-type-mismatch
-    return ac.func(self.obj, *args, **kwargs)
+    return self.auto_config.func(self.obj, *args, **kwargs)
 
   def as_buildable(self, *args, **kwargs) -> config.Buildable:
-    ac: AutoConfig = self.auto_config  # pytype: disable=annotation-type-mismatch
-    return ac.buildable_func(self.obj, *args, **kwargs)
+    return self.auto_config.buildable_func(self.obj, *args, **kwargs)
 
   @property
   def always_inline(self) -> bool:

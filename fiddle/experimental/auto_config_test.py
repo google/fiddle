@@ -342,7 +342,11 @@ class AutoConfigTest(parameterized.TestCase):
       @classmethod
       @auto_config.auto_config
       def simple(cls):
+        """Test simple docstring."""
         return cls(x=1, y='1', z=1.0)
+
+    class MySubclass(MyClass):
+      pass
 
     cfg = MyClass.simple.as_buildable()
     self.assertEqual(MyClass, cfg.__fn_or_cls__)
@@ -356,6 +360,25 @@ class AutoConfigTest(parameterized.TestCase):
     self.assertEqual(1, cfg.x)
     self.assertEqual('1', cfg.y)
     self.assertEqual(1.0, cfg.z)
+
+    self.assertEqual(MyClass.simple.__name__, 'simple')
+    self.assertEqual(MyClass.simple.__qualname__,
+                     'AutoConfigTest.test_classmethod.<locals>.MyClass.simple')
+    self.assertEqual(MyClass.simple.__module__,
+                     'fiddle.experimental.auto_config')
+    # TODO: Make `__doc__` return the original function's
+    # docstring.
+    # self.assertEqual(MyClass.simple.__doc__, 'Test simple docstring.')
+
+    # The attributes on the subclass should be the same, except for
+    # __qualname__.
+    self.assertEqual(MySubclass.simple.__name__, 'simple')
+    self.assertEqual(
+        MySubclass.simple.__qualname__,
+        'AutoConfigTest.test_classmethod.<locals>.MySubclass.simple')
+    self.assertEqual(MySubclass.simple.__module__,
+                     'fiddle.experimental.auto_config')
+    # self.assertEqual(MySubclass.simple.__doc__, 'Test simple docstring.')
 
   def test_classmethod_not_on_top(self):
 
