@@ -15,6 +15,7 @@
 
 """Tests for auto_config."""
 
+import copy
 import dataclasses
 import functools
 import inspect
@@ -378,6 +379,50 @@ class AutoConfigTest(parameterized.TestCase):
 
     self.assertEqual(3, obj.x)
     self.assertEqual(5, obj.y)
+
+  def test_copy(self):
+
+    @auto_config.auto_config
+    def test_fn():
+      return SampleClass(1, 2)
+
+    with self.subTest('shallow_copy'):
+      shallow_copy = copy.copy(test_fn)
+      self.assertIsNot(shallow_copy, test_fn)
+      self.assertEqual(shallow_copy.as_buildable(), test_fn.as_buildable())
+
+    with self.subTest('deep_copy'):
+      deep_copy = copy.deepcopy(test_fn)
+      self.assertIsNot(deep_copy, test_fn)
+      # We don't actually have any additional subfields that should be
+      # deepcopied to test, but this at least makes sure things run.
+      self.assertEqual(deep_copy.as_buildable(), test_fn.as_buildable())
+
+  def test_copy_classmethod(self):
+
+    @dataclasses.dataclass(frozen=True)
+    class SomeClass:
+      a: int
+      b: int
+
+      @classmethod
+      @auto_config.auto_config
+      def test_method(cls):
+        return cls(1, 2)
+
+    with self.subTest('shallow_copy'):
+      shallow_copy = copy.copy(SomeClass.test_method)
+      self.assertIsNot(shallow_copy, SomeClass.test_method)
+      self.assertEqual(shallow_copy.as_buildable(),
+                       SomeClass.test_method.as_buildable())
+
+    with self.subTest('deep_copy'):
+      deep_copy = copy.deepcopy(SomeClass.test_method)
+      self.assertIsNot(deep_copy, SomeClass.test_method)
+      # We don't actually have any additional subfields that should be
+      # deepcopied to test, but this at least makes sure things run.
+      self.assertEqual(deep_copy.as_buildable(),
+                       SomeClass.test_method.as_buildable())
 
   def test_call_super(self):
 

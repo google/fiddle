@@ -85,8 +85,9 @@ class AutoConfig:
     return self.func
 
   def __getattr__(self, name):
-    # Pass through extra things on the thing we wrapped.
-    return getattr(self.func, name)
+    # Pass through extra things on the thing we wrapped. We use
+    # super().__getattribute__('func') here to avoid an infinite recursion.
+    return getattr(super().__getattribute__('func'), name)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -95,7 +96,6 @@ class _BoundAutoConfig:
 
   This parallels the function / bound method pair.
   """
-  __slots__ = 'auto_config', 'obj'
   auto_config: AutoConfig
   obj: Any
 
