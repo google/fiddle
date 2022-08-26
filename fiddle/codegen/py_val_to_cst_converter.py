@@ -21,10 +21,9 @@ import inspect
 import types
 from typing import Any, Callable, Union, Type, List, Optional, NamedTuple, Sequence
 
-
 from fiddle import config
 from fiddle import tagging
-from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 import libcst as cst
 
@@ -310,7 +309,7 @@ def _convert_set(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
     return cst.Call(func=cst.Name('set'))
 
 
-@register_py_val_to_cst_converter(daglish.is_namedtuple_instance)
+@register_py_val_to_cst_converter(daglish_legacy.is_namedtuple_instance)
 def _convert_namedtuple(value: Any,
                         conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts an instance of a named tuple to CST."""

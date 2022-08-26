@@ -27,6 +27,7 @@ from typing import Any, Dict, Iterable, List
 from fiddle import config
 from fiddle import graphviz
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 from fiddle.experimental import daglish_traversal
 
 
@@ -99,7 +100,7 @@ def with_defaults_trimmed(cfg: config.Buildable) -> config.Buildable:
     else:
       return new_value
 
-  return daglish.memoized_traverse(traverse_fn, cfg)
+  return daglish_legacy.memoized_traverse(traverse_fn, cfg)
 
 
 def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:

@@ -249,7 +249,7 @@ class BasicTraversal(Traversal):
     if allow_caching and object_id in self.paths_cache:
       return self.paths_cache[object_id]
     else:
-      all_paths = self.paths_cache = daglish.collect_paths_by_id(
+      all_paths = self.paths_cache = collect_paths_by_id(
           self.root_obj, memoizable_only=True)
       return all_paths[object_id]
 
@@ -266,3 +266,36 @@ class MemoizedTraversal(BasicTraversal):
     else:
       result = self.memo[id(value)] = self.traversal_fn(value, state)
       return result
+
+
+def collect_paths_by_id(structure,
+                        memoizable_only=False) -> Dict[int, List[daglish.Path]]:
+  """Returns a dict mapping id(v)->paths for all `v` traversable from structure.
+
+  I.e., if `result = collect_paths_by_id(structure)`, then `result[id(v)]` is
+  the list of every path `p` such that `follow_path(structure, p) is v`.
+
+  This dict only includes values `v` for which `is_memoizable(v)` is true.
+
+  Args:
+    structure: The structure for which the id->paths mapping should be created.
+    memoizable_only: If true, then only include values `v` for which
+      `is_memoizable(v)` is true.  Currently required to be True, to avoid bugs
+      that can result from Python's interning optimizations.
+  """
+  if not memoizable_only:
+    raise ValueError(
+        "Including non-memoizable objects when collecting paths by id may "
+        "cause problems, because of Python's interning optimizations.  If you "
+        "are sure this is what you need, contact the Fiddle team, and we can "
+        "look into enabling this flag.")
+  paths_by_id = {}
+
+  def traverse(value, state: State):
+    if not memoizable_only or daglish.is_memoizable(value):
+      paths_by_id.setdefault(id(value), []).append(state.current_path)
+    if state.is_traversable(value):
+      state.flattened_map_children(value)
+
+  traverse(structure, BasicTraversal.begin(traverse, structure))
+  return paths_by_id

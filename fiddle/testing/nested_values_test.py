@@ -19,6 +19,7 @@ import random
 
 from absl.testing import parameterized
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 from fiddle.testing import nested_values
 
 
@@ -60,7 +61,8 @@ class NestedValuesTest(parameterized.TestCase):
     max_references = 0
     for i in range(20):
       value = nested_values.generate_nested_value(random.Random(i))
-      all_paths = daglish.collect_paths_by_id(value, memoizable_only=True)
+      all_paths = daglish_legacy.collect_paths_by_id(
+          value, memoizable_only=True)
       max_references = max([max_references, *map(len, all_paths.values())])
     self.assertGreater(max_references, 1)
 
@@ -69,6 +71,7 @@ class NestedValuesTest(parameterized.TestCase):
     for i in range(20):
       value = nested_values.generate_nested_value(
           random.Random(i), share_objects=False)
-      all_paths = daglish.collect_paths_by_id(value, memoizable_only=True)
+      all_paths = daglish_legacy.collect_paths_by_id(
+          value, memoizable_only=True)
       max_references = max([max_references, *map(len, all_paths.values())])
     self.assertEqual(max_references, 1)

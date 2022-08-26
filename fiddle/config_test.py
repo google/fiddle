@@ -25,6 +25,7 @@ from absl.testing import absltest
 import fiddle as fdl
 from fiddle import history
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 import pytype_extensions
 
@@ -471,7 +472,8 @@ class ConfigTest(absltest.TestCase):
       self.assertNotEqual(cfg, cfg_deepcopy)
 
     with self.subTest('traverse'):
-      values_by_path = daglish.collect_value_by_path(cfg, memoizable_only=False)
+      values_by_path = daglish_legacy.collect_value_by_path(
+          cfg, memoizable_only=False)
       values_by_path_str = {
           daglish.path_str(path): value
           for path, value in values_by_path.items()

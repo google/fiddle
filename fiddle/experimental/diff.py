@@ -23,6 +23,7 @@ from typing import Any, Dict, Sequence, List, Tuple, Union
 from fiddle import config
 from fiddle import tag_type
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 
 class AlignmentError(ValueError):
@@ -362,8 +363,10 @@ class DiffAlignment:
         f'{self._new_name!r}: {len(self._new_by_old_id)} object(s) aligned>')
 
   def __str__(self):
-    id_to_old_path = daglish.collect_paths_by_id(self.old, memoizable_only=True)
-    id_to_new_path = daglish.collect_paths_by_id(self.new, memoizable_only=True)
+    id_to_old_path = daglish_legacy.collect_paths_by_id(
+        self.old, memoizable_only=True)
+    id_to_new_path = daglish_legacy.collect_paths_by_id(
+        self.new, memoizable_only=True)
     old_to_new_paths = [(id_to_old_path[aligned_ids.old_value_id][0],
                          id_to_new_path[aligned_ids.new_value_id][0])
                         for aligned_ids in self.aligned_value_ids()]
@@ -399,8 +402,8 @@ def align_by_id(old: Any, new: Any, old_name='old', new_name='new'):
     A `DiffAlignment`.
   """
   alignment = DiffAlignment(old, new, old_name, new_name)
-  old_by_id = daglish.collect_value_by_id(old, memoizable_only=True)
-  new_by_id = daglish.collect_value_by_id(new, memoizable_only=True)
+  old_by_id = daglish_legacy.collect_value_by_id(old, memoizable_only=True)
+  new_by_id = daglish_legacy.collect_value_by_id(new, memoizable_only=True)
   for (value_id, value) in old_by_id.items():
     if value_id in new_by_id:
       alignment.align(value, value)
@@ -436,16 +439,16 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
   """
   # First pass: align by id.
   alignment = DiffAlignment(old, new, old_name, new_name)
-  old_by_id = daglish.collect_value_by_id(old, memoizable_only=True)
-  new_by_id = daglish.collect_value_by_id(new, memoizable_only=True)
+  old_by_id = daglish_legacy.collect_value_by_id(old, memoizable_only=True)
+  new_by_id = daglish_legacy.collect_value_by_id(new, memoizable_only=True)
   for (value_id, value) in old_by_id.items():
     if value_id in new_by_id:
       if alignment.can_align(value, value):
         alignment.align(value, value)
 
   # Second pass: align any objects that are reachable by the same path.
-  path_to_old = daglish.collect_value_by_path(old, memoizable_only=True)
-  path_to_new = daglish.collect_value_by_path(new, memoizable_only=True)
+  path_to_old = daglish_legacy.collect_value_by_path(old, memoizable_only=True)
+  path_to_new = daglish_legacy.collect_value_by_path(new, memoizable_only=True)
   for (path, old_value) in path_to_old.items():
     if path in path_to_new:
       if alignment.can_align(old_value, path_to_new[path]):
@@ -475,14 +478,14 @@ class _DiffFromAlignmentBuilder:
     self.changes: List[DiffOperation] = []
     self.new_shared_values: List[Any] = []
     self.alignment: DiffAlignment = alignment
-    self.paths_by_old_id = daglish.collect_paths_by_id(
+    self.paths_by_old_id = daglish_legacy.collect_paths_by_id(
         alignment.old, memoizable_only=True)
 
   def build_diff(self) -> Diff:
     """Returns a `Diff` between `alignment.old` and `alignment.new`."""
     if self.changes or self.new_shared_values:
       raise ValueError('build_diff should be called at most once.')
-    daglish.memoized_traverse(self.record_diffs, self.alignment.new)
+    daglish_legacy.memoized_traverse(self.record_diffs, self.alignment.new)
     return Diff(tuple(self.changes), tuple(self.new_shared_values))
 
   def record_diffs(self, new_paths: daglish.Paths, new_value: Any):
@@ -690,7 +693,7 @@ def resolve_diff_references(diff, old_root):
       original_target = daglish.follow_path(diff.new_shared_values,
                                             original_diff_value.target)
 
-      transformed_diff_value = daglish.traverse_with_path(
+      transformed_diff_value = daglish_legacy.traverse_with_path(
           replace_references, original_target)
 
     else:
@@ -703,15 +706,15 @@ def resolve_diff_references(diff, old_root):
     return transformed_diff_value
 
   # Replace all references in `diff.new_shared_values`.
-  new_shared_values = daglish.traverse_with_path(replace_references,
-                                                 diff.new_shared_values)
+  new_shared_values = daglish_legacy.traverse_with_path(replace_references,
+                                                        diff.new_shared_values)
 
   # Replace references in each change in `diff.changes`.
   changes = []
   for change in diff.changes:
     if isinstance(change, (ModifyValue, SetValue)):
-      new_value = daglish.traverse_with_path(replace_references,
-                                             change.new_value)
+      new_value = daglish_legacy.traverse_with_path(replace_references,
+                                                    change.new_value)
       changes.append(dataclasses.replace(change, new_value=new_value))
     else:
       changes.append(change)
@@ -760,7 +763,8 @@ def _apply_changes(changes: Tuple[DiffOperation, ...], structure: Any):
   """
   # Construct path->value map before we make any changes, since the paths
   # to values may change once we start mutating `structure`.
-  path_to_value = daglish.collect_value_by_path(structure, memoizable_only=True)
+  path_to_value = daglish_legacy.collect_value_by_path(
+      structure, memoizable_only=True)
 
   # Perform sanity checks before we apply the diff operations.
   _validate_changes(changes, path_to_value)

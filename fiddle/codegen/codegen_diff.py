@@ -25,6 +25,7 @@ from fiddle import config
 from fiddle.codegen import codegen
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff as fdl_diff
 
 import libcst as cst
@@ -225,8 +226,8 @@ def _find_used_paths(diff: fdl_diff.Diff) -> Set[daglish.Path]:
 
   for change in diff.changes:
     if isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
-      daglish.traverse_with_path(collect_ref_targets, change.new_value)
-  daglish.traverse_with_path(collect_ref_targets, diff.new_shared_values)
+      daglish_legacy.traverse_with_path(collect_ref_targets, change.new_value)
+  daglish_legacy.traverse_with_path(collect_ref_targets, diff.new_shared_values)
 
   return used_paths
 
@@ -243,8 +244,10 @@ def _add_path_aliases(paths: Set[daglish.Path], structure: Any):
     paths: A set of paths to values in `structure`.
     structure: The structure used to determine the paths for shared values.
   """
-  path_to_value = daglish.collect_value_by_path(structure, memoizable_only=True)
-  id_to_paths = daglish.collect_paths_by_id(structure, memoizable_only=True)
+  path_to_value = daglish_legacy.collect_value_by_path(
+      structure, memoizable_only=True)
+  id_to_paths = daglish_legacy.collect_paths_by_id(
+      structure, memoizable_only=True)
 
   for path in list(paths):
     value = path_to_value.get(path, None)  # None if not memoizable.

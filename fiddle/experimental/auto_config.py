@@ -34,7 +34,7 @@ from typing import Any, Callable, cast, Optional, Union
 from fiddle import building
 from fiddle import config
 from fiddle.experimental import auto_config_policy
-from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
 _CLOSURE_WRAPPER_ID = '__auto_config_closure_wrapper__'
@@ -273,7 +273,7 @@ def _contains_buildable(structure):
     else:
       yield  # Continue traversal.
 
-  daglish.traverse_with_path(traverse, structure)
+  daglish_legacy.traverse_with_path(traverse, structure)
   return contains_buildable
 
 

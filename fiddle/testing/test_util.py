@@ -20,6 +20,7 @@ from typing import Any, Set, Dict
 from absl.testing import absltest
 
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff
 
 
@@ -86,7 +87,7 @@ def get_shared_paths(structure: Any) -> Set[Set[daglish.Path]]:
       result.add(frozenset(paths))
     return (yield)
 
-  daglish.memoized_traverse(collect_value, structure)
+  daglish_legacy.memoized_traverse(collect_value, structure)
   return result
 
 

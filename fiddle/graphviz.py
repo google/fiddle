@@ -31,6 +31,7 @@ from fiddle import tag_type
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff as fdl_diff
 import graphviz
 import typing_extensions
@@ -265,14 +266,14 @@ class _GraphvizRenderer:
         self._shared_value_ids.add(id(value))
         return value
       elif isinstance(value, _ChangedValue):
-        daglish.traverse_with_path(visit, value.old_value)
-        daglish.traverse_with_path(visit, value.new_value)
+        daglish_legacy.traverse_with_path(visit, value.old_value)
+        daglish_legacy.traverse_with_path(visit, value.new_value)
       elif isinstance(value, _ChangedBuildable):
-        daglish.traverse_with_path(visit, value.arguments)
+        daglish_legacy.traverse_with_path(visit, value.arguments)
       visited_ids.add(id(value))
       return (yield)
 
-    daglish.traverse_with_path(visit, root)
+    daglish_legacy.traverse_with_path(visit, root)
 
   def _add_node_for_value(self, value: Any):
     """Adds a node for `value` to the graphviz graph `self._dot`.
@@ -292,7 +293,7 @@ class _GraphvizRenderer:
     already_tabular_types = (fdl.Buildable, dict, list, tuple,
                              _ChangedBuildable)
     if not (isinstance(value, already_tabular_types) or
-            daglish.is_namedtuple_instance(value)):
+            daglish_legacy.is_namedtuple_instance(value)):
       table = self.tag('table')
       tr = self.tag('tr')
       td = self.tag('td')
@@ -398,7 +399,7 @@ class _GraphvizRenderer:
     elif isinstance(value, dict):
       return self._render_dict(
           value, header=self._header_row(type(value).__name__, bgcolor=color))
-    elif daglish.is_namedtuple_instance(value):
+    elif daglish_legacy.is_namedtuple_instance(value):
       return self._render_dict(
           value._asdict(),
           header=self._header_row(type(value).__name__, bgcolor=color),
@@ -669,7 +670,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
 
     # If the value is a tuple, then temporarily convert it to a list so we
     # can modify it. If it's a namedtuple, then convert it to a SimpleNamespace.
-    if daglish.is_namedtuple_instance(original_value):
+    if daglish_legacy.is_namedtuple_instance(original_value):
       transformed_value = types.SimpleNamespace(**transformed_value._asdict())
     elif isinstance(original_value, tuple):
       transformed_value = list(transformed_value)
@@ -717,7 +718,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
           raise ValueError(f'Unexpected PathElement {path_elt}')
 
     # Convert transformed_value back to a tuple or NamedTuple, if necessary.
-    if daglish.is_namedtuple_instance(original_value):
+    if daglish_legacy.is_namedtuple_instance(original_value):
       transformed_value = type(original_value)(**transformed_value.__dict__)
     elif isinstance(original_value, tuple):
       transformed_value = type(original_value)(transformed_value)
@@ -730,7 +731,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
 
   new_values = [getattr(change, 'new_value', None) for change in diff.changes]
   old_and_new = _OldAndNewSharedValues(old, new_values)
-  result = daglish.memoized_traverse(record_change, old_and_new).old
+  result = daglish_legacy.memoized_traverse(record_change, old_and_new).old
 
   # Set the `_ChangedValue.new_value` values.  We need to do this in a second
   # pass, because the graph can contain cycles, and we need to make sure that
@@ -752,14 +753,14 @@ def _find_new_value_ids(structure_with_changed_values: Any) -> Set[int]:
     if id(value) in new_value_ids:
       return
     if isinstance(value, _ChangedValue):
-      daglish.traverse_with_path(visit, value.new_value)
+      daglish_legacy.traverse_with_path(visit, value.new_value)
     elif isinstance(value, _ChangedBuildable):
-      daglish.traverse_with_path(visit, value.arguments)
+      daglish_legacy.traverse_with_path(visit, value.arguments)
     elif daglish.is_memoizable(value):
       new_value_ids.add(id(value))
     return (yield)
 
-  daglish.traverse_with_path(visit, structure_with_changed_values)
+  daglish_legacy.traverse_with_path(visit, structure_with_changed_values)
   return new_value_ids
 
 
@@ -772,14 +773,14 @@ def _find_old_value_ids(structure_with_changed_values: Any) -> Set[int]:
     if id(value) in old_value_ids:
       return
     if isinstance(value, _ChangedValue):
-      daglish.traverse_with_path(visit, value.old_value)
+      daglish_legacy.traverse_with_path(visit, value.old_value)
     elif isinstance(value, _ChangedBuildable):
-      daglish.traverse_with_path(visit, value.arguments)
+      daglish_legacy.traverse_with_path(visit, value.arguments)
     elif daglish.is_memoizable(value):
       old_value_ids.add(id(value))
     return (yield)
 
-  daglish.traverse_with_path(visit, structure_with_changed_values)
+  daglish_legacy.traverse_with_path(visit, structure_with_changed_values)
   return old_value_ids
 
 

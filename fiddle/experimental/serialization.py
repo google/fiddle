@@ -36,6 +36,7 @@ from typing import Any, Dict, Iterable, List, Optional, Type
 
 from fiddle import config
 from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 _VERSION = '0.0.1'
 
@@ -62,7 +63,7 @@ def clear_argument_history(buildable: config.Buildable, deepcopy: bool = True):
 
   if deepcopy:
     buildable = copy.deepcopy(buildable)
-  daglish.traverse_with_path(_clear_history, buildable)
+  daglish_legacy.traverse_with_path(_clear_history, buildable)
   return buildable
 
 
@@ -421,7 +422,8 @@ class Serialization:
     # The root value being serialized.
     self._root = value
     # Maps (memoizable) object ids to all paths from `value` that reach them.
-    self._paths_by_id = daglish.collect_paths_by_id(value, memoizable_only=True)
+    self._paths_by_id = daglish_legacy.collect_paths_by_id(
+        value, memoizable_only=True)
     # The active PyrefPolicy.
     self._pyref_policy = pyref_policy or DefaultPyrefPolicy()
     # The result of the serialization.

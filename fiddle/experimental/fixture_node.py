@@ -23,7 +23,7 @@ which are hard questions to answer well at the Fiddle library level.
 from typing import Any
 
 from fiddle import config as fdl_config
-from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 
 class FixtureNode(fdl_config.Buildable):
@@ -56,4 +56,4 @@ def materialize(config: Any):
     else:
       return new_value
 
-  return daglish.memoized_traverse(traverse_fn, config)
+  return daglish_legacy.memoized_traverse(traverse_fn, config)
