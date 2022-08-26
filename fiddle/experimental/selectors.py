@@ -27,7 +27,7 @@ from typing import Any, Callable, Iterator, Optional, Type, Union
 
 from fiddle import config
 from fiddle import tag_type
-from fiddle.experimental import daglish_traversal
+from fiddle.experimental import daglish
 
 # Maybe DRY up with type declaration in autobuilders.py?
 FnOrClass = Union[Callable[..., Any], Type[Any]]
@@ -74,8 +74,8 @@ class Selection(metaclass=abc.ABCMeta):
 
 def _memoized_walk_leaves_first(value, state=None):
   """Yields all values (memoized) from a configuration DAG."""
-  state = state or daglish_traversal.MemoizedTraversal.begin(
-      _memoized_walk_leaves_first, value)
+  state = state or daglish.MemoizedTraversal.begin(_memoized_walk_leaves_first,
+                                                   value)
   if state.is_traversable(value):
     for sub_result in state.flattened_map_children(value).values:
       yield from sub_result

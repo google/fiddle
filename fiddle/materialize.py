@@ -28,7 +28,7 @@ more hermetic.
 from typing import Any
 
 from fiddle import config
-from fiddle.experimental import daglish_traversal
+from fiddle.experimental import daglish
 
 
 def materialize_defaults(value: Any) -> None:
@@ -51,7 +51,7 @@ def materialize_defaults(value: Any) -> None:
   """
 
   def traverse(node, state=None):
-    state = state or daglish_traversal.MemoizedTraversal.begin(traverse, node)
+    state = state or daglish.MemoizedTraversal.begin(traverse, node)
     if isinstance(node, config.Buildable):
       for arg in node.__signature__.parameters.values():
         if arg.default is not arg.empty and arg.name not in node.__arguments__:

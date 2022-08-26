@@ -28,7 +28,6 @@ from fiddle import config
 from fiddle import graphviz
 from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
-from fiddle.experimental import daglish_traversal
 
 
 def _raise_error():
@@ -128,7 +127,7 @@ def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:
     return sum(1 if isinstance(elt, daglish.Attr) else 0 for elt in path)
 
   def traverse(node, state=None) -> None:
-    state = state or daglish_traversal.MemoizedTraversal.begin(traverse, node)
+    state = state or daglish.MemoizedTraversal.begin(traverse, node)
     if isinstance(node, config.Buildable):
       all_paths = state.get_all_paths(allow_caching=True)
       node_to_depth[id(node)] = min(_path_len(path) for path in all_paths)

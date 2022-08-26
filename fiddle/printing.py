@@ -25,7 +25,6 @@ from fiddle import history
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 from fiddle.experimental import daglish
-from fiddle.experimental import daglish_traversal
 
 
 @dataclasses.dataclass(frozen=True)
@@ -44,8 +43,7 @@ class _UnsetValue:
 
 
 def _has_nested_builder(value: Any, state=None) -> bool:
-  state = state or daglish_traversal.MemoizedTraversal.begin(
-      _has_nested_builder, value)
+  state = state or daglish.MemoizedTraversal.begin(_has_nested_builder, value)
   return (isinstance(value, config.Buildable) or
           (state.is_traversable(value) and
            any(state.flattened_map_children(value).values)))
@@ -172,7 +170,7 @@ def as_str_flattened(cfg: config.Buildable,
   """
 
   def generate(value, state=None) -> Iterator[_LeafSetting]:
-    state = state or daglish_traversal.BasicTraversal.begin(generate, value)
+    state = state or daglish.BasicTraversal.begin(generate, value)
 
     # Rearrange parameters in signature order, and add "unset" sentinels.
     if isinstance(value, config.Buildable):
@@ -243,7 +241,7 @@ def _make_per_leaf_histories_recursive(
   """Recursively traverses `cfg` and generates per-param history summaries."""
 
   def traverse(value, state=None) -> Iterator[str]:
-    state = state or daglish_traversal.BasicTraversal.begin(traverse, value)
+    state = state or daglish.BasicTraversal.begin(traverse, value)
 
     if isinstance(value, config.Buildable):
       for name, param_history in value.__argument_history__.items():

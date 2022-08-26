@@ -67,7 +67,7 @@ from typing import Any, Collection, FrozenSet, Generic, Optional, TypeVar, Union
 from fiddle import config
 from fiddle import tag_type
 from fiddle.experimental import auto_config
-from fiddle.experimental import daglish_traversal
+from fiddle.experimental import daglish
 from fiddle.experimental import serialization
 
 TagType = tag_type.TagType
@@ -182,8 +182,7 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
   """
 
   def traverse(node_value, state=None):
-    state = state or daglish_traversal.MemoizedTraversal.begin(
-        traverse, node_value)
+    state = state or daglish.MemoizedTraversal.begin(traverse, node_value)
     if isinstance(node_value, config.Buildable):
       for key, tags in node_value.__argument_tags__.items():
         if any(issubclass(t, tag) for t in tags):
@@ -211,7 +210,7 @@ def list_tags(
   tags = set()
 
   def _inner(value, state=None):
-    state = state or daglish_traversal.MemoizedTraversal.begin(_inner, value)
+    state = state or daglish.MemoizedTraversal.begin(_inner, value)
     if isinstance(value, config.Buildable):
       for node_tags in value.__argument_tags__.values():
         tags.update(node_tags)
@@ -261,8 +260,8 @@ def materialize_tags(
     A new `fdl.Buildable` with its tags replaced by their values.
   """
 
-  def transform(value, state: Optional[daglish_traversal.State] = None):
-    state = state or daglish_traversal.MemoizedTraversal.begin(transform, value)
+  def transform(value, state: Optional[daglish.State] = None):
+    state = state or daglish.MemoizedTraversal.begin(transform, value)
     value = state.map_children(value)
     if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):

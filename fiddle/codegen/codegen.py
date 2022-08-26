@@ -28,7 +28,6 @@ from fiddle import config as fdl
 from fiddle.codegen import mini_ast
 from fiddle.codegen import special_value_codegen
 from fiddle.experimental import daglish
-from fiddle.experimental import daglish_traversal
 
 
 def _camel_to_snake(name: str) -> str:
@@ -214,7 +213,7 @@ def _get_shared_buildables(buildable: fdl.Buildable) -> List[fdl.Buildable]:
 
   def traverse(value, state=None):
     # N.B. don't memoize or we'll never count the duplicates!
-    state = state or daglish_traversal.BasicTraversal.begin(traverse, value)
+    state = state or daglish.BasicTraversal.begin(traverse, value)
     if isinstance(value, fdl.Buildable):
       to_count[id(value)] += 1
       children_by_id[id(value)] = value
@@ -234,7 +233,7 @@ def _has_child_buildables(value: Any) -> bool:
   result = False
 
   def traverse(sub_value, state=None):
-    state = state or daglish_traversal.BasicTraversal.begin(traverse, sub_value)
+    state = state or daglish.BasicTraversal.begin(traverse, sub_value)
     nonlocal result
     result = result or isinstance(sub_value, fdl.Buildable)
     if not result and state.is_traversable(sub_value):
@@ -299,7 +298,7 @@ class SharedBuildableManager:
 
     def traverse(child, state=None):
       nonlocal used_not_implemented
-      state = state or daglish_traversal.BasicTraversal.begin(traverse, child)
+      state = state or daglish.BasicTraversal.begin(traverse, child)
       if child in self:
         return _VarReference(self.instance_names_by_id[id(child)])
       elif isinstance(child, fdl.Buildable):
@@ -360,7 +359,7 @@ def _configure_shared_objects(
       # node `child`.
       shared_manager.add(name, child, mini_ast.ImmediateAttrsBlock(nodes))
 
-  traverser = daglish_traversal.MemoizedTraversal(
+  traverser = daglish.MemoizedTraversal(
       traverse, shared_objects, memo=shared_manager.instance_names_by_id.copy())
   traverse(shared_objects, traverser.initial_state())
 
@@ -418,8 +417,7 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
 
     def handle_child_attr(value, state=None):
       """Inner handler for traverse_with_path, assigning attributes."""
-      state = state or daglish_traversal.BasicTraversal.begin(
-          handle_child_attr, value)
+      state = state or daglish.BasicTraversal.begin(handle_child_attr, value)
 
       if not state.current_path:
         # Skip top level __arguments__ dict.

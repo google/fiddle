@@ -22,7 +22,6 @@ from typing import Any, Callable, Dict, Optional, TypeVar, Tuple, overload
 from fiddle import config
 from fiddle import tag_type
 from fiddle.experimental import daglish
-from fiddle.experimental import daglish_traversal
 
 T = TypeVar('T')
 CallableProducingT = Callable[..., T]
@@ -118,9 +117,9 @@ def build(buildable: Any) -> Any:
   ...
 
 
-def _build(value: Any, state: Optional[daglish_traversal.State] = None) -> Any:
+def _build(value: Any, state: Optional[daglish.State] = None) -> Any:
   """Inner method / implementation of build()."""
-  state = state or daglish_traversal.MemoizedTraversal.begin(_build, value)
+  state = state or daglish.MemoizedTraversal.begin(_build, value)
 
   if isinstance(value, config.Buildable):
     sub_traversal = state.flattened_map_children(value)
