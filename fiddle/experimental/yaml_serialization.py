@@ -27,7 +27,7 @@ from typing import Any
 
 from fiddle import config
 from fiddle import tagging
-from fiddle.experimental import fixture
+from fiddle.experimental import fixture_node
 import yaml
 
 
@@ -75,7 +75,7 @@ def _taggedvalue_representer(dumper, data):
 
 yaml.SafeDumper.add_representer(config.Config, _config_representer)
 yaml.SafeDumper.add_representer(config.Partial, _partial_representer)
-yaml.SafeDumper.add_representer(fixture.Fixture, _fixture_representer)
+yaml.SafeDumper.add_representer(fixture_node.FixtureNode, _fixture_representer)
 yaml.SafeDumper.add_representer(tagging.TaggedValueCls,
                                 _taggedvalue_representer)
 

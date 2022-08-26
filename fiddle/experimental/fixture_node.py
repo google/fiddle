@@ -26,28 +26,30 @@ from fiddle import config as fdl_config
 from fiddle.experimental import daglish
 
 
-class Fixture(fdl_config.Buildable):
+class FixtureNode(fdl_config.Buildable):
 
   def __build__(self, *args: Any, **kwargs: Any):
     raise ValueError(
         "You must first materialize a Fiddle configuration that contains "
-        "Fixture nodes. Please call `config = fixture.materialize(config)`.")
+        "`FixtureNode`s. Please call "
+        "`config = fixture_node.materialize(config)`.")
 
 
 def materialize(config: Any):
-  """Invokes any Fixture nodes, resulting in low-level configuration.
+  """Invokes any `FixtureNode`s, resulting in low-level configuration.
 
   Args:
     config: fdl.Buildable object, or collection which may include Buildable
-      objects. Any Fixture nodes within this DAG will be invoked.
+      objects. Any `FixtureNode`s within this DAG will be invoked.
 
   Returns:
-    Lower-level configuration as a result of invoking `Fixture`s in `config`.
+    Lower-level configuration as a result of invoking `FixtureNode`s in
+    `config`.
   """
 
   def traverse_fn(unused_all_paths, unused_value):
     new_value = (yield)
-    if isinstance(new_value, Fixture):
+    if isinstance(new_value, FixtureNode):
       # TODO: If this proposal is taken forward, preserve
       # __argument_history__ as well.
       return new_value.__fn_or_cls__(**new_value.__arguments__)

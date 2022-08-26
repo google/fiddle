@@ -20,7 +20,7 @@ from typing import Any
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle.experimental import fixture
+from fiddle.experimental import fixture_node
 from fiddle.experimental import serialization
 from fiddle.experimental import yaml_serialization
 from fiddle.testing import test_util
@@ -48,7 +48,7 @@ def _partial_constructor(loader, node):
 
 
 def _fixture_constructor(loader, node):
-  return fixture.Fixture(_config_constructor(loader, node))
+  return fixture_node.FixtureNode(_config_constructor(loader, node))
 
 
 class SemiSafeLoader(yaml.SafeLoader):
@@ -129,10 +129,11 @@ class YamlSerializationTest(test_util.TestCase):
     self.assertEqual(loaded, config)
 
   def test_dump_fixture(self):
-    config = fixture.Fixture(my_fixture, fdl.Config(Foo, a=1, b="hi", c=None))
+    config = fixture_node.FixtureNode(my_fixture,
+                                      fdl.Config(Foo, a=1, b="hi", c=None))
     serialized = yaml_serialization.dump_yaml(value=config)
     loaded = load_yaml_test_only(serialized)
-    self.assertIsInstance(loaded, fixture.Fixture)
+    self.assertIsInstance(loaded, fixture_node.FixtureNode)
     self.assertEqual(loaded, config)
 
   def test_dump_tagged_value(self):

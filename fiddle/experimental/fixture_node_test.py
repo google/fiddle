@@ -21,7 +21,7 @@ import dataclasses
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import building
-from fiddle.experimental import fixture
+from fiddle.experimental import fixture_node
 
 
 @dataclasses.dataclass
@@ -74,18 +74,18 @@ def layer_fixture(
 class FixtureTest(absltest.TestCase):
 
   def test_build_errors(self):
-    config = fixture.Fixture(list_fixture, item=diamond(), num_items=4)
+    config = fixture_node.FixtureNode(list_fixture, item=diamond(), num_items=4)
     with self.assertRaisesRegex(building.BuildError,
                                 "Failed to construct or call list_fixture."):
       fdl.build(config)
 
   def test_list_fixture(self):
-    config = fixture.Fixture(list_fixture, item=diamond(), num_items=2)
+    config = fixture_node.FixtureNode(list_fixture, item=diamond(), num_items=2)
 
     # Can modify num_layers later/dynamically.
     config.num_items = 4
 
-    config = fixture.materialize(config)
+    config = fixture_node.materialize(config)
     result = fdl.build(config)
     self.assertIsInstance(result, list)
     self.assertLen(result, 4)
@@ -95,8 +95,9 @@ class FixtureTest(absltest.TestCase):
       self.assertIsNot(result[i].b.a, result[i + 1].c.a)
 
   def test_layer_fixture(self):
-    config = fixture.Fixture(layer_fixture, item=diamond(), num_items=4)
-    config = fixture.materialize(config)
+    config = fixture_node.FixtureNode(
+        layer_fixture, item=diamond(), num_items=4)
+    config = fixture_node.materialize(config)
     result = fdl.build(config)
     self.assertIsInstance(result, list)
     self.assertLen(result, 4)
