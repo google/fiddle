@@ -29,6 +29,7 @@ import functools
 import inspect
 import textwrap
 import types
+import typing
 from typing import Any, Callable, cast, Optional, Union
 
 from fiddle import building
@@ -666,7 +667,7 @@ def is_auto_config(function_object: Any) -> bool:
   return isinstance(function_object, (AutoConfig, _BoundAutoConfig))
 
 
-def inline(buildable: config.Config):
+def inline(buildable: Union[config.Config, Any]):
   """Converts `buildable` of an `auto_config` function into a DAG of Buildables.
 
   `inline` updates `buildable` in place to preserve aliasing within a larger
@@ -681,19 +682,18 @@ def inline(buildable: config.Config):
   def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
     file_path = '/base_path/'+name
     augmentation = 'my_augmentation_routine'
-    # ...
-    return InputPipeline(file_path, augmentation, ...)
+    return InputPipeline(file_path, augmentation)
 
   # config/main.py
   @auto_config
-  def make_experiment():
+  def make_experiment(batch_size: int):
     data = make_input_pipeline('normal_dataset', batch_size)
     model = ...
     return Experiment(data, model)
 
   # experiment_configuration.py
   def make_experiment():
-    config = make_experiment.as_buildable()
+    config = make_experiment.as_buildable(batch_size=128)
     config.data.name = 'advanced_dataset'
     # config.data.augmentation = 'custom_augmentation'  # Not configurable!!!
     # return fdl.build(config)                          # Works like normal.
@@ -701,6 +701,32 @@ def inline(buildable: config.Config):
     print(config.data.file_path)         # Prints: '/base_path/advanced_dataset'
     config.data.augmentation = 'custom_augmentation'    # Now exposed.
     experiment = fdl.build(config)                      # Works like normal.
+    return experiment
+  ```
+
+  `inline` can also be used within `auto_config` functions:
+
+  ```py
+  # shared/input_pipelines.py
+  @auto_config(experimental_api_boundary=True)
+  def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
+    ...  # Same as above.
+
+  # config/main.py
+  @auto_config
+  def make_experiment(batch_size: int):
+    data = make_input_pipeline('normal_dataset', batch_size)
+    inline(data)
+    model = ...
+    return Experiment(data, model)
+
+  # experiment_configuration.py
+  def make_experiment():
+    config = make_experiment.as_buildable(batch_size=128)
+    # config.data.name = 'advanced_dataset'                 # Not configurable!!
+    print(config.data.file_path)            # Prints '/base_path/normal_dataset'
+    config.data.file_path = '/other_path/advanced_dataset'  # works!
+    experiment = fdl.build(config)                          # As expected.
     return experiment
   ```
 
@@ -712,6 +738,10 @@ def inline(buildable: config.Config):
     ValueError: If `buildable` is not a `Config`, or if `buildable` doesn't
       correspond to an auto_config'd function.
   """
+  if not isinstance(buildable, config.Buildable):
+    # Called inside an auto_config function in Python mode.
+    return
+
   if not isinstance(buildable, config.Config):
     raise ValueError('Cannot `inline` non-Config buildables; '
                      f'{type(buildable)} is not compatible.')
@@ -728,6 +758,10 @@ def inline(buildable: config.Config):
 
   _move_buildable_internals(source=tmp_config, destination=buildable)
 
+
+if not typing.TYPE_CHECKING:
+  # Make inline work inside auto_config contexts.
+  inline = AutoConfig(inline, inline, always_inline=True)
 
 _buildable_internals_keys = ('__fn_or_cls__', '__signature__', '__arguments__',
                              '_has_var_keyword', '__argument_tags__')
