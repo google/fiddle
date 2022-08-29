@@ -310,8 +310,7 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
       expected_changes: Tuple of DiffOperation.  Order is ignored.
       expected_new_shared_values: Tuple of value
     """
-    alignment = diff.align_heuristically(old, new)
-    cfg_diff = diff.build_diff_from_alignment(alignment)
+    cfg_diff = diff.build_diff(old, new)
     self.assertCountEqual(cfg_diff.changes, expected_changes)
     self.assertEqual(cfg_diff.new_shared_values, expected_new_shared_values)
 

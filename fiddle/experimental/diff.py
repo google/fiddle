@@ -646,6 +646,20 @@ def build_diff_from_alignment(alignment: DiffAlignment) -> Diff:
   return _DiffFromAlignmentBuilder(alignment).build_diff()
 
 
+def build_diff(old: Any, new: Any) -> Diff:
+  """Builds a diff between `old` and `new` using heuristic alignment.
+
+  Args:
+    old: The root object of the `old` structure.
+    new: The root object of the `new` structure.
+
+  Returns:
+    A `Diff` describing the changes between `old` and `new`.
+  """
+  alignment = align_heuristically(old, new)
+  return build_diff_from_alignment(alignment)
+
+
 def resolve_diff_references(diff, old_root):
   """Returns a copy of `diff` with references resolved.
 
