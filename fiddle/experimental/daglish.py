@@ -323,6 +323,31 @@ def is_memoizable(value: Any) -> bool:
   )  # pyformat: disable
 
 
+def is_internable(value: Any) -> bool:
+  """Returns true if Python can apply an interning optimization to `value`.
+
+  If this is false, then `x is y` is only true if they point to the same object,
+  created at the same place.
+
+  If this is true, then `x is y` may be true for unrelated but equal values
+  (i.e., values that were created at different places).
+
+  The most common examples of values that the interning optimization can
+  apply to are constants, such as booleans, strings, and small integers.
+
+  The interning optimization may be applied to (nested) tuples whose
+  values are constants.
+
+  Args:
+    value: any value, it can be a Fiddle buildable or a regular Python value.
+  """
+  return not is_memoizable(value) or (
+      # pylint: disable-next=unidiomatic-typecheck
+      # We want tuples only and not things like NamedTuples which are not
+      # interned by Python.
+      type(value) is tuple and all(is_internable(e) for e in value))
+
+
 def is_namedtuple_subclass(type_: Type[Any]) -> bool:
   return (
       issubclass(type_, tuple) and
@@ -377,7 +402,7 @@ class Traversal(metaclass=abc.ABCMeta):
       root_obj: Root object being traversed.
 
     Returns:
-      The initial state (from init_state) of a new traversal instance.
+      The initial state (from `initial_state`) of a new traversal instance.
     """
     return cls(traversal_fn=fn, root_obj=root_obj).initial_state()
 
@@ -559,10 +584,37 @@ class BasicTraversal(Traversal):
 class MemoizedTraversal(BasicTraversal):
   """Traversal that memoizes results."""
 
+  memoize_internables: bool = True
   memo: Dict[int, Any] = dataclasses.field(default_factory=dict)
 
+  @classmethod
+  def begin(cls,
+            fn: Callable[..., Any],
+            root_obj: Any,
+            memoize_internables: bool = True) -> State:
+    """Creates a new traversal and returns the initial state.
+
+    Args:
+      fn: Function which is applied at each node during the traversal.
+      root_obj: Root object being traversed.
+      memoize_internables: `True` if internables should be memoized. Something
+        is internable if it's declaration in separate code locations still cause
+        references to it to use the same instance when the value is the same
+        (for example, primitives are internable). This is a result of Python's
+        internal optimization. See also `daglish.is_internable`.
+
+    Returns:
+      The initial state (from `initial_state`) of a new traversal instance.
+    """
+    return cls(
+        traversal_fn=fn,
+        root_obj=root_obj,
+        memoize_internables=memoize_internables).initial_state()
+
   def apply(self, value, state):
-    if id(value) in self.memo:
+    if not self.memoize_internables and is_internable(value):
+      return self.traversal_fn(value, state)
+    elif id(value) in self.memo:
       return self.memo[id(value)]
     else:
       result = self.memo[id(value)] = self.traversal_fn(value, state)
