@@ -169,6 +169,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     value = self.__arguments__.get(name, _UNSET_SENTINEL)
     if value is not _UNSET_SENTINEL:
       return value
+    if (dataclasses.is_dataclass(self.__fn_or_cls__) and
+        _field_uses_default_factory(self.__fn_or_cls__, name)):
+      raise ValueError("Can't get default value for dataclass field " +
+                       f'{self.__fn_or_cls__.__qualname__}.{name} ' +
+                       'since it uses a default_factory.')
     param = self.__signature__.parameters.get(name)
     if param is not None and param.default is not param.empty:
       return param.default
@@ -480,6 +485,14 @@ class Partial(Generic[T], Buildable[T]):
       `self.__fn_or_cls__`.
     """
     return functools.partial(self.__fn_or_cls__, *args, **kwargs)
+
+
+def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
+  """Returns true if <dataclass_type>.<field_name> uses a default_factory."""
+  for field in dataclasses.fields(dataclass_type):
+    if field.name == field_name:
+      return field.default_factory != dataclasses.MISSING
+  return False
 
 
 def update_callable(buildable: Buildable,

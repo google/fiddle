@@ -16,6 +16,7 @@
 """Tests for the `fiddle.config` module."""
 
 import copy
+import dataclasses
 import functools
 import pickle
 import threading
@@ -162,6 +163,16 @@ class Unserializable:
 
 def _test_fn_unserializable_default(x=Unserializable()):
   return x
+
+
+@dataclasses.dataclass
+class DataclassChild:
+  x: int = 0
+
+
+@dataclasses.dataclass
+class DataclassParent:
+  child: DataclassChild = dataclasses.field(default_factory=DataclassChild)
 
 
 class ConfigTest(absltest.TestCase):
@@ -1035,6 +1046,22 @@ class ConfigTest(absltest.TestCase):
     cfg = fdl.Config(basic_fn)
     with self.assertRaisesRegex(TypeError, 'not_there'):
       fdl.assign(cfg, arg1=1, not_there=2)
+
+  def test_dataclass_default_factory(self):
+
+    cfg = fdl.Config(DataclassParent)
+
+    with self.subTest('read_default_is_error'):
+      expected_error = (
+          r"Can't get default value for dataclass field DataclassParent\.child "
+          r'since it uses a default_factory\.')
+      with self.assertRaisesRegex(ValueError, expected_error):
+        cfg.child.x = 5
+
+    with self.subTest('read_ok_after_override'):
+      cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
+      cfg.child.x = 5  # now it's ok to configure child.
+      self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
 
 
 if __name__ == '__main__':
