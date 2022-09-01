@@ -16,10 +16,11 @@
 """Library for finding differences between Fiddle configurations."""
 
 import abc
+import collections
 import copy
 import dataclasses
 
-from typing import Any, Dict, Sequence, List, Tuple, Union
+from typing import Any, Callable, Dict, Sequence, List, Tuple, Union
 from fiddle import config
 from fiddle import tag_type
 from fiddle.experimental import daglish
@@ -77,6 +78,42 @@ class Diff:
             '\n     ),\n     new_shared_values=(\n' +
             '\n'.join(f'         {val!r},' for val in self.new_shared_values) +
             '\n     ))')
+
+  def ignoring_changes(self, ignore_fn: Callable[[DiffOperation],
+                                                 bool]) -> 'Diff':
+    """Creates a new `Diff` without changes that satisfy a predicate.
+
+    Args:
+      ignore_fn: A function that accepts a `DiffOperation` and returns `True` if
+        this diff should be ignored (i.e. excluded from the returned `Diff`).
+
+    Returns:
+      A new `Diff` without changes for which the `ignore_fn` returned `True`.
+    """
+    new_changes = tuple(
+        change for change in self.changes if not ignore_fn(change))
+    # TODO: prune new_shared_values as some may not be relevant anymore
+    return Diff(new_changes, self.new_shared_values)
+
+  def ignoring_paths(self,
+                     paths=collections.abc.Iterable[daglish.Path]) -> 'Diff':
+    """Creates a new `Diff` without changes involving the given `paths`.
+
+    Args:
+      paths: an `Iterable` of `daglish.Path` objects that should be ignored in
+        the returned `Diff`.
+
+    Returns:
+      A new `Diff` without changes that relate to the given `paths`.
+    """
+    paths = set(paths)
+
+    def _ignore_fn(change: DiffOperation):
+      return any(
+          daglish.is_prefix(target_path, change.target)
+          for target_path in paths)
+
+    return self.ignoring_changes(_ignore_fn)
 
 
 @dataclasses.dataclass(frozen=True)

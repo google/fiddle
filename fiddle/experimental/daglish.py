@@ -266,6 +266,19 @@ register_node_traverser(
     path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))))
 
 
+def is_prefix(prefix_path: Path, containing_path: Path):
+  """Returns `True` if `prefix_path` is a prefix of `containing_path`.
+
+  Args:
+    prefix_path: the `Path` that may be a prefix of `containing_path`.
+    containing_path: the `Path` that may be prefixed by `prefix_path`.
+
+  Returns:
+    `True` if `prefix_path` is a prefix of `containing_path`.
+  """
+  return prefix_path == containing_path[:len(prefix_path)]
+
+
 def path_str(path: Path) -> str:
   return "".join(x.code for x in path)
 

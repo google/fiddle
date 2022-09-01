@@ -27,6 +27,7 @@ from absl.testing import parameterized
 import fiddle as fdl
 from fiddle.experimental import daglish
 from fiddle.testing import nested_values
+from fiddle.testing import test_util
 
 
 @dataclasses.dataclass
@@ -130,6 +131,41 @@ dataclass_registry.register_node_traverser(
     unflatten_fn=_unflatten_dataclass,
     path_elements_fn=_dataclass_path_elements,
 )
+
+
+class PathTest(parameterized.TestCase):
+
+  @parameterized.named_parameters(
+      dict(
+          testcase_name="exact_match",
+          prefix_path=".foo.bar",
+          containing_path=".foo.bar",
+          expected=True),
+      dict(
+          testcase_name="prefix",
+          prefix_path=".foo.bar",
+          containing_path=".foo.bar.baz",
+          expected=True),
+      dict(
+          testcase_name="prefix_with_index",
+          prefix_path=".foo.bar",
+          containing_path=".foo.bar[0]",
+          expected=True),
+      dict(
+          testcase_name="not_prefix",
+          prefix_path=".foo.bar.baz",
+          containing_path=".foo.bar",
+          expected=False),
+      dict(
+          testcase_name="not_prefix_with_index",
+          prefix_path=".foo.bar[0]",
+          containing_path=".foo.bar",
+          expected=False),
+  )
+  def test_is_prefix(self, prefix_path, containing_path, expected):
+    prefix_path = test_util.parse_path(prefix_path)
+    containing_path = test_util.parse_path(containing_path)
+    self.assertEqual(daglish.is_prefix(prefix_path, containing_path), expected)
 
 
 class PathElementTest(absltest.TestCase):

@@ -290,6 +290,90 @@ class DiffTest(absltest.TestCase):
          ))""")
     self.assertEqual(str(cfg_diff), expected_str)
 
+  def assertDiffEqual(self, diff1, diff2):
+    self.assertCountEqual(diff1.changes, diff2.changes)
+    self.assertEqual(diff1.new_shared_values, diff2.new_shared_values)
+
+  def test_ignore_changes(self):
+    cfg_diff = diff.Diff(
+        changes=(
+            diff.ModifyValue(parse_path('.foo[1]'), 2),
+            diff.SetValue(
+                parse_path('.foo[2]'), parse_reference('old', '.bar')),
+            diff.DeleteValue(parse_path('.bar.x')),
+            diff.ModifyValue(
+                parse_path('.bar.y'), parse_reference('new_shared_values',
+                                                      '[0]')),
+            diff.SetValue(
+                parse_path('.bar.z'),
+                {'a': parse_reference('new_shared_values', '[0]')}),
+        ),
+        new_shared_values=([1, 2, parse_reference('old', '.bar')],))
+
+    def ignore_deletions(diff_op: diff.DiffOperation) -> bool:
+      return isinstance(diff_op, diff.DeleteValue)
+
+    cfg_diff = cfg_diff.ignoring_changes(ignore_deletions)
+
+    expected_diff = diff.Diff(
+        changes=(
+            diff.ModifyValue(parse_path('.foo[1]'), 2),
+            diff.SetValue(
+                parse_path('.foo[2]'), parse_reference('old', '.bar')),
+            diff.ModifyValue(
+                parse_path('.bar.y'), parse_reference('new_shared_values',
+                                                      '[0]')),
+            diff.SetValue(
+                parse_path('.bar.z'),
+                {'a': parse_reference('new_shared_values', '[0]')}),
+        ),
+        new_shared_values=([1, 2, parse_reference('old', '.bar')],))
+    self.assertDiffEqual(expected_diff, cfg_diff)
+
+  def test_ignore_fields(self):
+    cfg_diff = diff.Diff(
+        changes=(
+            diff.ModifyValue(parse_path('.foo[1]'), 2),
+            diff.SetValue(
+                parse_path('.foo[2]'), parse_reference('old', '.bar')),
+            diff.DeleteValue(parse_path('.bar.x')),
+            diff.ModifyValue(
+                parse_path('.bar.y'), parse_reference('new_shared_values',
+                                                      '[0]')),
+            diff.SetValue(
+                parse_path('.bar.z'),
+                {'a': parse_reference('new_shared_values', '[0]')}),
+        ),
+        new_shared_values=([1, 2, parse_reference('old', '.bar')],))
+
+    with self.subTest('ignore array element'):
+      diff1 = cfg_diff.ignoring_paths([parse_path('.foo[1]')])
+      expected_diff = diff.Diff(
+          changes=(
+              diff.SetValue(
+                  parse_path('.foo[2]'), parse_reference('old', '.bar')),
+              diff.DeleteValue(parse_path('.bar.x')),
+              diff.ModifyValue(
+                  parse_path('.bar.y'),
+                  parse_reference('new_shared_values', '[0]')),
+              diff.SetValue(
+                  parse_path('.bar.z'),
+                  {'a': parse_reference('new_shared_values', '[0]')}),
+          ),
+          new_shared_values=([1, 2, parse_reference('old', '.bar')],))
+      self.assertDiffEqual(diff1, expected_diff)
+
+    with self.subTest('ignore all subpath'):
+      diff2 = cfg_diff.ignoring_paths([parse_path('.bar')])
+      expected_diff = diff.Diff(
+          changes=(
+              diff.ModifyValue(parse_path('.foo[1]'), 2),
+              diff.SetValue(
+                  parse_path('.foo[2]'), parse_reference('old', '.bar')),
+          ),
+          new_shared_values=([1, 2, parse_reference('old', '.bar')],))
+      self.assertDiffEqual(diff2, expected_diff)
+
 
 class DiffFromAlignmentBuilderTest(absltest.TestCase):
 
