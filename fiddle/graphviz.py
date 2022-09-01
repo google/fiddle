@@ -469,20 +469,25 @@ class _GraphvizRenderer:
     td = self.tag('td')
     index_td = self.tag('td', cellpadding=0, bgcolor=_DEFAULT_HEADER_COLOR)
     index_font = self.tag('font', point_size=6)
+    ellipsis_td = self.tag('td', rowspan=2)
 
-    if not sequence:
-      return '[]' if isinstance(sequence, list) else '()'
+    type_name = type(sequence).__name__
+    if isinstance(sequence, fdl_diff.ListPrefix):
+      type_name = 'Sequence'
+
+    if not sequence and not isinstance(sequence, fdl_diff.ListPrefix):
+      return '[]'
 
     cells, indices = [], []
     for i, value in enumerate(sequence):
       cells.append(td(self._render_nested_value(value)))
       indices.append(index_td(index_font(i)))
+    if isinstance(sequence, fdl_diff.ListPrefix):
+      sequence = list(sequence) + ['...']
+      cells.append(ellipsis_td('...'))
     row_stride = self._max_sequence_elements_per_row
     colspan = min(len(sequence), row_stride)
-    rows = [
-        self._header_row(
-            type(sequence).__name__, colspan=colspan, bgcolor=color)
-    ]
+    rows = [self._header_row(type_name, colspan=colspan, bgcolor=color)]
     for i in range(0, len(sequence), row_stride):
       rows.extend([tr(cells[i:i + row_stride]), tr(indices[i:i + row_stride])])
     return table(rows)
@@ -586,21 +591,40 @@ def render(config: Any) -> graphviz.Graph:
   return _GraphvizRenderer().render(config)
 
 
-def render_diff(diff: fdl_diff.Diff, config: Any) -> graphviz.Graph:
-  """Renders the given `diff` as a `graphviz.Graph`.
+def render_diff(diff: Optional[fdl_diff.Diff] = None,
+                *,
+                old: Optional[Any] = None,
+                new: Optional[Any] = None) -> graphviz.Graph:
+  """Renders the given diff as a `graphviz.Graph`.
+
+  Should be called using one of the following signatures:
+    * `render_diff(diff=...)`
+    * `render_diff(diff=..., old=...)`
+    * `render_diff(old=..., new=...)`
 
   Args:
-    diff: The diff to render.
-    config: The structure modified by the diff.
+    diff: The diff to render.  If not specified, then the diff between `old` and
+      `new` will be computed and rendered.
+    old: The structure modified by the diff.  If not specified, then use a
+      minimal config that can be used as the source for the diff.
+    new: The result of the diff.  May not be specified if `diff` is specified.
 
   Returns:
-    A `graphviz.Graph` object containing the resulting rendering of `diff`.
+    A `graphviz.Graph` object containing the resulting rendering of the diff.
     Standard `graphviz` methods can then be used to export this to a file.
   """
-  # TODO: Make the `config` argument optional.  If not specified,
-  # then construct a skeleton based on all paths in `diff`, and use that
-  # as the `old` configuration for the diff.
-  config = _record_changed_values_from_diff(diff, config)
+  if ((diff is None and (old is None or new is None)) or
+      (diff is not None and new is not None)):
+    raise TypeError(
+        'render_diff must be called with one of the following signatures:\n'
+        '  * render_diff(diff=...)\n'
+        '  * render_diff(diff=..., old=...)\n'
+        '  * render_diff(old=..., new=...)')
+  if diff is None:
+    diff = fdl_diff.build_diff(old, new)
+  if old is None:
+    old = fdl_diff.skeleton_from_diff(diff)
+  config = _record_changed_values_from_diff(diff, old)
   old_value_ids = _find_old_value_ids(config)
   new_value_ids = _find_new_value_ids(config)
   fill_color = functools.partial(

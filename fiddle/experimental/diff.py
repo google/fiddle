@@ -899,3 +899,133 @@ def _child_has_value(parent: Any, child: daglish.PathElement):
     return child.name in parent.__arguments__
   else:
     raise ValueError(f'Unsupported PathElement: {child}')
+
+
+@dataclasses.dataclass(frozen=True)
+class AnyValue:
+  """Object used by `skeleton_from_diff` to encode an unknown value."""
+
+  def __repr__(self):
+    return '*'
+
+
+class AnyCallable(AnyValue):
+  """Object used by `skeleton_from_diff` to encode an unknown callable."""
+  __name__ = '*'
+
+  def __call__(self, **kwargs):
+    raise ValueError('AnyCallable should not be called.')
+
+
+class ListPrefix(list):
+  """Object used by `skeleton_from_diff` to encode lists.
+
+  This is used to indicate that the list may contain additional elements.
+  In particular, if the diff used to create a skeleton accesses a list
+  using `Index[i]`, then we know that the list has at least `i` elements.
+  """
+
+  def __repr__(self):
+    return '[%s...]' % ''.join(f'{child!r}, ' for child in self)
+
+
+daglish.register_node_traverser(
+    ListPrefix,
+    flatten_fn=lambda x: (tuple(x), None),
+    unflatten_fn=lambda x, _: ListPrefix(x),
+    path_elements_fn=lambda x: tuple(daglish.Index(i) for i in range(len(x))))
+
+
+def skeleton_from_diff(diff: Diff):
+  """Returns a minimal object that can be used as the target for the `diff`.
+
+  Finds the set of `old` paths that occur in `diff`, and returns a minimal
+  "skeleton" object that makes those paths valid.  I.e.
+  `daglish.follow_path(skeleton, path)` is valid for each `old` path.
+  The leaves of the skeleton are `AnyValue` objects, and any `Config`s in
+  the skeleton use `AnyCallable` as their callable.  Both `AnyValue` and
+  `AnyCallable` will render as "*" in graphviz.
+
+  List values will have an Ellipsis object just past the last referenced
+  value, to indicate that the diff allows for additional elements.
+
+  Args:
+    diff: The `Diff` object used to search for paths.
+  """
+  root = AnyValue()
+
+  def add_reference_target(path, value):
+    nonlocal root
+    del path  # Unused.
+    if isinstance(value, Reference) and value.root == 'old':
+      root = _add_path_to_skeleton(root, value.target)
+    return (yield)
+
+  for change in diff.changes:
+    skip_leaf = (
+        isinstance(change, SetValue) or
+        isinstance(change.target[-1], daglish.BuildableFnOrCls))
+    root = _add_path_to_skeleton(root, change.target, skip_leaf)
+    if isinstance(change, (ModifyValue, SetValue)):
+      daglish_legacy.traverse_with_path(add_reference_target, change.new_value)
+    if isinstance(change, RemoveTag):
+      config.add_tag(
+          daglish.follow_path(root, change.target[:-1]), change.target[-1].name,
+          change.tag)
+  daglish_legacy.traverse_with_path(add_reference_target,
+                                    diff.new_shared_values)
+
+  return root
+
+
+def _add_path_to_skeleton(skeleton, path, skip_leaf=False):
+  """Returns a copy of `skeleton`, updated to make `path` valid.
+
+  Args:
+    skeleton: A skeleton structure built by `skeleton_from_diff`.
+    path: A path that should be made valid.
+    skip_leaf: If true, then don't add the leaf value of the path.
+  """
+  if not path:
+    return skeleton
+
+  # Replace `skeleton` with a type that can be used as a parent for path[0].
+  if isinstance(skeleton, AnyValue):
+    if isinstance(path[0], (daglish.Attr, daglish.BuildableFnOrCls)):
+      skeleton = config.Config(AnyCallable())
+    elif isinstance(path[0], daglish.Index):
+      skeleton = ListPrefix()
+    elif isinstance(path[0], daglish.Key):
+      skeleton = {}
+
+  if len(path) == 1 and skip_leaf:
+    return skeleton
+
+  # Add child element at path[0], if it's not present.
+  if isinstance(path[0], daglish.Attr):
+    assert isinstance(skeleton, config.Config)
+    if path[0].name not in skeleton.__arguments__:
+      setattr(skeleton, path[0].name, AnyValue())
+  elif isinstance(path[0], daglish.Index):
+    assert isinstance(skeleton, ListPrefix)
+    if path[0].index >= len(skeleton):
+      skeleton += [AnyValue() for _ in range(path[0].index + 1 - len(skeleton))]
+  elif isinstance(path[0], daglish.Key):
+    assert isinstance(skeleton, dict)
+    skeleton.setdefault(path[0].key, AnyValue())
+  else:
+    raise ValueError(f'Unuspported PathElement {path[0]}')
+
+  # Recurse to the child element.
+  child = _add_path_to_skeleton(path[0].follow(skeleton), path[1:], skip_leaf)
+  if isinstance(path[0], daglish.Attr):
+    assert isinstance(skeleton, config.Config)
+    setattr(skeleton, path[0].name, child)
+  elif isinstance(path[0], daglish.Index):
+    assert isinstance(skeleton, ListPrefix)
+    skeleton[path[0].index] = child
+  elif isinstance(path[0], daglish.Key):
+    assert isinstance(skeleton, dict)
+    skeleton[path[0].key] = child
+
+  return skeleton

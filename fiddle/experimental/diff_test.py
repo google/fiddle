@@ -20,6 +20,7 @@ import dataclasses
 import textwrap
 from typing import Any
 from absl.testing import absltest
+from absl.testing import parameterized
 import fiddle as fdl
 from fiddle import testing
 from fiddle.experimental import daglish
@@ -65,6 +66,15 @@ class BlueTag(fdl.Tag):
 # Helper functions to make expected Paths easier to write (and read).
 parse_path = testing.parse_path
 parse_reference = testing.parse_reference
+
+
+# TODO: Get rid of this helper once there's a way to specify
+# tags when constructing a Config.
+def config_with_tags(fdl_config, parameter_tags):
+  """Updates `fdl_configs` to have the specified tags, and returns it."""
+  for param, tags in parameter_tags.items():
+    fdl.set_tags(fdl_config, param, tags)
+  return fdl_config
 
 
 @dataclasses.dataclass(frozen=True)
@@ -988,6 +998,112 @@ class ApplyDiffTest(absltest.TestCase):
     with self.assertRaisesRegex(
         ValueError, 'Unsupported PathElement: UnsupportedPathElement'):
       diff._child_has_value([], UnsupportedPathElement())
+
+
+class SkeletonFromDiffTest(testing.TestCase, parameterized.TestCase):
+
+  @parameterized.parameters([
+      # Test each PathElement type.
+      [  # Index
+          diff.Diff(changes=(diff.DeleteValue(parse_path('[1]')),)),
+          diff.ListPrefix([diff.AnyValue(), diff.AnyValue()])
+      ],
+      [  # Key
+          diff.Diff(changes=(diff.DeleteValue(parse_path('["a"]')),)),
+          dict(a=diff.AnyValue())
+      ],
+      [  # Attr
+          diff.Diff(changes=(diff.DeleteValue(parse_path('.x')),)),
+          fdl.Config(diff.AnyCallable(), x=diff.AnyValue())
+      ],
+      [  # BuildableFnOrCls
+          diff.Diff(
+              changes=(
+                  diff.ModifyValue(parse_path('.__fn_or_cls__'), basic_fn),)),
+          fdl.Config(diff.AnyCallable())
+      ],
+      # Test each DiffOperation type.
+      [  # DeleteValue
+          diff.Diff(changes=(diff.DeleteValue(parse_path('["a"]')),)),
+          dict(a=diff.AnyValue())
+      ],
+      [  # SetValue
+          diff.Diff(changes=(diff.SetValue(parse_path('["a"]'), 1),)), {}
+      ],
+      [  # SetValue
+          diff.Diff(changes=(diff.SetValue(parse_path('["a"]["b"]'), 1),)),
+          dict(a={})
+      ],
+      [  # ModifyValue
+          diff.Diff(changes=(diff.ModifyValue(parse_path('[2]'), 1),)),
+          diff.ListPrefix([
+              diff.AnyValue(),
+              diff.AnyValue(),
+              diff.AnyValue(),
+          ])
+      ],
+      [  # ModifyValue
+          diff.Diff(changes=(diff.ModifyValue(parse_path('["a"]'), 1),)),
+          dict(a=diff.AnyValue())
+      ],
+      [  # AddTag
+          diff.Diff(changes=(diff.AddTag(parse_path('.x'), GreenTag),)),
+          fdl.Config(diff.AnyCallable(), x=diff.AnyValue())
+      ],
+      [  # RemoveTag
+          diff.Diff(changes=(diff.RemoveTag(parse_path('.x'), GreenTag),)),
+          config_with_tags(
+              fdl.Config(diff.AnyCallable(), x=diff.AnyValue()),
+              {'x': {GreenTag}})
+      ],
+      # Paths with >1 PathElement
+      [
+          diff.Diff(changes=(diff.DeleteValue(parse_path('.x["a"]')),)),
+          fdl.Config(diff.AnyCallable(), x={'a': diff.AnyValue()})
+      ],
+      [
+          diff.Diff(changes=(diff.DeleteValue(parse_path('.x.y')),)),
+          fdl.Config(
+              diff.AnyCallable(),
+              x=fdl.Config(diff.AnyCallable(), y=diff.AnyValue()))
+      ],
+      [
+          diff.Diff(changes=(diff.ModifyValue(parse_path('.x[2]'), 5),)),
+          fdl.Config(
+              diff.AnyCallable(),
+              x=diff.ListPrefix(
+                  [diff.AnyValue(),
+                   diff.AnyValue(),
+                   diff.AnyValue()]))
+      ],
+      [
+          diff.Diff(
+              changes=(
+                  diff.ModifyValue(parse_path('.x.__fn_or_cls__'), basic_fn),)),
+          fdl.Config(diff.AnyCallable(), x=fdl.Config(diff.AnyCallable()))
+      ],
+      # Diff with multiple paths.
+      [
+          diff.Diff(
+              changes=(diff.DeleteValue(parse_path('.x.y')),
+                       diff.SetValue(parse_path('.y[1].q'), 3),
+                       diff.DeleteValue(parse_path('.z["foo"]')),
+                       diff.ModifyValue(parse_path('.y[2]'), 5))),
+          fdl.Config(
+              diff.AnyCallable(),
+              x=fdl.Config(diff.AnyCallable(), y=diff.AnyValue()),
+              y=diff.ListPrefix([
+                  diff.AnyValue(),
+                  fdl.Config(diff.AnyCallable()),
+                  diff.AnyValue()
+              ]),
+              z={'foo': diff.AnyValue()}),
+      ],
+  ])
+  def test_skeleton_from_diff(self, cfg_diff, expected):
+    actual = diff.skeleton_from_diff(cfg_diff)
+    self.assertEqual(repr(actual), repr(expected))
+    self.assertDagEqual(actual, expected)
 
 
 if __name__ == '__main__':
