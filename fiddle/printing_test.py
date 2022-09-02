@@ -96,8 +96,7 @@ class GetTypeAnnotationTest(absltest.TestCase):
 class AsStrFlattenedTests(absltest.TestCase):
 
   def check_result(self, actual, expected):
-    expected = re.escape(textwrap.dedent(expected)).replace(
-        '__main__', _local_module_regex)
+    expected = re.escape(textwrap.dedent(expected))
     self.assertRegex(actual, expected)
 
   def test_simple_printing(self):
@@ -211,17 +210,17 @@ class AsStrFlattenedTests(absltest.TestCase):
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = <[unset]> #__main__.SampleTag
-        y = 'abc' #__main__.SampleTag""")
+        output, f"""\
+        x = <[unset]> {SampleTag}
+        y = 'abc' {SampleTag}""")
 
     tagging.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = 'cba' #__main__.SampleTag
-        y = 'cba' #__main__.SampleTag""")
+        output, f"""\
+        x = 'cba' {SampleTag}
+        y = 'cba' {SampleTag}""")
 
   def test_tagged_values_multiple_tags(self):
     cfg = fdl.Config(
@@ -231,17 +230,17 @@ class AsStrFlattenedTests(absltest.TestCase):
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = <[unset]> #__main__.SampleTag #__main__.SampleTag2
-        y = 'abc' #__main__.SampleTag #__main__.SampleTag2""")
+        output, f"""\
+        x = <[unset]> {SampleTag} {SampleTag2}
+        y = 'abc' {SampleTag} {SampleTag2}""")
 
     tagging.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = 'cba' #__main__.SampleTag #__main__.SampleTag2
-        y = 'cba' #__main__.SampleTag #__main__.SampleTag2""")
+        output, f"""\
+        x = 'cba' {SampleTag} {SampleTag2}
+        y = 'cba' {SampleTag} {SampleTag2}""")
 
   def test_partial(self):
     partial = fdl.Partial(fn_x_y)

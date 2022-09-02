@@ -796,9 +796,12 @@ class ConfigTest(absltest.TestCase):
     fdl.add_tag(config, 'arg2', Tag2)
     fdl.add_tag(config, 'kwarg2', Tag1)
     fdl.add_tag(config, 'kwarg2', Tag2)
+
+    # Note: f'{Tag1}' may be '#Tag1' or '#fiddle.config_test.Tag1', depending
+    # on the context where this test is being run.
     expected_repr = (
-        '<Config[SampleClass(arg1[#__main__.Tag1]=1, arg2[#__main__.Tag2], ' +
-        "kwarg1='kwarg1', kwarg2[#__main__.Tag1, #__main__.Tag2]=" +
+        f'<Config[SampleClass(arg1[{Tag1}]=1, arg2[{Tag2}], ' +
+        f"kwarg1='kwarg1', kwarg2[{Tag1}, {Tag2}]=" +
         "<Config[SampleClass(arg1='nested value might be large so put tag " +
         "next to param, not after value.')]>)]>")
     self.assertEqual(repr(config), expected_repr)
