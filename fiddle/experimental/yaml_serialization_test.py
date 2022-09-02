@@ -141,7 +141,7 @@ class YamlSerializationTest(test_util.TestCase):
         yaml_serialization.dump_yaml(value=FakeTag.new(2)).strip(),
         r"""!fdl\.TaggedValue
 tags:
-- [\w\d_\.]+\.FakeTag
+- ([\w\d_\.]+\.)?FakeTag
 value: 2""")
 
   def test_dump_diamond(self):

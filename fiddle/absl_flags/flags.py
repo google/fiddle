@@ -309,6 +309,8 @@ def set_tags(cfg: config.Buildable):
   all_tags = tagging.list_tags(cfg, add_superclasses=True)
   for flag in _FDL_TAGS_SET.value:
     name, value = flag.split('=', maxsplit=1)
+    if name.startswith('__main__.'):
+      name = name[len('__main__.'):]  # Strip prefix for backwards compatibility
     matching_tags = [tag for tag in all_tags if tag.name == name]
     if not matching_tags:
       # TODO: Improve and unify these errors.

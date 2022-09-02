@@ -54,7 +54,8 @@ class TagType(type):
   @property
   def name(cls) -> str:
     """A unique name for this tag."""
-    return f'{cls.__module__}.{cls.__qualname__}'
+    module = '' if cls.__module__ == '__main__' else f'{cls.__module__}.'
+    return f'{module}{cls.__qualname__}'
 
   def __str__(cls) -> str:
     return f'#{cls.name}'
