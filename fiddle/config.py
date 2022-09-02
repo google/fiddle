@@ -256,7 +256,17 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       formatted_fn_or_cls = self.__fn_or_cls__.__qualname__
     else:
       formatted_fn_or_cls = str(self.__fn_or_cls__)
-    formatted_params = [f'{k}={v!r}' for k, v in self.__arguments__.items()]
+    formatted_params = []
+    for name in self.__signature__.parameters:
+      tags = self.__argument_tags__.get(name, ())
+      value = self.__arguments__.get(name, _UNSET_SENTINEL)
+      if tags or (value is not _UNSET_SENTINEL):
+        param_str = name
+        if tags:
+          param_str += f"[{', '.join(sorted(str(tag) for tag in tags))}]"
+        if value is not _UNSET_SENTINEL:
+          param_str += f'={value!r}'
+        formatted_params.append(param_str)
     name = type(self).__name__
     return f"<{name}[{formatted_fn_or_cls}({', '.join(formatted_params)})]>"
 

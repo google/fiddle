@@ -784,6 +784,25 @@ class ConfigTest(absltest.TestCase):
     expected_repr = "<Partial[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_partial), expected_repr)
 
+  def test_repr_class_tags(self):
+    config = fdl.Config(
+        SampleClass,
+        1,
+        kwarg1='kwarg1',
+        kwarg2=fdl.Config(
+            SampleClass, 'nested value might be large so ' +
+            'put tag next to param, not after value.'))
+    fdl.add_tag(config, 'arg1', Tag1)
+    fdl.add_tag(config, 'arg2', Tag2)
+    fdl.add_tag(config, 'kwarg2', Tag1)
+    fdl.add_tag(config, 'kwarg2', Tag2)
+    expected_repr = (
+        '<Config[SampleClass(arg1[#__main__.Tag1]=1, arg2[#__main__.Tag2], ' +
+        "kwarg1='kwarg1', kwarg2[#__main__.Tag1, #__main__.Tag2]=" +
+        "<Config[SampleClass(arg1='nested value might be large so put tag " +
+        "next to param, not after value.')]>)]>")
+    self.assertEqual(repr(config), expected_repr)
+
   def test_nonexistent_attribute_error(self):
     class_config = fdl.Config(SampleClass, 1)
     expected_msg = (r"No parameter 'nonexistent_arg' has been set on "
