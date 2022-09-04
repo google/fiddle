@@ -20,11 +20,12 @@ import dataclasses
 import functools
 import pickle
 import threading
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, cast
 
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import history
+from fiddle.experimental import arg_factory
 from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 
@@ -1081,6 +1082,138 @@ class ConfigTest(absltest.TestCase):
       cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
       cfg.child.x = 5  # now it's ok to configure child.
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
+
+
+class ArgFactoryConfigTest(absltest.TestCase):
+
+  def test_build_argfactory(self):
+    """Build an ArgFactoryConfig(...)."""
+    cfg = fdl.ArgFactoryConfig(SampleClass, arg1=5)
+    value = fdl.build(cfg)
+    self.assertIsInstance(value, arg_factory.ArgFactory)
+    self.assertIsInstance(value.factory, functools.partial)
+    self.assertFalse(arg_factory.is_arg_factory_partial(value.factory))
+    factory = cast(functools.partial, value.factory)
+    self.assertIs(factory.func, SampleClass)
+    self.assertEqual(factory.keywords, dict(arg1=5))
+    self.assertEqual(factory.args, ())
+
+  def test_build_partial_argfactory(self):
+    """Build a Partial(..., ArgFactoryConfig(...))."""
+    cfg = fdl.Partial(basic_fn, fdl.ArgFactoryConfig(DataclassChild))
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertIsInstance(partial_fn, functools.partial)
+    self.assertIsInstance(partial_fn.keywords['arg1'], arg_factory.ArgFactory)
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn(arg2=3)
+    v2 = partial_fn(arg2=3)
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1, dict(arg1=DataclassChild(), arg2=3, kwarg1=None, kwarg2=None))
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+
+  def test_build_partial_argffactory_argffactory(self):
+    """Build a Partial(..., ArgFactoryConfig(..., ArgFactoryConfig(...)))."""
+    cfg = fdl.Partial(
+        basic_fn,
+        fdl.ArgFactoryConfig(basic_fn, fdl.ArgFactoryConfig(DataclassChild)))
+    cfg.arg1.arg2 = 2
+    cfg.arg2 = 3
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertIsInstance(partial_fn, functools.partial)
+    self.assertIsInstance(partial_fn.keywords['arg1'], arg_factory.ArgFactory)
+    self.assertTrue(
+        arg_factory.is_arg_factory_partial(partial_fn.keywords['arg1'].factory))
+    self.assertIsInstance(partial_fn.keywords['arg1'].factory.keywords['arg1'],
+                          arg_factory.ArgFactory)
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1=dict(arg1=DataclassChild(), arg2=2, kwarg1=None, kwarg2=None),
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    self.assertIsInstance(v1['arg1'], dict)
+    self.assertIsInstance(v1['arg1']['arg1'], DataclassChild)
+
+    # neither the dict nor the DataclassChild is shared.
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIsNot(v1['arg1']['arg1'], v2['arg1']['arg1'])
+
+  def test_build_partial_argfactory_config(self):
+    """Build a Partial(..., ArgFactoryConfig(..., Config(...)))."""
+    cfg = fdl.Partial(
+        basic_fn, fdl.ArgFactoryConfig(basic_fn, fdl.Config(DataclassChild)))
+    cfg.arg1.arg2 = 2
+    cfg.arg2 = 3
+    partial_fn = fdl.build(cfg)
+    self.assertIsInstance(partial_fn, functools.partial)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertIsInstance(partial_fn.keywords['arg1'], arg_factory.ArgFactory)
+    self.assertIsInstance(partial_fn.keywords['arg1'].factory,
+                          functools.partial)
+    self.assertFalse(
+        arg_factory.is_arg_factory_partial(partial_fn.keywords['arg1'].factory))
+    self.assertIsInstance(partial_fn.keywords['arg1'].factory.keywords['arg1'],
+                          DataclassChild)
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1=dict(arg1=DataclassChild(), arg2=2, kwarg1=None, kwarg2=None),
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    self.assertIsInstance(v1['arg1'], dict)
+    self.assertIsInstance(v1['arg1']['arg1'], DataclassChild)
+
+    # The dict is not shared, but the DataclassChild *is* shared.
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIs(v1['arg1']['arg1'], v2['arg1']['arg1'])
+
+  def test_build_partial_tree_argfactory(self):
+    """Build a Partial(..., Tree(..., ArgFactoryConfig(...)))."""
+    cfg = fdl.Partial(
+        basic_fn,
+        {'x': [[fdl.Config(object)],
+               fdl.ArgFactoryConfig(DataclassChild)]})
+    partial_fn = fdl.build(cfg)
+    self.assertIsInstance(partial_fn, functools.partial)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertIsInstance(partial_fn.keywords['arg1'], arg_factory.ArgFactory)
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn(arg2=3)
+    v2 = partial_fn(arg2=3)
+    self.assertEqual(v1, v2)
+    obj = v1['arg1']['x'][0][0]  # created from fdl.Config(object)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1={'x': [[obj], DataclassChild()]},
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    # The DataclassChild and nesting structure is not shared:
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIsNot(v1['arg1']['x'], v2['arg1']['x'])
+    self.assertIsNot(v1['arg1']['x'][0], v2['arg1']['x'][0])
+    self.assertIsNot(v1['arg1']['x'][1], v2['arg1']['x'][1])
+    # But the object created by fdl.Config is shared:
+    self.assertIs(v1['arg1']['x'][0][0], obj)
+    self.assertIs(v2['arg1']['x'][0][0], obj)
 
 
 if __name__ == '__main__':
