@@ -27,6 +27,7 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable
 from fiddle import history
 from fiddle import tag_type
 from fiddle._src import field_metadata
+from fiddle.experimental import arg_factory
 from fiddle.experimental import daglish
 
 T = TypeVar('T')
@@ -125,7 +126,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
           for tag in metadata.tags:
             add_tag(self, field.name, tag)
           if (metadata.buildable_initializer and field.name not in arguments):
-            setattr(self, field.name, metadata.buildable_initializer())
+            field_config = metadata.buildable_initializer()
+            if (isinstance(field_config, Config) and
+                (isinstance(self, (Partial, ArgFactoryConfig)))):
+              # TODO: Update this to use fdl.cast, once available.
+              field_config = ArgFactoryConfig(field_config)
+            setattr(self, field.name, field_config)
 
     for name, value in arguments.items():
       setattr(self, name, value)
@@ -450,6 +456,73 @@ class Config(Generic[T], Buildable[T]):
     return self.__fn_or_cls__(*args, **kwargs)
 
 
+def _contains_arg_factory(value, state=None):
+  """Returns true if `value` contains any `ArgFactory` instances."""
+  state = state or daglish.MemoizedTraversal.begin(_contains_arg_factory, value)
+  if isinstance(value, arg_factory.ArgFactory):
+    return True
+  elif state.is_traversable(value):
+    return any(state.flattened_map_children(value).values)
+  else:
+    return False
+
+
+def _invoke_arg_factories(value, state=None):
+  """Returns a copy of `value` with any `ArgFactory` `f` replaced by `f()`."""
+  state = state or daglish.MemoizedTraversal.begin(_invoke_arg_factories, value)
+  if isinstance(value, arg_factory.ArgFactory):
+    return value.factory()
+  else:
+    return state.map_children(value)
+
+
+def _promote_arg_factory(arg):
+  """Converts a structure of ArgFactory -> ArgFactory that generates structure.
+
+  If `arg` is an `ArgFactory`, or is a nested structure that doesn't contain
+  any `ArgFactory`s, then return it as-is.
+
+  Othewise, return a new `ArgFactory` whose factory returns a copy of `arg`
+  with any `ArgFactory` `f` replaced by `f()`.
+
+  Args:
+    arg: The argument value to convert.
+
+  Returns:
+    `arg`; or an `ArgFactory` whose factory returns a copy of `arg` with any
+    `ArgFactory` `f` replaced by `f()`.
+  """
+  if isinstance(arg, arg_factory.ArgFactory) or not _contains_arg_factory(arg):
+    return arg
+  else:
+    return arg_factory.ArgFactory(functools.partial(_invoke_arg_factories, arg))
+
+
+def _build_partial(fn, args, kwargs):
+  """Returns `functools.partial` or `arg_factory.partial` for `fn`.
+
+  If `args` or `kwargs` contain any `ArgFactory` instances, then return
+  `arg_factory.partial(fn, *args, **kwargs)`.  Otherwise, return
+  `functools.partial(fn, *args, **kwargs)`.  If any `args` or `kwargs`
+  are nested structures that contain one or more `ArgFactory`s, then
+  convert them to an `ArgFactory` that returns a copy of that structure with
+  the nested `ArgFactory`s invoked.
+
+  Args:
+    fn: The function argument for the partial.
+    args: The positional arguments for the partial.
+    kwargs: The keyword arguments for the partial.
+  """
+  args = [_promote_arg_factory(arg) for arg in args]
+  kwargs = {key: _promote_arg_factory(arg) for key, arg in kwargs.items()}
+
+  if (any(isinstance(arg, arg_factory.ArgFactory) for arg in args) or
+      any(isinstance(arg, arg_factory.ArgFactory) for arg in kwargs.values())):
+    return arg_factory.partial(fn, *args, **kwargs)
+  else:
+    return functools.partial(fn, *args, **kwargs)
+
+
 class Partial(Generic[T], Buildable[T]):
   """A `Partial` config creates a partial function or class when built.
 
@@ -492,9 +565,40 @@ class Partial(Generic[T], Buildable[T]):
 
     Returns:
       A `functools.partial` or instance with `args` and `kwargs` bound to
-      `self.__fn_or_cls__`.
+      `self.__fn_or_cls__`; or a `Partial` (if any of the
+      `Partial`'s arguments are `ArgFactory`s.
     """
-    return functools.partial(self.__fn_or_cls__, *args, **kwargs)
+    return _build_partial(self.__fn_or_cls__, args, kwargs)
+
+
+class ArgFactoryConfig(Generic[T], Buildable[T]):
+  """An `ArgFactory` config creates an `ArgFactory` when built.
+
+  `ArgFactory` is a wrapper class used by `Partial` to define
+  parameters that should be built with a factory each time the partial is
+  called.
+
+  When an `ArgFactoryConfig` is used as a parameter for a `fdl.Partial`, the
+  partial function built from that `fdl.Partial` will construct a new value for
+  the parameter each time it is called.  For example:
+
+  >>> def f(x, noise): return x + noise
+  >>> cfg = fdl.Partial(f, noise=fdl.ArgFactoryConfig(random.random))
+  >>> p = fdl.build(cfg)
+  >>> p(5) == p(5)  # noise has a different value for each call to `p`.
+  False
+
+  In contrast, if we replaced `fdl.ArgFactoryConfig` with `fdl.Config` in the
+  above example, then the same noise value would be added each time `p` is
+  called, since `random.random` would be called when `fdl.build(cfg)` is called.
+  """
+
+  # NOTE: We currently need to repeat this annotation for pytype.
+  __fn_or_cls__: TypeOrCallableProducingT
+
+  def __build__(self, *args, **kwargs):
+    return arg_factory.ArgFactory(
+        _build_partial(self.__fn_or_cls__, args, kwargs))
 
 
 def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
