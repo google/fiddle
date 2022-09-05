@@ -425,7 +425,8 @@ _T = TypeVar("_T")
 
 @dataclasses.dataclass(frozen=True)
 class SubTraversalResult:
-  __slots__ = ("values", "metadata", "path_elements")
+  __slots__ = ("node_traverser", "values", "metadata", "path_elements")
+  node_traverser: NodeTraverser
   values: List[Any]
   metadata: Any
   path_elements: PathElements
@@ -508,7 +509,10 @@ class State:
         for subvalue, path_element in zip(subvalues, path_elements)
     ]
     return SubTraversalResult(
-        values=new_subvalues, metadata=metadata, path_elements=path_elements)
+        node_traverser=node_traverser,
+        values=new_subvalues,
+        metadata=metadata,
+        path_elements=path_elements)
 
   def map_children(self, value: _T) -> _T:
     """Maps over children for traversable values, otherwise returns it.

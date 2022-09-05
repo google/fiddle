@@ -16,9 +16,10 @@
 """Utility functions for tests that use fiddle.experimental.daglish."""
 
 import re
-from typing import Any, Set, Dict
-from absl.testing import absltest
+from typing import Any, Dict, Set
 
+from absl.testing import absltest
+from fiddle import config
 from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff
@@ -158,6 +159,11 @@ def describe_dag_diffs(x, y):
       y_children, y_metadata = node_traverser.flatten(y_val)
       x_path_elements = node_traverser.path_elements(x_val)
       y_path_elements = node_traverser.path_elements(y_val)
+
+      if isinstance(x_metadata, config.BuildableTraverserMetadata):
+        x_metadata = x_metadata.without_history()
+      if isinstance(y_metadata, config.BuildableTraverserMetadata):
+        y_metadata = y_metadata.without_history()
 
       if x_path_elements != y_path_elements:
         for path_elt in set(x_path_elements) - set(y_path_elements):

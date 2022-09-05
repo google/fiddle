@@ -22,7 +22,8 @@ import copy
 import dataclasses
 import functools
 import inspect
-from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, NamedTuple, Set, Tuple, Type, TypeVar, Union
+import types
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
 
 from fiddle import history
 from fiddle import tag_type
@@ -46,6 +47,11 @@ class BuildableTraverserMetadata(NamedTuple):
   fn_or_cls: Callable[..., Any]
   argument_names: Tuple[str, ...]
   argument_tags: Dict[str, FrozenSet[tag_type.TagType]]
+  argument_history: Mapping[str, Tuple[history.HistoryEntry, ...]] = (
+      types.MappingProxyType({}))
+
+  def without_history(self) -> BuildableTraverserMetadata:
+    return self._replace(argument_history={})
 
   def arguments(self, values: Iterable[Any]) -> Dict[str, Any]:
     """Returns a dictionary combining `self.argument_names` with `values`."""
@@ -54,6 +60,11 @@ class BuildableTraverserMetadata(NamedTuple):
   def tags(self) -> Dict[str, set[tag_type.TagType]]:
     return collections.defaultdict(
         set, {name: set(tags) for name, tags in self.argument_tags.items()})
+
+  def history(self) -> Dict[str, List[history.HistoryEntry]]:
+    return collections.defaultdict(list, {
+        name: list(entries) for name, entries in self.argument_history.items()
+    })
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
@@ -149,8 +160,15 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     tags = {
         name: frozenset(tags) for name, tags in self.__argument_tags__.items()
     }
+    argument_history = {
+        name: tuple(entries)
+        for name, entries in self.__argument_history__.items()
+    }
     metadata = BuildableTraverserMetadata(
-        fn_or_cls=self.__fn_or_cls__, argument_names=keys, argument_tags=tags)
+        fn_or_cls=self.__fn_or_cls__,
+        argument_names=keys,
+        argument_tags=tags,
+        argument_history=argument_history)
     return values, metadata
 
   @classmethod
@@ -159,6 +177,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     rebuilt = cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
     object.__setattr__(rebuilt, '__argument_tags__', metadata.tags())
+    object.__setattr__(rebuilt, '__argument_history__', metadata.history())
     return rebuilt
 
   def __path_elements__(self):

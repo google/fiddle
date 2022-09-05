@@ -25,6 +25,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 import fiddle as fdl
+from fiddle import history
 from fiddle.experimental import daglish
 from fiddle.testing import nested_values
 from fiddle.testing import test_util
@@ -400,6 +401,19 @@ class BasicStructuredMappingTest(parameterized.TestCase):
     fcn = TraversalLoggingMapFunction()
     fcn(value, daglish.BasicTraversal.begin(fcn, value))
     self.assertEqual(fcn.all_path_args, expected_paths)
+
+  def test_argument_history(self):
+    cfg = fdl.Config(Foo)
+    cfg.bar = 4
+    cfg.bar = 5
+    copied = TraversalLoggingMapFunction()(cfg)
+    self.assertEqual(
+        copied.__argument_history__["bar"][-1].location.line_number,
+        cfg.__argument_history__["bar"][-1].location.line_number)
+    self.assertEqual(copied.__argument_history__["bar"][0].new_value, 4)
+    self.assertEqual(copied.__argument_history__["bar"][1].new_value, 5)
+    self.assertEqual(copied.__argument_history__["bar"][-1].kind,
+                     history.ChangeKind.NEW_VALUE)
 
 
 class ArgsSwitchingFuzzTest(parameterized.TestCase):

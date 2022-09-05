@@ -657,6 +657,20 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
     self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(copied, 'arg1'))
 
+  def test_flatten_unflatten_histories(self):
+    cfg = fdl.Config(SampleClass)
+    cfg.arg1 = 4
+    cfg.arg1 = 5
+    values, metadata = cfg.__flatten__()
+    copied = fdl.Config.__unflatten__(values, metadata)
+    self.assertEqual(
+        copied.__argument_history__['arg1'][-1].location.line_number,
+        cfg.__argument_history__['arg1'][-1].location.line_number)
+    self.assertEqual(copied.__argument_history__['arg1'][0].new_value, 4)
+    self.assertEqual(copied.__argument_history__['arg1'][1].new_value, 5)
+    self.assertEqual(copied.__argument_history__['arg1'][-1].kind,
+                     history.ChangeKind.NEW_VALUE)
+
   def test_dir_simple(self):
     fn_config = fdl.Config(basic_fn)
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(fn_config))

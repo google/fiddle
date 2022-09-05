@@ -41,30 +41,31 @@ from fiddle.experimental import daglish_legacy
 _VERSION = '0.0.1'
 
 
-def clear_argument_history(buildable: config.Buildable, deepcopy: bool = True):
+def clear_argument_history(buildable: config.Buildable):
   """Creates a copy of a config, clearing its history.
 
   This can be useful when a Config's history contains a non-picklable value.
 
   Args:
     buildable: A Fiddle configuration DAG whose history will be removed.
-    deepcopy: Whether to deepcopy the configuration before clearing its history.
 
   Returns:
-     If `deepcopy` is `True`, returns a deep copy of `buildable` with
-     `__argument_history__` set to empty. Otherwise, returns `buildable` (with
-     history clearing happening inplace).
+    A copy of `buildable` with `__argument_history__` set to empty.
   """
 
-  def _clear_history(unused_path: daglish.Path, value: ...):
-    if isinstance(value, config.Buildable):
-      value.__argument_history__.clear()
-    return (yield)
+  def traverse(value: Any, state: daglish.State) -> Any:
+    if state.is_traversable(value):
+      if isinstance(value, config.Buildable):
+        sub_results = state.flattened_map_children(value)
+        metadata = sub_results.metadata.without_history()
+        return sub_results.node_traverser.unflatten(sub_results.values,
+                                                    metadata)
+      return state.map_children(value)
+    else:
+      return copy.deepcopy(value)
 
-  if deepcopy:
-    buildable = copy.deepcopy(buildable)
-  daglish_legacy.traverse_with_path(_clear_history, buildable)
-  return buildable
+  return traverse(buildable,
+                  daglish.MemoizedTraversal.begin(traverse, buildable))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -545,6 +546,8 @@ class Serialization:
         serialized_item = (f'{path_element!r}', serialized_value)
         serialized_items.append(serialized_item)
 
+      if isinstance(metadata, config.BuildableTraverserMetadata):
+        metadata = metadata.without_history()
       serialized_metadata = self._serialize(
           metadata, current_path + (MetadataElement(),), all_paths=None)
 

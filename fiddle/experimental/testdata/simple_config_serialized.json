@@ -35,6 +35,23 @@
                 "metadata": null
             }
         },
+        "dict_2": {
+            "type": {
+                "type": "pyref",
+                "module": "builtins",
+                "name": "dict"
+            },
+            "items": [],
+            "metadata": {
+                "type": {
+                    "type": "pyref",
+                    "module": "builtins",
+                    "name": "tuple"
+                },
+                "items": [],
+                "metadata": null
+            }
+        },
         "buildable_traverser_metadata_1": {
             "type": {
                 "type": "pyref",
@@ -62,6 +79,13 @@
                     {
                         "type": "ref",
                         "key": "dict_1"
+                    }
+                ],
+                [
+                    "Attr(name='argument_history')",
+                    {
+                        "type": "ref",
+                        "key": "dict_2"
                     }
                 ]
             ],
@@ -101,6 +125,7 @@
     "refcounts": {
         "tuple_1": 1,
         "dict_1": 1,
+        "dict_2": 1,
         "buildable_traverser_metadata_1": 1,
         "identity_fn_1": 1
     },
