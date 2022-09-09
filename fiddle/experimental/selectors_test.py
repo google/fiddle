@@ -15,13 +15,16 @@
 
 """Tests for selectors."""
 
+import copy
 import dataclasses
 import typing
 from typing import Any, List
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle.experimental import auto_config
 from fiddle.experimental import selectors
+from fiddle.testing.example import person_friend_toy
 
 
 def fake_init_fn(rng, shape, dtype):
@@ -78,6 +81,23 @@ class KernelInitializerTag(AnyInitializerTag):
 
 class BiasInitializerTag(AnyInitializerTag):
   """Sub-tag class for the bias initializer."""
+
+
+def fcn(name, args):
+  return {name: args}
+
+
+def fcn2(name, args):
+  return {name: args}
+
+
+@auto_config.auto_config
+def fixture():
+  shared = fcn2("shared", ())
+  a = fcn("a", shared)
+  b = fcn("b", shared)
+  c = fcn2("c", ())
+  return fcn("root", [a, b, c])
 
 
 def encoder_decoder_config() -> fdl.Config[FakeEncoderDecoder]:
@@ -195,6 +215,75 @@ class NodeSelectionTest(absltest.TestCase):
 
     # The shared kernel init node is only visited once.
     self.assertLen(list(selectors.select(cfg, fake_init_fn)), 1)
+
+  def test_replace_fails_if_replacing_whole_tree(self):
+    config = fixture.as_buildable()
+    with self.assertRaisesRegex(ValueError, "replace.*not supported.*root"):
+      selectors.select(config, fcn).replace("replaced")
+
+  def test_replace_shallow_copy(self):
+    config = fixture.as_buildable()
+    root_name_history = copy.deepcopy(config.__argument_history__["name"])
+    selectors.select(config, fcn2).replace(["replaced"], deepcopy=False)
+    built = fdl.build(config)
+    self.assertEqual(
+        built,
+        {"root": [
+            {
+                "a": ["replaced"]
+            },
+            {
+                "b": ["replaced"]
+            },
+            ["replaced"],
+        ]})
+    self.assertIs(built["root"][0]["a"], built["root"][1]["b"])
+    self.assertIs(built["root"][0]["a"], built["root"][2])
+
+    # Check that history for root buildable is maintained.
+    self.assertEqual(root_name_history, config.__argument_history__["name"])
+
+    # Note: currently the replaced argument history is not updated, because this
+    # is not yet supported by the traversal API. In the future, we should modify
+    # config.args[0].__argument_history__['args'].
+
+  def test_replace_deep_copy(self):
+    config = fixture.as_buildable()
+    replacement = ["replaced"]
+    selectors.select(config, fcn2).replace(replacement)
+    built = fdl.build(config)
+    self.assertEqual(
+        built,
+        {"root": [
+            {
+                "a": ["replaced"]
+            },
+            {
+                "b": ["replaced"]
+            },
+            ["replaced"],
+        ]})
+
+    # Fields that were aliased in the old configuration will remain aliased.
+    self.assertIs(built["root"][0]["a"], built["root"][1]["b"])
+
+    # Fields that were not aliased will get deepcopied values.
+    self.assertIsNot(built["root"][0]["a"], built["root"][2])
+
+    self.assertIsNot(built["root"][0]["a"], replacement)
+    self.assertIsNot(built["root"][2], replacement)
+
+  def test_replace_sharing(self):
+    shared_f = fdl.Config(fcn, "shared", [1, fdl.Config(fcn2, "child", [1, 2])])
+    cfg = fdl.Config(fcn, "root", [shared_f, shared_f])
+    selectors.select(cfg, fcn2).replace(None, deepcopy=True)
+    self.assertIs(cfg.args[0], cfg.args[1])
+
+  def test_replace_doesnt_unlink(self):
+    config = person_friend_toy.build_example.as_buildable()
+    self.assertIs(config.child.friend, config.friend.friend)
+    selectors.select(config.friend, person_friend_toy.Toy).replace(None)
+    self.assertIs(config.child.friend, config.friend.friend)
 
   def test_set(self):
     cfg = encoder_decoder_config()

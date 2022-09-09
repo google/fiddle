@@ -33,6 +33,7 @@ from typing import Any, Callable, cast, Optional, Union
 
 from fiddle import building
 from fiddle import config
+from fiddle._src import mutate_buildable
 from fiddle.experimental import auto_config_policy
 from fiddle.experimental import daglish_legacy
 
@@ -726,32 +727,5 @@ def inline(buildable: config.Config):
     raise ValueError('You cannot currently inline functions that do not return '
                      '`fdl.Buildable`s.')
 
-  _move_buildable_internals(source=tmp_config, destination=buildable)
-
-
-_buildable_internals_keys = ('__fn_or_cls__', '__signature__', '__arguments__',
-                             '_has_var_keyword', '__argument_tags__')
-
-
-def _move_buildable_internals(*, source: config.Buildable,
-                              destination: config.Buildable):
-  """Changes the internals of `destination` to be equivalent to `source`.
-
-  Currently, this results in aliasing behavior, but this should not be relied
-  upon. All the internals of `source` are aliased into `destination` except
-  `__argument_history__`.
-
-  Args:
-    source: The source configuration to pull internals from.
-    destination: One of the buildables to swap.
-  """
-  if type(source) is not type(destination):
-    # TODO: Relax this constraint such that both types merely need to be
-    # buildable's.
-    raise TypeError(f'types must match exactly: {type(source)} vs '
-                    f'{type(destination)}.')
-
-  # Update in-place using object.__setattr__ to bypass argument checking.
-  for attr in _buildable_internals_keys:
-    object.__setattr__(destination, attr, getattr(source, attr))
-  # TODO: Figure out what to do with `argument_history`.
+  mutate_buildable.move_buildable_internals(
+      source=tmp_config, destination=buildable)

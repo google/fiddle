@@ -28,6 +28,7 @@ from typing import Any, Callable, Iterator, Optional, Type, Union
 from fiddle import config
 from fiddle import daglish
 from fiddle import tag_type
+from fiddle._src import mutate_buildable
 
 # Maybe DRY up with type declaration in autobuilders.py?
 FnOrClass = Union[Callable[..., Any], Type[Any]]
@@ -41,7 +42,7 @@ class Selection(metaclass=abc.ABCMeta):
     raise NotImplementedError(f"Iteration is not supported for {type(self)}")
 
   @abc.abstractmethod
-  def replace(self, value, deepcopy: bool = False) -> None:
+  def replace(self, value, deepcopy: bool = True) -> None:
     """Replaces all selected nodes/objects/values with a new value.
 
     Args:
@@ -134,9 +135,30 @@ class NodeSelection(Selection):
       if self._matches(value):
         yield value
 
-  def replace(self, value, deepcopy: bool = False) -> None:
-    raise NotImplementedError(
-        "replace() is not implemented for node selections yet.")
+  def replace(self, value: Any, deepcopy: bool = True) -> None:
+    if self._matches(self.cfg):
+      raise ValueError(
+          "NodeSelection.replace() is not supported on selections that "
+          "match the root Buildable, because select() is primarily a "
+          "mutation-based API that does not return new/replacement configs.")
+
+    def traverse(node, state: daglish.State):
+      if self._matches(node):
+        return copy.deepcopy(value) if deepcopy else value
+      elif state.is_traversable(node):
+        # TODO: Consider moving this into Daglish.
+        result = state.map_children(node)
+        if isinstance(node, config.Buildable):
+          mutate_buildable.move_buildable_internals(
+              source=result, destination=node)
+        else:
+          node = result
+      return node
+
+    new_config = traverse(self.cfg,
+                          daglish.MemoizedTraversal.begin(traverse, self.cfg))
+    mutate_buildable.move_buildable_internals(
+        source=new_config, destination=self.cfg)
 
   def set(self, **kwargs) -> None:
     """Sets multiple attributes on nodes matching this selection.
@@ -177,7 +199,7 @@ class TagSelection(Selection):
           if any(issubclass(tag, self.tag) for tag in tags):
             yield getattr(value, name)
 
-  def replace(self, value: Any, deepcopy: bool = False) -> None:
+  def replace(self, value: Any, deepcopy: bool = True) -> None:
 
     for node_value in _memoized_walk_leaves_first(self.cfg):
       if isinstance(node_value, config.Buildable):

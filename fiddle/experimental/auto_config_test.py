@@ -899,11 +899,6 @@ class InlineTest(test_util.TestCase):
     cfg = fdl.Config(my_fn, x=2)
     auto_config.inline(cfg)
 
-  def test_no_unexpected_attributes(self):
-    sample_config = fdl.Config(SampleClass)
-    expected = auto_config._buildable_internals_keys + ('__argument_history__',)
-    self.assertEqual(set(expected), set(sample_config.__dict__.keys()))
-
 
 if __name__ == '__main__':
   absltest.main()
