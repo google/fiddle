@@ -799,6 +799,14 @@ class ConfigTest(absltest.TestCase):
     expected_repr = "<Partial[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_partial), expected_repr)
 
+  def test_repr_varkwargs(self):
+    # Note: in the repr, kwarg1 comes before x and y and z because kwarg1 is an
+    # explicit keyword parameter, while x, y, and z are **kwargs parameters.
+    cfg = fdl.Config(fn_with_var_kwargs, 1, x=2, z=3, y=4, kwarg1=5)
+    expected_repr = (
+        '<Config[fn_with_var_kwargs(arg1=1, kwarg1=5, x=2, z=3, y=4)]>')
+    self.assertEqual(repr(cfg), expected_repr)
+
   def test_repr_class_tags(self):
     config = fdl.Config(
         SampleClass,

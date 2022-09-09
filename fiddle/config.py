@@ -276,7 +276,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     else:
       formatted_fn_or_cls = str(self.__fn_or_cls__)
     formatted_params = []
-    for name in self.__signature__.parameters:
+    # Show parameters from signature first (in signature order) followed by
+    # **varkwarg parameters (in the order they were set).
+    param_names = (
+        list(self.__signature__.parameters) + [
+            name for name in self.__arguments__
+            if name not in self.__signature__.parameters
+        ])
+    for name in param_names:
       tags = self.__argument_tags__.get(name, ())
       value = self.__arguments__.get(name, _UNSET_SENTINEL)
       if tags or (value is not _UNSET_SENTINEL):
