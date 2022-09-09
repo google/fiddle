@@ -119,6 +119,17 @@ def _get_annotation(cfg: config.Buildable,
     return None if param.annotation is param.empty else param.annotation
 
 
+def _get_tags(cfg, path):
+  """Returns the tags for a given Daglish path, or None if there are none."""
+  if path:
+    child = path[-1]
+    if isinstance(child, daglish.Attr):
+      parent = daglish.follow_path(cfg, path[:-1])
+      if isinstance(parent, config.Buildable):
+        return parent.__argument_tags__.get(child.name)
+    return None
+
+
 def _rearrange_buildable_args_and_insert_unset_sentinels(
     value: config.Buildable) -> config.Buildable:
   """Returns a copy of a Buildable with normalized arguments.
@@ -172,6 +183,10 @@ def as_str_flattened(cfg: config.Buildable,
   def generate(value, state=None) -> Iterator[_LeafSetting]:
     state = state or daglish.BasicTraversal.begin(generate, value)
 
+    tags = _get_tags(cfg, state.current_path)
+    if tags:
+      value = tagging.TaggedValue(tags=tags, default=value)
+
     # Rearrange parameters in signature order, and add "unset" sentinels.
     if isinstance(value, config.Buildable):
       value = _rearrange_buildable_args_and_insert_unset_sentinels(value)
@@ -183,12 +198,11 @@ def as_str_flattened(cfg: config.Buildable,
     elif not _has_nested_builder(value):
       annotation = _get_annotation(cfg, state.current_path)
       yield _LeafSetting(state.current_path, annotation, value)
-    elif state.is_traversable(value):
+    else:
+      # value must be a Buildable or a traversable containing a Buidable.
+      assert state.is_traversable(value)
       for sub_result in state.flattened_map_children(value).values:
         yield from sub_result
-    else:
-      annotation = _get_annotation(cfg, state.current_path)
-      yield _LeafSetting(state.current_path, annotation, value)
 
   def format_line(line: _LeafSetting):
     type_annotation = ''
