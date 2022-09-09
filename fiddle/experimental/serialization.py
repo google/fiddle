@@ -64,8 +64,7 @@ def clear_argument_history(buildable: config.Buildable):
     else:
       return copy.deepcopy(value)
 
-  return traverse(buildable,
-                  daglish.MemoizedTraversal.begin(traverse, buildable))
+  return daglish.MemoizedTraversal.run(traverse, buildable)
 
 
 @dataclasses.dataclass(frozen=True)

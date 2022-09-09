@@ -398,6 +398,12 @@ class Traversal(metaclass=abc.ABCMeta):
     """
     return cls(traversal_fn=fn, root_obj=root_obj).initial_state()  # pytype: disable=not-instantiable
 
+  @classmethod
+  def run(cls, fn: Callable[..., Any], root_obj: Any) -> Any:
+    """Creates a traversal and state, and then calls/returns `fn` on this."""
+    state = cls.begin(fn=fn, root_obj=root_obj)
+    return fn(root_obj, state)
+
 
 _T = TypeVar("_T")
 
@@ -646,5 +652,5 @@ def collect_paths_by_id(structure,
     if state.is_traversable(value):
       state.flattened_map_children(value)
 
-  traverse(structure, BasicTraversal.begin(traverse, structure))
+  BasicTraversal.run(traverse, structure)
   return paths_by_id

@@ -70,6 +70,7 @@ def _stacktrace_location_provider() -> Location:
   """
   for frame in reversed(traceback.extract_stack()):
     if (not frame.filename.endswith("fiddle/config.py") and
+        not frame.filename.endswith("fiddle/daglish.py") and
         not frame.filename.endswith("fiddle/history.py") and
         not frame.filename.endswith("fiddle/materialize.py")):
       return Location(

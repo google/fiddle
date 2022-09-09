@@ -211,16 +211,15 @@ def _get_shared_buildables(buildable: fdl.Buildable) -> List[fdl.Buildable]:
   to_count = collections.Counter()
   children_by_id = {}
 
-  def traverse(value, state=None):
+  def traverse(value, state: daglish.State):
     # N.B. don't memoize or we'll never count the duplicates!
-    state = state or daglish.BasicTraversal.begin(traverse, value)
     if isinstance(value, fdl.Buildable):
       to_count[id(value)] += 1
       children_by_id[id(value)] = value
     if state.is_traversable(value):
       state.flattened_map_children(value)
 
-  traverse(buildable)
+  daglish.BasicTraversal.run(traverse, buildable)
   return [
       children_by_id[child_hash]
       for child_hash, count in to_count.items()
@@ -232,14 +231,13 @@ def _has_child_buildables(value: Any) -> bool:
   """Returns whether a value has any nested buildables."""
   result = False
 
-  def traverse(sub_value, state=None):
-    state = state or daglish.BasicTraversal.begin(traverse, sub_value)
+  def traverse(sub_value, state: daglish.State):
     nonlocal result
     result = result or isinstance(sub_value, fdl.Buildable)
     if not result and state.is_traversable(sub_value):
       state.flattened_map_children(sub_value)
 
-  traverse(value)
+  daglish.BasicTraversal.run(traverse, value)
   return result
 
 
@@ -415,10 +413,8 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
     ]
     deferred = []  # Defer configuring sub-Buildable nodes.
 
-    def handle_child_attr(value, state=None):
+    def handle_child_attr(value, state: daglish.State):
       """Inner handler for traverse_with_path, assigning attributes."""
-      state = state or daglish.BasicTraversal.begin(handle_child_attr, value)
-
       if not state.current_path:
         # Skip top level __arguments__ dict.
         state.flattened_map_children(value)
@@ -437,7 +433,7 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
       if state.is_traversable(value) and not isinstance(value, fdl.Buildable):
         state.flattened_map_children(value)
 
-    handle_child_attr(child)
+    daglish.BasicTraversal.run(handle_child_attr, child)
     main_tree_blocks.append(mini_ast.ImmediateAttrsBlock(nodes))
 
     # Recurses to configure sub-Buildable nodes.

@@ -393,6 +393,11 @@ class BasicStructuredMappingTest(parameterized.TestCase):
     fcn(value, daglish.BasicTraversal.begin(fcn, value))
     self.assertEqual(fcn.all_path_args, expected_paths)
 
+    with self.subTest("run() classmethod alias"):
+      fcn = TraversalLoggingMapFunction()
+      daglish.BasicTraversal.run(fcn, value)
+      self.assertEqual(fcn.all_path_args, expected_paths)
+
   def test_argument_history(self):
     cfg = fdl.Config(Foo)
     cfg.bar = 4

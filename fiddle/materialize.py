@@ -50,8 +50,7 @@ def materialize_defaults(value: Any) -> None:
     value: A nested collection which may contain Buildable arguments.
   """
 
-  def traverse(node, state=None):
-    state = state or daglish.MemoizedTraversal.begin(traverse, node)
+  def traverse(node, state: daglish.State):
     if isinstance(node, config.Buildable):
       for arg in node.__signature__.parameters.values():
         if arg.default is not arg.empty and arg.name not in node.__arguments__:
@@ -59,4 +58,4 @@ def materialize_defaults(value: Any) -> None:
     if state.is_traversable(node):
       state.flattened_map_children(node)
 
-  traverse(value)
+  daglish.MemoizedTraversal.run(traverse, value)

@@ -126,8 +126,7 @@ def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:
   def _path_len(path: daglish.Path) -> int:
     return sum(1 if isinstance(elt, daglish.Attr) else 0 for elt in path)
 
-  def traverse(node, state=None) -> None:
-    state = state or daglish.MemoizedTraversal.begin(traverse, node)
+  def traverse(node, state: daglish.State) -> None:
     if isinstance(node, config.Buildable):
       all_paths = state.get_all_paths(allow_caching=True)
       node_to_depth[id(node)] = min(_path_len(path) for path in all_paths)
@@ -135,7 +134,7 @@ def depth_over(cfg: config.Buildable, depth: int) -> List[config.Buildable]:
     if state.is_traversable(node):
       state.flattened_map_children(node)
 
-  traverse(cfg)
+  daglish.MemoizedTraversal.run(traverse, cfg)
 
   return [
       id_to_node[key]

@@ -181,8 +181,7 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     value: Value to set for all parameters tagged with `tag`.
   """
 
-  def traverse(node_value, state=None):
-    state = state or daglish.MemoizedTraversal.begin(traverse, node_value)
+  def traverse(node_value, state: daglish.State):
     if isinstance(node_value, config.Buildable):
       for key, tags in node_value.__argument_tags__.items():
         if any(issubclass(t, tag) for t in tags):
@@ -190,7 +189,7 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     if state.is_traversable(node_value):
       state.flattened_map_children(node_value)
 
-  traverse(root)
+  daglish.MemoizedTraversal.run(traverse, root)
 
 
 def list_tags(
@@ -209,15 +208,14 @@ def list_tags(
   """
   tags = set()
 
-  def _inner(value, state=None):
-    state = state or daglish.MemoizedTraversal.begin(_inner, value)
+  def _inner(value, state: daglish.State):
     if isinstance(value, config.Buildable):
       for node_tags in value.__argument_tags__.values():
         tags.update(node_tags)
     if state.is_traversable(value):
       state.flattened_map_children(value)
 
-  _inner(root)
+  daglish.MemoizedTraversal.run(_inner, root)
 
   # Add superclasses if desired.
   if add_superclasses:
@@ -260,8 +258,7 @@ def materialize_tags(
     A new `fdl.Buildable` with its tags replaced by their values.
   """
 
-  def transform(value, state: Optional[daglish.State] = None):
-    state = state or daglish.MemoizedTraversal.begin(transform, value)
+  def transform(value, state: daglish.State):
     value = state.map_children(value)
     if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):
@@ -269,4 +266,4 @@ def materialize_tags(
     else:
       return value
 
-  return transform(buildable)
+  return daglish.MemoizedTraversal.run(transform, buildable)
