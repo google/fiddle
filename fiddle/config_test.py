@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import history
 from fiddle.experimental import daglish_legacy
@@ -1095,6 +1096,37 @@ class ConfigTest(absltest.TestCase):
       cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
       cfg.child.x = 5  # now it's ok to configure child.
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
+
+
+class OrderedArgumentsTest(absltest.TestCase):
+
+  def test_ordered_arguments(self):
+    cfg = fdl.Config(fn_with_var_kwargs)
+    cfg.var_kwarg1 = 3
+    cfg.kwarg1 = 'hi'
+    cfg.arg1 = 4
+    cfg.var_kwarg2 = 0
+    self.assertEqual(
+        list(cfg.__arguments__.items()), [
+            ('var_kwarg1', 3),
+            ('kwarg1', 'hi'),
+            ('arg1', 4),
+            ('var_kwarg2', 0),
+        ])
+    self.assertEqual(
+        list(config_lib.ordered_arguments(cfg).items()), [
+            ('arg1', 4),
+            ('kwarg1', 'hi'),
+            ('var_kwarg1', 3),
+            ('var_kwarg2', 0),
+        ])
+
+    with self.subTest('path element and keys match up'):
+      _, metadata = cfg.__flatten__()
+      path_elements = cfg.__path_elements__()
+      self.assertEqual(
+          metadata.argument_names,
+          tuple(path_element.name for path_element in path_elements))
 
 
 if __name__ == '__main__':

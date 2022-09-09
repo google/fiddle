@@ -154,8 +154,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
   def __flatten__(self) -> Tuple[Tuple[Any, ...], BuildableTraverserMetadata]:
-    keys = tuple(self.__arguments__.keys())
-    values = tuple(self.__arguments__.values())
+    arguments = ordered_arguments(self)
+    keys = tuple(arguments.keys())
+    values = tuple(arguments.values())
     tags = {
         name: frozenset(tags) for name, tags in self.__argument_tags__.items()
     }
@@ -180,7 +181,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     return rebuilt
 
   def __path_elements__(self):
-    return tuple(daglish.Attr(name) for name in self.__arguments__.keys())
+    return tuple(daglish.Attr(name) for name in ordered_arguments(self).keys())
 
   def __getattr__(self, name: str):
     """Get parameter with given `name`."""
@@ -599,6 +600,17 @@ def assign(buildable: Buildable, **kwargs):
   """
   for name, value in kwargs.items():
     setattr(buildable, name, value)
+
+
+def ordered_arguments(buildable: Buildable) -> Dict[str, Any]:
+  """Returns arguments of a Buildable, ordered by the signature."""
+  result = {}
+  for name, param in buildable.__signature__.parameters.items():
+    if param.kind != param.VAR_KEYWORD and name in buildable.__arguments__:
+      result[name] = buildable.__arguments__[name]
+  for name, value in buildable.__arguments__.items():
+    result.setdefault(name, value)
+  return result
 
 
 def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
