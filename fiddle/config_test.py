@@ -24,8 +24,8 @@ from typing import Any, Callable, Dict
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import daglish
 from fiddle import history
-from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 
 import pytype_extensions

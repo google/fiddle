@@ -21,10 +21,10 @@ import inspect
 from typing import Any, Iterator, List, Optional, Type
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import history
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
-from fiddle.experimental import daglish
 
 
 @dataclasses.dataclass(frozen=True)

@@ -22,9 +22,9 @@ from typing import Union
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import daglish
 from fiddle import printing
 from fiddle import tagging
-from fiddle.experimental import daglish
 
 
 class SampleTag(tagging.Tag):

@@ -65,9 +65,9 @@ import typing
 from typing import Any, Collection, FrozenSet, Generic, Optional, TypeVar, Union
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import tag_type
 from fiddle.experimental import auto_config
-from fiddle.experimental import daglish
 from fiddle.experimental import serialization
 
 TagType = tag_type.TagType

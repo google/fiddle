@@ -18,8 +18,8 @@ import random
 from typing import Any, List, Union
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import tagging
-from fiddle.experimental import daglish
 
 
 def kwargs_fn(**kwargs):

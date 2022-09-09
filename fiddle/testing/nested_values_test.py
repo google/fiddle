@@ -18,7 +18,7 @@
 import random
 
 from absl.testing import parameterized
-from fiddle.experimental import daglish
+from fiddle import daglish
 from fiddle.experimental import daglish_legacy
 from fiddle.testing import nested_values
 

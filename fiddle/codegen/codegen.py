@@ -25,9 +25,9 @@ from typing import Any, Dict, List, Sequence, Set
 
 from absl import logging
 from fiddle import config as fdl
+from fiddle import daglish
 from fiddle.codegen import mini_ast
 from fiddle.codegen import special_value_codegen
-from fiddle.experimental import daglish
 
 
 def _camel_to_snake(name: str) -> str:

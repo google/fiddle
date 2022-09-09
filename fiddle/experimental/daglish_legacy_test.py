@@ -21,7 +21,7 @@ from typing import Any, NamedTuple
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle.experimental import daglish
+from fiddle import daglish
 from fiddle.experimental import daglish_legacy
 
 

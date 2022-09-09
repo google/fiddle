@@ -19,12 +19,12 @@ import collections
 import functools
 import re
 import types
-from typing import List, Tuple, Any, Set, Dict, Callable
+from typing import Any, Callable, Dict, List, Set, Tuple
 
 from fiddle import config
+from fiddle import daglish
 from fiddle.codegen import codegen
 from fiddle.codegen import py_val_to_cst_converter
-from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff as fdl_diff
 

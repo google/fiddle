@@ -28,7 +28,7 @@ more hermetic.
 from typing import Any
 
 from fiddle import config
-from fiddle.experimental import daglish
+from fiddle import daglish
 
 
 def materialize_defaults(value: Any) -> None:

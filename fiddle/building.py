@@ -17,11 +17,11 @@
 import contextlib
 import threading
 
-from typing import Any, Callable, Dict, Optional, TypeVar, Tuple, overload
+from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, overload
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import tag_type
-from fiddle.experimental import daglish
 
 T = TypeVar('T')
 CallableProducingT = Callable[..., T]

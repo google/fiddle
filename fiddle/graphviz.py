@@ -24,13 +24,13 @@ import html
 import itertools
 import types
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Type, NamedTuple, Set
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Type, Union
 
 from fiddle import config as fdl
+from fiddle import daglish
 from fiddle import tag_type
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
-from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff as fdl_diff
 import graphviz

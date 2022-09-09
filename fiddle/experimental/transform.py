@@ -15,10 +15,10 @@
 
 """Transformation functions for Fiddle buildables."""
 
-from typing import TypeVar, Optional
+from typing import Optional, TypeVar
 
 from fiddle import config
-from fiddle.experimental import daglish
+from fiddle import daglish
 
 # Any subclass of Buildable
 AnyBuildable = TypeVar("AnyBuildable", bound=config.Buildable)

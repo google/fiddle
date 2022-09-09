@@ -19,14 +19,14 @@ import collections
 import dataclasses
 import json
 import random
-from typing import Any, cast, Iterable, List, NamedTuple, Optional, Type
+from typing import Any, Iterable, List, NamedTuple, Optional, Type, cast
 
 from absl.testing import absltest
 from absl.testing import parameterized
 
 import fiddle as fdl
+from fiddle import daglish
 from fiddle import history
-from fiddle.experimental import daglish
 from fiddle.testing import nested_values
 from fiddle.testing import test_util
 
@@ -304,15 +304,6 @@ class TraverserRegistryTest(parameterized.TestCase):
           flatten_fn=lambda x: (tuple(x), None),
           unflatten_fn=lambda x, _: list(x),
           path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
-
-  def test_map_children(self):
-    value = {"a": 1, "b": 2}
-    result = daglish.map_children(lambda x: x - 1, value)
-    self.assertEqual({"a": 0, "b": 1}, result)
-
-  def test_map_children_non_traversable_error(self):
-    with self.assertRaises(ValueError):
-      daglish.map_children(lambda x: x, 42)
 
 
 class BasicStructuredMappingTest(parameterized.TestCase):

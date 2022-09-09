@@ -25,8 +25,8 @@ import inspect
 from typing import Any, Dict, Iterable, List
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import graphviz
-from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 
 

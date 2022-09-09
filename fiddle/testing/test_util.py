@@ -20,7 +20,7 @@ from typing import Any, Dict, Set
 
 from absl.testing import absltest
 from fiddle import config
-from fiddle.experimental import daglish
+from fiddle import daglish
 from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff
 

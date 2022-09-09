@@ -26,8 +26,8 @@ import dataclasses
 from typing import Any, Callable, Iterator, Optional, Type, Union
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import tag_type
-from fiddle.experimental import daglish
 
 # Maybe DRY up with type declaration in autobuilders.py?
 FnOrClass = Union[Callable[..., Any], Type[Any]]

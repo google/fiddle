@@ -24,11 +24,10 @@ import functools
 import inspect
 import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
-
+from fiddle import daglish
 from fiddle import history
 from fiddle import tag_type
 from fiddle._src import field_metadata
-from fiddle.experimental import daglish
 
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]

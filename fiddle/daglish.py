@@ -191,26 +191,6 @@ class NodeTraverserRegistry:
       node_type = NamedTupleType
     return self._node_traversers.get(node_type)
 
-  def map_children(self, fn: Callable[[Any], Any], value: Any) -> Any:
-    """Maps `fn` over the immediate children of `value`.
-
-    Args:
-      fn: A single-argument callable to apply to the children of `value`.
-      value: The value to map `fn` over.
-
-    Returns:
-      A value of the same type as `value`, but with each child replaced by the
-      return value of `fn(child)`.
-
-    Raises:
-      ValueError: If `value` is not traversable.
-    """
-    traverser = self.find_node_traverser(type(value))
-    if traverser is None:
-      raise ValueError(f"{value} is not traversable.")
-    values, metadata = traverser.flatten(value)
-    return traverser.unflatten((fn(value) for value in values), metadata)
-
   def is_traversable_type(self, node_type: Type[Any]) -> bool:
     """Returns whether `node_type` can be traversed."""
     return self.find_node_traverser(node_type) is not None
@@ -222,7 +202,6 @@ _default_traverser_registry = NodeTraverserRegistry()
 # Forward functions from the module level to the default registry.
 register_node_traverser = _default_traverser_registry.register_node_traverser
 find_node_traverser = _default_traverser_registry.find_node_traverser
-map_children = _default_traverser_registry.map_children
 is_traversable_type = _default_traverser_registry.is_traversable_type
 
 register_node_traverser(

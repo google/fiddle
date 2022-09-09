@@ -35,7 +35,7 @@ import types
 from typing import Any, Dict, Iterable, List, Optional, Type
 
 from fiddle import config
-from fiddle.experimental import daglish
+from fiddle import daglish
 from fiddle.experimental import daglish_legacy
 
 _VERSION = '0.0.1'

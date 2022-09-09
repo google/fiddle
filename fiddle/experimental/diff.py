@@ -20,10 +20,10 @@ import collections
 import copy
 import dataclasses
 
-from typing import Any, Callable, Dict, Sequence, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 from fiddle import config
+from fiddle import daglish
 from fiddle import tag_type
-from fiddle.experimental import daglish
 from fiddle.experimental import daglish_legacy
 
 

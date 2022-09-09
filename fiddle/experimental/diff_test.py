@@ -22,8 +22,8 @@ from typing import Any
 from absl.testing import absltest
 from absl.testing import parameterized
 import fiddle as fdl
+from fiddle import daglish
 from fiddle import testing
-from fiddle.experimental import daglish
 from fiddle.experimental import diff
 
 
