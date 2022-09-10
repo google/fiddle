@@ -416,6 +416,9 @@ class SubTraversalResult:
   metadata: Any
   path_elements: PathElements
 
+  def unflatten(self):
+    return self.node_traverser.unflatten(self.values, self.metadata)
+
 
 @dataclasses.dataclass(frozen=True)
 class State:
