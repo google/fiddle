@@ -23,6 +23,7 @@ from absl.testing import absltest
 import fiddle as fdl
 from fiddle.experimental import auto_config
 from fiddle.experimental import dataclasses as fdl_dc
+from fiddle.testing import test_util
 
 
 class SampleTag(fdl.Tag):
@@ -76,7 +77,23 @@ class AncestorType:
       default_factory=AnAutoconfigType.default)
 
 
-class DataclassesTest(absltest.TestCase):
+@dataclasses.dataclass
+class Parent:
+  """A class w/ a field that uses configurable_factory=True."""
+  child: AnAutoconfigType = fdl_dc.field(
+      default_factory=AnAutoconfigType, configurable_factory=True)
+  y: int = 0
+
+
+@dataclasses.dataclass
+class ParentPair:
+  first: Parent = fdl_dc.field(
+      default_factory=Parent, configurable_factory=True)
+  second: Parent = fdl_dc.field(
+      default_factory=Parent, configurable_factory=True)
+
+
+class DataclassesTest(test_util.TestCase):
 
   def test_dataclass_tagging(self):
     config = fdl.Config(ATaggedType)
@@ -139,6 +156,56 @@ class DataclassesTest(absltest.TestCase):
     with self.assertRaisesRegex(
         ValueError, 'cannot specify both default and default_factory'):
       fdl_dc.field(default_factory=nested_structure, default=4)
+
+  def test_configurable_factory(self):
+    config = fdl.Config(ParentPair)
+    expected_config = fdl.Config(
+        ParentPair, fdl.Config(Parent, child=fdl.Config(AnAutoconfigType)),
+        fdl.Config(Parent, child=fdl.Config(AnAutoconfigType)))
+    self.assertDagEqual(config, expected_config)
+    self.assertEqual(fdl.build(config), ParentPair())
+
+  def test_configurable_factory_can_be_configured(self):
+    # Create a config and make some changes to it.
+    config = fdl.Config(ParentPair)
+    config.first.y = 100
+    config.second.child.another_default = {'x': 1}
+    fdl.set_tagged(config, tag=SampleTag, value='changed')
+
+    # Create a ParentPair object and make the same changes.
+    expected_result = ParentPair()
+    expected_result.first.y = 100
+    expected_result.second.child.another_default = {'x': 1}
+    expected_result.first.child.tagged_type.tagged = 'changed'
+    expected_result.first.child.tagged_type.double_tagged = 'changed'
+    expected_result.second.child.tagged_type.tagged = 'changed'
+    expected_result.second.child.tagged_type.double_tagged = 'changed'
+
+    self.assertEqual(fdl.build(config), expected_result)
+
+  def test_configurable_factory_no_unintentional_aliasing(self):
+    config = fdl.Config(ParentPair)
+    self.assertIsNot(config.first, config.second)
+    self.assertIsNot(config.first.child, config.second.child)
+    self.assertIsNot(config.first.child.tagged_type,
+                     config.second.child.tagged_type)
+    self.assertIsNot(config.first.child.another_default,
+                     config.second.child.another_default)
+
+    val = fdl.build(config)
+    self.assertIsNot(val.first, val.second)
+    self.assertIsNot(val.first.child, val.second.child)
+    self.assertIsNot(val.first.child.tagged_type, val.second.child.tagged_type)
+    self.assertIsNot(val.first.child.another_default,
+                     val.second.child.another_default)
+
+  def test_configurable_factory_autoconfig_error(self):
+    with self.assertRaisesRegex(
+        ValueError, 'configurable_factory should not '
+        "be used with auto_config'ed functions"):
+      fdl_dc.field(
+          default_factory=AnAutoconfigType.default, configurable_factory=True)
+
 
 if __name__ == '__main__':
   absltest.main()

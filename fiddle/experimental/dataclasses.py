@@ -24,9 +24,11 @@ rest of Fiddle.
 """
 
 import dataclasses
+import inspect
 import types
 from typing import Any, Collection, Mapping, Optional, Union
 
+from fiddle import config
 from fiddle import tag_type
 from fiddle._src import field_metadata
 from fiddle.experimental import auto_config
@@ -36,10 +38,20 @@ TagOrTags = Union[tag_type.TagType, Collection[tag_type.TagType]]
 FieldMetadata = field_metadata.FieldMetadata
 
 
+def _has_signature(value):
+  """Returns true if inspect.signature(value) succeeds."""
+  try:
+    inspect.signature(value)
+  except ValueError:
+    return False
+  return True
+
+
 def field(*,
           default_factory: Any = dataclasses.MISSING,
           tags: Optional[TagOrTags] = tuple(),
           metadata: Optional[Mapping[Any, Any]] = None,
+          configurable_factory: bool = False,
           **kwargs) -> Union[dataclasses.Field[Any], Any]:
   """A wrapper around dataclasses.field to add optional Fiddle metadata.
 
@@ -52,6 +64,13 @@ def field(*,
     tags: One or more tags to attach to the `fdl.Buildable`'s argument
       corresponding to the field.
     metadata: Any additional metadata to include.
+    configurable_factory: If true, then set this field to
+      `fdl.Config(default_factory)` when creating a `fdl.Buildable` for the
+      enclosing type.  For example, if `default_factory` is a dataclass, then
+      this will make it possible to configure default values for the fields
+      of that dataclass.  This should not be set to True if `default_factory`
+      is an `auto_config`'ed function; see above for handling of `auto_config'ed
+      `default_factory`.
     **kwargs: All other kwargs are passed to `dataclasses.field`; see the
       documentation on `dataclasses.field` for valid arguments.
 
@@ -64,9 +83,18 @@ def field(*,
   if isinstance(tags, tag_type.TagType):
     tags = (tags,)
 
-  buildable_initializer = (
-      default_factory.as_buildable
-      if auto_config.is_auto_config(default_factory) else None)
+  if auto_config.is_auto_config(default_factory):
+    if configurable_factory:
+      raise ValueError("configurable_factory should not be used with "
+                       "auto_config'ed functions.")
+    buildable_initializer = default_factory.as_buildable
+  elif configurable_factory:
+    if not (default_factory and _has_signature(default_factory)):
+      raise ValueError("configurable_factory requires that default_factory "
+                       "be set to a function or class with a signature.")
+    buildable_initializer = lambda: config.Config(default_factory)
+  else:
+    buildable_initializer = None
 
   metadata: Mapping[Any, Any] = types.MappingProxyType(metadata or {})
   # pylint: disable=protected-access
