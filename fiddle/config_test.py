@@ -1105,6 +1105,26 @@ class ConfigTest(absltest.TestCase):
       cfg.child.x = 5  # now it's ok to configure child.
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
 
+  def test_config_for_fn_with_special_arg_names(self):
+    # The reason that these tests pass is that we use positional-only
+    # parameters for self, etc. in functions such as Config.__build__.
+    # If we used keyword-or-positional parameters instead, then these
+    # tests would fail with a "multiple values for argument" TypeError.
+
+    def f(self, fn_or_cls, buildable=0):
+      return self + fn_or_cls + buildable
+
+    cfg = fdl.Config(f)
+    cfg.self = 100
+    cfg.fn_or_cls = 200
+    self.assertEqual(fdl.build(cfg), 300)
+
+    fdl.assign(cfg, buildable=10)  # pytype: disable=wrong-arg-types
+    self.assertEqual(fdl.build(cfg), 310)
+
+    cfg2 = fdl.Config(f, self=5, fn_or_cls=1)  # pytype: disable=wrong-arg-types
+    self.assertEqual(fdl.build(cfg2), 6)
+
 
 class OrderedArgumentsTest(absltest.TestCase):
 

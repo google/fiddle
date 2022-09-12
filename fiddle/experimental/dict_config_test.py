@@ -81,6 +81,10 @@ class DictConfigTest(absltest.TestCase):
       cfg2.y = 'def'
       self.assertNotEqual(cfg1, cfg2)
 
+  def test_key_named_self(self):
+    cfg = dict_config.DictConfig(self=2)  # pytype: disable=wrong-arg-types
+    self.assertEqual(fdl.build(cfg), {'self': 2})
+
 
 if __name__ == '__main__':
   absltest.main()

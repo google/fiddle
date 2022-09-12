@@ -48,6 +48,10 @@ class SampleClass:
   def method(self):
     return 42
 
+  @auto_config.auto_config
+  def autoconfig_method(self):
+    return basic_fn(self)
+
 
 @auto_config.auto_unconfig(experimental_always_inline=True)
 def explicit_config_building_fn(x: int) -> fdl.Config:
@@ -62,7 +66,7 @@ def _line_number():
   return sys._getframe(1).f_lineno
 
 
-class AutoConfigTest(parameterized.TestCase):
+class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_create_basic_config(self):
     expected_config = fdl.Config(SampleClass, 1, arg2=2)
@@ -700,6 +704,25 @@ class AutoConfigTest(parameterized.TestCase):
         auto_config.UnsupportedLanguageConstructError,
         r'Async function definitions are not supported by auto_config\.'):
       auto_config.auto_config(test_config)
+
+  def test_access_autoconfig_method_via_class(self):
+    # If we access an autoconfig via an instance, we get a bound method:
+    self.assertIsInstance(
+        SampleClass(1, 2).autoconfig_method, auto_config._BoundAutoConfig)
+
+    # But if we access it via the class, we get the (unbound) AutoConfig:
+    self.assertIsInstance(SampleClass.autoconfig_method, auto_config.AutoConfig)
+
+  def test_can_pass_self_as_keyword(self):
+    x = SampleClass(1, 2)
+    self.assertEqual(
+        SampleClass.autoconfig_method(self=x), {
+            'arg': x,
+            'kwarg': 'test'
+        })
+    self.assertDagEqual(
+        SampleClass.autoconfig_method.as_buildable(self=x),
+        fdl.Config(basic_fn, x))
 
 
 class AutoUnconfigTest(absltest.TestCase):

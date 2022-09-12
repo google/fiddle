@@ -83,7 +83,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   __argument_tags__: Dict[str, Set[tag_type.TagType]]
   _has_var_keyword: bool
 
-  def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
+  def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT], /,
                *args, **kwargs):
     """Initialize for `fn_or_cls`, optionally specifying parameters.
 
@@ -149,7 +149,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     )
 
   @abc.abstractmethod
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds output for this instance; see subclasses for details."""
     raise NotImplementedError()
 
@@ -460,7 +460,7 @@ class Config(Generic[T], Buildable[T]):
   __fn_or_cls__: TypeOrCallableProducingT
   __signature__: inspect.Signature
 
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds this `Config` for the given `args` and `kwargs`.
 
     This method is called during `build` to get the output for this `Config`.
@@ -507,7 +507,7 @@ class Partial(Generic[T], Buildable[T]):
   # NOTE: We currently need to repeat this annotation for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
 
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds this `Partial` for the given `args` and `kwargs`.
 
     This method is called during `build` to get the output for this `Partial`.
@@ -581,7 +581,7 @@ def update_callable(buildable: Buildable,
       history.new_value('__fn_or_cls__', new_callable))
 
 
-def assign(buildable: Buildable, **kwargs):
+def assign(buildable: Buildable, /, **kwargs):
   """Assigns multiple arguments to cfg.
 
   Although this function does not enable a caller to do something they can't
