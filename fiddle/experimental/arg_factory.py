@@ -300,7 +300,7 @@ class CallableWithDefaultFactory(Generic[T]):
 
 def _signature_for_callable_with_default_factories(
     func_signature: inspect.Signature,
-    default_factories: dict[str, Callable[..., Any]]) -> inspect.Signature:
+    default_factories: Dict[str, Callable[..., Any]]) -> inspect.Signature:
   """Returns the signature for a callable with default factories.
 
   * Updates Parameter.default for any parameters with default factories.

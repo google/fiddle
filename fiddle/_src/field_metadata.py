@@ -39,7 +39,8 @@ class FieldMetadata:
 
 
 def field_metadata(
-    field_object: dataclasses.Field[Any]) -> Optional[FieldMetadata]:
+    field_object: dataclasses.Field  # pylint: disable=g-bare-generic
+) -> Optional[FieldMetadata]:
   """Retrieves the Fiddle-specific metadata (if present) on `field`."""
   # Note: `field_object` is named as such, and not `field` to avoid shadowing
   # the `field` symbol (function) defined above.

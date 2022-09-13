@@ -21,7 +21,7 @@ See https://github.com/google/fiddle for documentation.
 from setuptools import find_packages
 from setuptools import setup
 
-_VERSION = '0.2.1'
+_VERSION = '0.2.2'
 
 long_description = """
 # Fiddle

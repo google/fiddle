@@ -47,12 +47,13 @@ def _has_signature(value):
   return True
 
 
-def field(*,
-          default_factory: Any = dataclasses.MISSING,
-          tags: Optional[TagOrTags] = tuple(),
-          metadata: Optional[Mapping[Any, Any]] = None,
-          configurable_factory: bool = False,
-          **kwargs) -> Union[dataclasses.Field[Any], Any]:
+def field(
+    *,
+    default_factory: Any = dataclasses.MISSING,
+    tags: Optional[TagOrTags] = tuple(),
+    metadata: Optional[Mapping[Any, Any]] = None,
+    configurable_factory: bool = False,
+    **kwargs) -> Union[dataclasses.Field, Any]:  # pylint: disable=g-bare-generic
   """A wrapper around dataclasses.field to add optional Fiddle metadata.
 
   Args:
@@ -67,9 +68,9 @@ def field(*,
     configurable_factory: If true, then set this field to
       `fdl.Config(default_factory)` when creating a `fdl.Buildable` for the
       enclosing type.  For example, if `default_factory` is a dataclass, then
-      this will make it possible to configure default values for the fields
-      of that dataclass.  This should not be set to True if `default_factory`
-      is an `auto_config`'ed function; see above for handling of `auto_config'ed
+      this will make it possible to configure default values for the fields of
+      that dataclass.  This should not be set to True if `default_factory` is an
+      `auto_config`'ed function; see above for handling of `auto_config'ed
       `default_factory`.
     **kwargs: All other kwargs are passed to `dataclasses.field`; see the
       documentation on `dataclasses.field` for valid arguments.

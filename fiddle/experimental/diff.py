@@ -16,11 +16,10 @@
 """Library for finding differences between Fiddle configurations."""
 
 import abc
-import collections
 import copy
 import dataclasses
 
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 from fiddle import config
 from fiddle import daglish
 from fiddle import tag_type
@@ -95,8 +94,7 @@ class Diff:
     # TODO: prune new_shared_values as some may not be relevant anymore
     return Diff(new_changes, self.new_shared_values)
 
-  def ignoring_paths(self,
-                     paths=collections.abc.Iterable[daglish.Path]) -> 'Diff':
+  def ignoring_paths(self, paths=Iterable[daglish.Path]) -> 'Diff':
     """Creates a new `Diff` without changes involving the given `paths`.
 
     Args:
