@@ -20,19 +20,16 @@
 Currently this just affects codegen, graphviz, and other debugging functions.
 """
 
-from fiddle.codegen import codegen
-from fiddle.codegen import mini_ast
-
-_seqio_import = mini_ast.DirectImport(name="seqio")
+from fiddle.codegen import import_manager
 
 _import_aliases = (
     # Seqio  aliases all of these to its top level import.
-    ("seqio.dataset_providers", _seqio_import),
-    ("seqio.evaluation", _seqio_import),
-    ("seqio.feature_converters", _seqio_import),
-    ("seqio.loggers", _seqio_import),
-    ("seqio.utils", _seqio_import),
-    ("seqio.vocabularies", _seqio_import),
+    ("seqio.dataset_providers", "import seqio"),
+    ("seqio.evaluation", "import seqio"),
+    ("seqio.feature_converters", "import seqio"),
+    ("seqio.loggers", "import seqio"),
+    ("seqio.utils", "import seqio"),
+    ("seqio.vocabularies", "import seqio"),
 )
 
 
@@ -42,4 +39,4 @@ def enable():
   This allows for nicer handling of seqio imports.
   """
   for module_str, import_stmt in _import_aliases:
-    codegen.register_import_alias(module_str, import_stmt)
+    import_manager.register_import_alias(module_str, import_stmt)

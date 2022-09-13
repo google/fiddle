@@ -17,163 +17,17 @@
 
 import collections
 import dataclasses
-import inspect
-import itertools
-import keyword
-import re
-from typing import Any, Dict, List, Sequence, Set
+from typing import Any, Dict, List, Sequence
 
-from absl import logging
 from fiddle import config as fdl
 from fiddle import daglish
+from fiddle.codegen import import_manager as import_manager_lib
 from fiddle.codegen import mini_ast
+from fiddle.codegen import namespace as namespace_lib
 from fiddle.codegen import special_value_codegen
 
-
-def _camel_to_snake(name: str) -> str:
-  """Converts a camel or studly-caps name to a snake_case name."""
-  return re.sub(r"(?<=.)([A-Z])", lambda m: "_" + m.group(0).lower(),
-                name).lower()
-
-
-# Project-specific import aliases.
-_SPECIAL_IMPORT_ALIASES = {}
-
-
-def register_import_alias(name: str, import_stmt: mini_ast.ImportNode) -> None:
-  """Registers an import alias.
-
-  Typically this is called by extensions in `fiddle.extensions`.
-
-  Args:
-    name: Full module name to alias. Often, this is what can be found in
-      `type(py_value).__module__.__name__`.
-    import_stmt: Import statement to emit for this module.
-  """
-  _SPECIAL_IMPORT_ALIASES[name] = import_stmt
-
-
-def _get_import_aliases() -> Dict[str, mini_ast.ImportNode]:
-  """Dictionary of import aliases."""
-  return {
-      **_SPECIAL_IMPORT_ALIASES,
-      "fiddle.config":
-          mini_ast.ImportAs(name="fdl", module="fiddle"),
-  }
-
-
-@dataclasses.dataclass
-class Namespace:
-  """Manages active Python instance names."""
-
-  names: Set[str] = dataclasses.field(
-      default_factory=lambda: set(keyword.kwlist))
-
-  def __contains__(self, key: str) -> bool:
-    return key in self.names
-
-  def add(self, name: str) -> str:
-    """Adds a name, checking if it already exists, and returns it."""
-    if name in self.names:
-      raise ValueError(
-          f"Tried to add {name!r} (e.g. an import), but it already exists!")
-    self.names.add(name)
-    return name
-
-  def get_new_name(self, base_name, prefix: str = "shared_") -> str:
-    """Generates a new name for a given instance.
-
-    Example:
-      self.names = ["foo"]
-      get_new_name("bar") == "shared_bar"
-
-    Example 2:
-      self.names = ["shared_foo", "bar"]
-      get_new_name("Foo") == "shared_foo_2"
-
-    Args:
-      base_name: Base name to derive a new name for. This will be converted to
-        snake case automatically.
-      prefix: Prefix to prepend to any names.
-
-    Returns:
-      New unique name for a variable representing a config for that function
-      or class.
-    """
-
-    name = prefix + _camel_to_snake(base_name)
-    if name not in self.names:
-      return self.add(name)
-    for i in itertools.count(start=2):
-      if f"{name}_{i}" not in self.names:
-        return self.add(f"{name}_{i}")
-    raise AssertionError("pytype helper -- itertools.count() is infinite")
-
-
-@dataclasses.dataclass
-class ImportManager:
-  """Helper class to maintain a list of import statements."""
-
-  namespace: Namespace
-  imports: List[mini_ast.ImportNode] = dataclasses.field(default_factory=list)
-  aliases: Dict[str, mini_ast.ImportNode] = dataclasses.field(
-      default_factory=_get_import_aliases)
-
-  def add_by_name(self, module_name: str) -> str:
-    """Adds an import given a module name.
-
-    This is a slightly lower-level API than `add`; you should only use it if
-    you don't have access.
-
-    Args:
-      module_name: String module name to try to import.
-
-    Returns:
-      Alias for the imported module.
-    """
-    result = self.aliases.get(module_name)
-    if not result:
-      if "." in module_name:
-        parent, module_name = module_name.rsplit(".", 1)
-        result = mini_ast.FromImport(name=module_name, parent=parent)
-      else:
-        result = mini_ast.DirectImport(module_name)
-
-    if result not in self.imports:
-      if result.name in self.namespace:
-        # Create or adjust the alias for the import.
-        new_name = self.namespace.get_new_name(result.name, prefix="")
-        result = result.change_alias(new_name)
-      else:
-        self.namespace.add(result.name)
-      self.imports.append(result)
-    return result.name
-
-  def add(self, fn_or_cls: Any) -> str:
-    """Adds an import if it doesn't exist.
-
-    This adds an import statement to this manager.
-
-    Args:
-      fn_or_cls: Function or class.
-
-    Returns:
-      Relative-qualified name for the instance.
-    """
-    module_name = inspect.getmodule(fn_or_cls).__name__
-    fn_or_cls_name = fn_or_cls.__qualname__
-    if module_name == "__main__":
-      logging.warning(
-          "%s's module is __main__, so an import couldn't be added.",
-          fn_or_cls_name)
-      return fn_or_cls_name
-
-    imported_name = self.add_by_name(module_name)
-    return f"{imported_name}.{fn_or_cls_name}"
-
-  def sorted_imports(self):
-    """Returns imports sorted lexicographically."""
-    return sorted(self.imports, key=lambda x: x.sortkey())
+Namespace = namespace_lib.Namespace
+ImportManager = import_manager_lib.ImportManager
 
 
 def assignment_path(base_var: str, path: Sequence[daglish.PathElement]) -> str:
@@ -445,7 +299,7 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
   # Adds the final return statement, glues together the shared instance block
   # with the main tree block, and adds imports.
   main_tree_blocks.append(mini_ast.ReturnStmt("root"))
-  return mini_ast.ConfigBuilder(import_manager.sorted_imports(), [
+  return mini_ast.ConfigBuilder(import_manager.sorted_import_lines(), [
       mini_ast.SharedThenResultAssignment(shared_manager.instances,
                                           main_tree_blocks)
   ])

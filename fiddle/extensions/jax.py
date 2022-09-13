@@ -18,8 +18,7 @@
 Currently this just affects codegen, graphviz, and other debugging functions.
 """
 
-from fiddle.codegen import codegen
-from fiddle.codegen import mini_ast
+from fiddle.codegen import import_manager
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.codegen import special_value_codegen
 import jax
@@ -53,12 +52,8 @@ _jnp_type_importables = (
 
 _import_aliases = (
     # Rewrite internal import for JAX initializers.
-    ("jax._src.nn.initializers",
-     mini_ast.FromImport(name="initializers", parent="jax.nn")),
-    (
-        "jax.numpy",
-        mini_ast.FromImportAs(name="jnp", parent="jax", module="numpy"),
-    ),
+    ("jax._src.nn.initializers", "from jax.nn import initializers"),
+    ("jax.numpy", "from jax import numpy as jnp"),
 )
 
 
@@ -113,7 +108,7 @@ def enable():
     special_value_codegen.register_exact_value(value, importable)
 
   for module_str, import_stmt in _import_aliases:
-    codegen.register_import_alias(module_str, import_stmt)
+    import_manager.register_import_alias(module_str, import_stmt)
 
   # The odd calling syntax here ("register(type)(handler)") comes from the fact
   # that register_converter is usually a decorator, but we call it directly.

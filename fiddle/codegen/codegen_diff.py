@@ -23,7 +23,8 @@ from typing import Any, Callable, Dict, List, Set, Tuple
 
 from fiddle import config
 from fiddle import daglish
-from fiddle.codegen import codegen
+from fiddle.codegen import import_manager as import_manager_lib
+from fiddle.codegen import namespace as namespace_lib
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.experimental import daglish_legacy
 from fiddle.experimental import diff as fdl_diff
@@ -73,11 +74,11 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
   """
   # Create a namespace to keep track of variables that we add.  Reserve the
   # names of the param & func.
-  namespace = codegen.Namespace()
+  namespace = namespace_lib.Namespace()
   namespace.add(param_name)
   namespace.add(func_name)
 
-  import_manager = codegen.ImportManager(namespace)
+  import_manager = import_manager_lib.ImportManager(namespace)
 
   # Get a list of paths that are referenced by the diff.
   used_paths = _find_used_paths(diff)
@@ -101,7 +102,7 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
 
   # Add variables for new shared values added by the diff.
   new_shared_value_names = [
-      namespace.get_new_name(_name_for_value(value))
+      namespace.get_new_name(_name_for_value(value), 'shared_')
       for value in diff.new_shared_values
   ]
 
@@ -134,23 +135,12 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
                                          pyval_to_cst)
   body += _cst_for_changes(diff, param_name, moved_value_names, pyval_to_cst)
 
-  imports = _cst_for_imports(import_manager)
-  fiddler = _cst_for_fiddler(func_name, param_name, body, bool(imports))
+  fiddler = _cst_for_fiddler(func_name, param_name, body,
+                             bool(import_manager.imports_by_full_name))
 
-  result = cst.Module(body=imports + [fiddler])
+  result = cst.Module(body=import_manager.sorted_import_lines() + [fiddler])
 
   return result
-
-
-def _cst_for_imports(
-    import_manager: codegen.ImportManager) -> List[cst.CSTNode]:
-  """Returns a list of `cst.CSTNode` for import satements in `import_manager`."""
-  imp_lines = []
-  for imp in import_manager.sorted_imports():
-    imp_lines.extend(imp.lines())
-  import_str = '\n'.join(imp_lines) + '\n'
-  module = cst.parse_module(import_str)
-  return module.body
 
 
 def _cst_for_fiddler(func_name: str, param_name: str, body: List[cst.CSTNode],
