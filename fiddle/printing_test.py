@@ -360,9 +360,12 @@ class AsStrFlattenedTests(absltest.TestCase):
     cfg = fdl.Config(to_integer, 1)
     output = printing.as_str_flattened(cfg, include_types=True)
 
-    expected = textwrap.dedent("""\
-        x: typing.Union[int, str] = 1""")
-    self.assertEqual(output, expected)
+    expected = {
+        # Output depends on Python version.
+        'x: typing.Union[int, str] = 1',
+        'x: Union = 1'
+    }
+    self.assertIn(output, expected)
 
   def test_materialized_default_values(self):
 

@@ -210,7 +210,8 @@ def as_str_flattened(cfg: config.Buildable,
       try:
         type_annotation = f': {line.annotation.__qualname__}'
       except AttributeError:
-        # Certain types, such as Union, do not have a __qualname__ attribute.
+        # Certain types (such as Union before Python 3.10) do not have a
+        # __qualname__ attribute.
         type_annotation = f': {line.annotation}'
     value = _format_value(line.value, raw_value_repr=raw_value_repr)
     return f'{_path_str(line.path)}{type_annotation} = {value}'
