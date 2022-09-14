@@ -18,6 +18,7 @@
 import copy
 import dataclasses
 import inspect
+import types
 from typing import Any, Iterator, List, Optional, Type
 
 from fiddle import config
@@ -204,13 +205,21 @@ def as_str_flattened(cfg: config.Buildable,
       for sub_result in state.flattened_map_children(value).values:
         yield from sub_result
 
+  # Used in format_line below.  The use of getattr and the dummy type default
+  # is to maintain Python 3.8 compatibility.
+  dummy_type = type('', (), {})
+  generic_alias = getattr(types, 'GenericAlias', dummy_type)
+
   def format_line(line: _LeafSetting):
     type_annotation = ''
     if include_types and line.annotation is not None:
-      try:
+      # If the annotation is a type, use the __qualname__, unless the annotation
+      # is a parameterized generic (e.g. list[int]), in which case the
+      # __qualname__ would lose information about the parameters.
+      is_parameterized_generic = isinstance(line.annotation, generic_alias)
+      if isinstance(line.annotation, type) and not is_parameterized_generic:
         type_annotation = f': {line.annotation.__qualname__}'
-      except AttributeError:
-        # Certain types, such as Union, do not have a __qualname__ attribute.
+      else:
         type_annotation = f': {line.annotation}'
     value = _format_value(line.value, raw_value_repr=raw_value_repr)
     return f'{_path_str(line.path)}{type_annotation} = {value}'

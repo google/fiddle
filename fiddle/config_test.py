@@ -820,11 +820,11 @@ class ConfigTest(absltest.TestCase):
     fdl.add_tag(config, 'kwarg2', Tag1)
     fdl.add_tag(config, 'kwarg2', Tag2)
     expected_repr = (
-        '<Config[SampleClass(arg1[#__main__.Tag1]=1, arg2[#__main__.Tag2], ' +
-        "kwarg1='kwarg1', kwarg2[#__main__.Tag1, #__main__.Tag2]=" +
+        '<Config[SampleClass(arg1[#{module}.Tag1]=1, arg2[#{module}.Tag2], ' +
+        "kwarg1='kwarg1', kwarg2[#{module}.Tag1, #{module}.Tag2]=" +
         "<Config[SampleClass(arg1='nested value might be large so put tag " +
         "next to param, not after value.')]>)]>")
-    self.assertEqual(repr(config), expected_repr)
+    self.assertEqual(repr(config), expected_repr.format(module=__name__))
 
   def test_nonexistent_attribute_error(self):
     class_config = fdl.Config(SampleClass, 1)

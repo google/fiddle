@@ -46,7 +46,7 @@ class SampleTag(fdl.Tag):
   """`fdl.Tag` to use for testing."""
 
 
-def test_fn(arg, kwarg="test"):
+def sample_fn(arg, kwarg="test"):
   return arg, kwarg
 
 
@@ -430,7 +430,7 @@ class ArgsSwitchingFuzzTest(parameterized.TestCase):
 class GenerateTest(absltest.TestCase):
 
   def test_basic_walking(self):
-    shared = fdl.Config(test_fn, "arg")
+    shared = fdl.Config(sample_fn, "arg")
     config = {"tuple": (shared, None, shared), "int": 7}
     result = list(daglish_generate(config))
     self.assertEqual(result, [
@@ -443,14 +443,14 @@ class GenerateTest(absltest.TestCase):
     ])
 
   def test_walk_dataclass_default_traverser(self):
-    config = {"dataclass": Foo(3, fdl.Config(test_fn, "arg"))}
+    config = {"dataclass": Foo(3, fdl.Config(sample_fn, "arg"))}
     result = list(daglish_generate(config))
     self.assertEqual(result, [
         (config["dataclass"], (daglish.Key(key="dataclass"),)),
     ])
 
   def test_walk_dataclass_dataclass_aware_traverser(self):
-    config = {"dataclass": Foo(3, fdl.Config(test_fn, "arg"))}
+    config = {"dataclass": Foo(3, fdl.Config(sample_fn, "arg"))}
     state = daglish.MemoizedTraversal(
         daglish_generate, config, registry=dataclass_registry).initial_state()
     result = list(daglish_generate(config, state=state))

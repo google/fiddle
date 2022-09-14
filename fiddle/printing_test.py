@@ -17,6 +17,7 @@
 
 import dataclasses
 import re
+import sys
 import textwrap
 from typing import Union
 
@@ -360,8 +361,20 @@ class AsStrFlattenedTests(absltest.TestCase):
     cfg = fdl.Config(to_integer, 1)
     output = printing.as_str_flattened(cfg, include_types=True)
 
-    expected = textwrap.dedent("""\
-        x: typing.Union[int, str] = 1""")
+    expected = 'x: typing.Union[int, str] = 1'
+    self.assertEqual(output, expected)
+
+  def test_can_print_parameterized_generic(self):
+    if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
+      self.skipTest('types.GenericAlias is 3.9+ only.')
+
+    def takes_list(x: list[int]):
+      return x
+
+    cfg = fdl.Config(takes_list, [1, 2, 3])
+    output = printing.as_str_flattened(cfg)
+
+    expected = 'x: list[int] = [1, 2, 3]'
     self.assertEqual(output, expected)
 
   def test_materialized_default_values(self):

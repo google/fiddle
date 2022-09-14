@@ -43,7 +43,7 @@ class Parent:
       arg_factory.CallableWithDefaultFactory(add_child, child=Child))
 
 
-def test_fn(arg1, arg2, kwarg1=0, kwarg2=None):
+def sample_fn(arg1, arg2, kwarg1=0, kwarg2=None):
   return (arg1, arg2, kwarg1, kwarg2)
 
 
@@ -69,20 +69,20 @@ class Counter:
 class ArgFactoryPartialTest(parameterized.TestCase):
 
   def test_factory_positional_arg(self):
-    p = arg_factory.partial(test_fn, Counter())
+    p = arg_factory.partial(sample_fn, Counter())
     self.assertEqual(p(5), ('counter_1', 5, 0, None))
     self.assertEqual(p(5), ('counter_2', 5, 0, None))
     self.assertEqual(p(2, kwarg2=3), ('counter_3', 2, 0, 3))
     self.assertEqual(p(arg2=5), ('counter_4', 5, 0, None))
 
   def test_factory_keyword_arg(self):
-    p = arg_factory.partial(test_fn, kwarg1=Counter())
+    p = arg_factory.partial(sample_fn, kwarg1=Counter())
     self.assertEqual(p(1, 2), (1, 2, 'counter_1', None))
     self.assertEqual(p(1, 2), (1, 2, 'counter_2', None))
     self.assertEqual(p(1, 2, kwarg2='x'), (1, 2, 'counter_3', 'x'))
 
   def test_factory_is_not_run_when_overridden(self):
-    p = arg_factory.partial(test_fn, arg2=Counter())
+    p = arg_factory.partial(sample_fn, arg2=Counter())
     self.assertEqual(p(arg1=5), (5, 'counter_1', 0, None))
 
     # On the following line, arg2 is overriden, so the factory does not
@@ -102,7 +102,7 @@ class ArgFactoryPartialTest(parameterized.TestCase):
 
   def test_multiple_factories(self):
     p = arg_factory.partial(
-        test_fn,
+        sample_fn,
         arg1=Counter('arg1'),
         arg2=Counter('arg2'),
         kwarg2=Counter('kwarg2'))
@@ -114,7 +114,7 @@ class ArgFactoryPartialTest(parameterized.TestCase):
 
   def test_reused_factory(self):
     factory = Counter()
-    p = arg_factory.partial(test_fn, arg1=factory, arg2=factory)
+    p = arg_factory.partial(sample_fn, arg1=factory, arg2=factory)
     self.assertEqual(p(), ('counter_1', 'counter_2', 0, None))
     self.assertEqual(p(), ('counter_3', 'counter_4', 0, None))
 
@@ -198,29 +198,29 @@ class ArgFactoryPartialTest(parameterized.TestCase):
     self.assertFalse(arg_factory.is_arg_factory_partial('xyz'))
 
   @parameterized.parameters([
-      (arg_factory.partial(test_fn, arg1=list),
+      (arg_factory.partial(sample_fn, arg1=list),
        '(*, arg1=<built by: list()>, arg2, kwarg1=0, kwarg2=None)'),
-      (arg_factory.partial(test_fn, kwarg1=list),
+      (arg_factory.partial(sample_fn, kwarg1=list),
        '(arg1, arg2, *, kwarg1=<built by: list()>, kwarg2=None)'),
   ])
   def test_partial_func_signature(self, p, signature):
     self.assertEqual(str(inspect.signature(p)), signature)
 
   def test_arg_factory_partial_wrap_functools_partial(self):
-    p1 = functools.partial(test_fn, arg1=5)
+    p1 = functools.partial(sample_fn, arg1=5)
     p2 = arg_factory.partial(p1, arg2=list)
     self.assertEqual(p2(kwarg1=10), (5, [], 10, None))
 
   def test_functools_partial_wrap_arg_factory_partial(self):
-    p1 = arg_factory.partial(test_fn, arg2=list)
+    p1 = arg_factory.partial(sample_fn, arg2=list)
     p2 = functools.partial(p1, arg1=5)
     self.assertEqual(p2(kwarg1=10), (5, [], 10, None))
 
   def test_arg_factories_must_be_callable_error(self):
     with self.assertRaisesRegex(TypeError, 'Expected .* to be callable'):
-      arg_factory.partial(test_fn, 5)
+      arg_factory.partial(sample_fn, 5)
     with self.assertRaisesRegex(TypeError, 'Expected .* to be callable'):
-      arg_factory.partial(test_fn, kwarg1=None)
+      arg_factory.partial(sample_fn, kwarg1=None)
 
   def test_partial_cant_bind_positional_only_params_as_keywords(self):
     p = arg_factory.partial(posonly_fn, c=list)
@@ -233,7 +233,7 @@ class ArgFactoryPartialTest(parameterized.TestCase):
 class DefaultFactoryTest(parameterized.TestCase):
 
   def test_factory_arg(self):
-    p = arg_factory.CallableWithDefaultFactory(test_fn, arg2=Counter())
+    p = arg_factory.CallableWithDefaultFactory(sample_fn, arg2=Counter())
     self.assertEqual(p(arg1=5), (5, 'counter_1', 0, None))
     self.assertEqual(p(arg1=5), (5, 'counter_2', 0, None))
     self.assertEqual(p(arg1=2, kwarg2=3), (2, 'counter_3', 0, 3))
@@ -241,13 +241,13 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertEqual(p(arg1=5), (5, 'counter_4', 0, None))
 
   def test_factory_kwarg(self):
-    p = arg_factory.CallableWithDefaultFactory(test_fn, kwarg1=Counter())
+    p = arg_factory.CallableWithDefaultFactory(sample_fn, kwarg1=Counter())
     self.assertEqual(p(1, 2), (1, 2, 'counter_1', None))
     self.assertEqual(p(1, 2), (1, 2, 'counter_2', None))
     self.assertEqual(p(1, 2, kwarg2='x'), (1, 2, 'counter_3', 'x'))
 
   def test_factory_is_not_run_when_overridden(self):
-    p = arg_factory.CallableWithDefaultFactory(test_fn, arg2=Counter())
+    p = arg_factory.CallableWithDefaultFactory(sample_fn, arg2=Counter())
     self.assertEqual(p(arg1=5), (5, 'counter_1', 0, None))
 
     # On the following line, arg2 is overriden, so the factory does not
@@ -257,7 +257,7 @@ class DefaultFactoryTest(parameterized.TestCase):
 
   def test_multiple_factories(self):
     p = arg_factory.CallableWithDefaultFactory(
-        test_fn,
+        sample_fn,
         arg1=Counter('arg1'),
         arg2=Counter('arg2'),
         kwarg2=Counter('kwarg2'))
@@ -270,7 +270,7 @@ class DefaultFactoryTest(parameterized.TestCase):
   def test_reused_factory(self):
     factory = Counter()
     p = arg_factory.CallableWithDefaultFactory(
-        test_fn, arg1=factory, arg2=factory)
+        sample_fn, arg1=factory, arg2=factory)
     self.assertEqual(p(), ('counter_1', 'counter_2', 0, None))
     self.assertEqual(p(), ('counter_3', 'counter_4', 0, None))
 
@@ -346,20 +346,20 @@ class DefaultFactoryTest(parameterized.TestCase):
 
   @parameterized.parameters([
       # Add a default:
-      (arg_factory.CallableWithDefaultFactory(test_fn, arg2=Child),
+      (arg_factory.CallableWithDefaultFactory(sample_fn, arg2=Child),
        '(arg1, arg2=<built by: Child()>, kwarg1=0, kwarg2=None)'),
       # Add two defaults:
-      (arg_factory.CallableWithDefaultFactory(test_fn, arg1=list, arg2=list),
+      (arg_factory.CallableWithDefaultFactory(sample_fn, arg1=list, arg2=list),
        '(arg1=<built by: list()>, arg2=<built by: list()>, ' +
        'kwarg1=0, kwarg2=None)'),
       # Override a default:
       (arg_factory.CallableWithDefaultFactory(
-          test_fn, arg2=Parent,
+          sample_fn, arg2=Parent,
           kwarg2=list), '(arg1, arg2=<built by: Parent()>, ' +
        'kwarg1=0, kwarg2=<built by: list()>)'),
       # Add a default before an arg w/o a deault.
       # All arguments after arg1 get converted to KEYWORD_ONLY.
-      (arg_factory.CallableWithDefaultFactory(test_fn, arg1=Child),
+      (arg_factory.CallableWithDefaultFactory(sample_fn, arg1=Child),
        '(arg1=<built by: Child()>, *, arg2, kwarg1=0, kwarg2=None)'),
       # positional-only args
       (arg_factory.CallableWithDefaultFactory(posonly_fn, b=list, c=list),
@@ -390,9 +390,9 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertIsNot(x, y)
 
   def test_repr(self):
-    p1 = arg_factory.CallableWithDefaultFactory(test_fn, arg2=Child)
+    p1 = arg_factory.CallableWithDefaultFactory(sample_fn, arg2=Child)
     self.assertEqual(
-        repr(p1), '<CallableWithDefaultFactory test_fn(arg1, '
+        repr(p1), '<CallableWithDefaultFactory sample_fn(arg1, '
         'arg2=<built by: Child()>, kwarg1=0, kwarg2=None)>')
 
   def test_default_for_keyword_only_param(self):
