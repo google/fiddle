@@ -21,9 +21,9 @@ from unittest import mock
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import selectors
 from fiddle import tagging
 from fiddle import tagging_test_module as tst
-from fiddle.experimental import selectors
 
 
 @dataclasses.dataclass

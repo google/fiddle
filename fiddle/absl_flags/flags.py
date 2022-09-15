@@ -118,7 +118,7 @@ import inspect
 import re
 import sys
 import typing
-from typing import Any, List, Union, Sequence, Optional
+from typing import Any, List, Optional, Sequence, Union
 
 from absl import app
 from absl import flags
@@ -127,8 +127,8 @@ from absl import logging
 from fiddle import config
 from fiddle import module_reflection
 from fiddle import printing
+from fiddle import selectors
 from fiddle import tagging
-from fiddle.experimental import selectors
 
 _FDL_CONFIG = flags.DEFINE_string(
     'fdl_config',

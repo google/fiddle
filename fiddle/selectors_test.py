@@ -22,8 +22,8 @@ from typing import Any, List
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import selectors
 from fiddle.experimental import auto_config
-from fiddle.experimental import selectors
 from fiddle.testing.example import person_friend_toy
 
 
