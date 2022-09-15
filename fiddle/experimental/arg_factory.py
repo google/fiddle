@@ -156,7 +156,8 @@ class _ArgFactory:
   def __init__(self, factory: Callable[..., Any]):
     if not callable(factory):
       raise TypeError(
-          'Expected arguments to `arg_factory.partial` to be callable.')
+          'Expected arguments to `arg_factory.partial` to be callable. '
+          f'Got {factory!r}.')
     self._factory = factory
 
   factory = property(lambda self: self._factory)
