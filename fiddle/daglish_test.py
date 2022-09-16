@@ -19,7 +19,7 @@ import collections
 import dataclasses
 import json
 import random
-from typing import Any, Iterable, List, NamedTuple, Optional, Type, cast
+from typing import Any, List, NamedTuple, Optional, Type, cast
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -78,17 +78,6 @@ def switch_buildables_to_args(value, state: Optional[daglish.State] = None):
                                                    value)
   value = state.map_children(value)
   return value.__arguments__ if isinstance(value, fdl.Buildable) else value
-
-
-def daglish_generate(value,
-                     state: Optional[daglish.State] = None) -> Iterable[Any]:
-  """Implements the Daglish generator API with daglish."""
-  state = state or daglish.BasicTraversal.begin(daglish_generate, value)
-  if not state.is_traversable(value):
-    yield value, state.current_path
-  else:
-    for sub_iter in state.flattened_map_children(value).values:
-      yield from sub_iter
 
 
 # Dataclasses iterator registry
@@ -427,38 +416,59 @@ class ArgsSwitchingFuzzTest(parameterized.TestCase):
         json.dumps(result)
 
 
-class GenerateTest(absltest.TestCase):
+def _iterate_path_strings(*args, **kwargs):
+  return [(value, daglish.path_str(path))
+          for value, path in daglish.iterate(*args, **kwargs)]
+
+
+class IterateTest(absltest.TestCase):
 
   def test_basic_walking(self):
     shared = fdl.Config(sample_fn, "arg")
     config = {"tuple": (shared, None, shared), "int": 7}
-    result = list(daglish_generate(config))
-    self.assertEqual(result, [
-        ("arg", (daglish.Key(key="tuple"), daglish.Index(index=0),
-                 daglish.Attr(name="arg"))),
-        (None, (daglish.Key(key="tuple"), daglish.Index(index=1))),
-        ("arg", (daglish.Key(key="tuple"), daglish.Index(index=2),
-                 daglish.Attr(name="arg"))),
-        (7, (daglish.Key(key="int"),)),
-    ])
+    self.assertEqual(
+        _iterate_path_strings(config), [
+            (config, ""),
+            ((shared, None, shared), "['tuple']"),
+            (shared, "['tuple'][0]"),
+            ("arg", "['tuple'][0].arg"),
+            (None, "['tuple'][1]"),
+            (7, "['int']"),
+        ])
+
+  def test_basic_walking_non_memoized(self):
+    shared = fdl.Config(sample_fn, "arg")
+    config = {"tuple": (shared, None, shared), "int": 7}
+    self.assertEqual(
+        _iterate_path_strings(config, memoized=False), [
+            (config, ""),
+            ((shared, None, shared), "['tuple']"),
+            (shared, "['tuple'][0]"),
+            ("arg", "['tuple'][0].arg"),
+            (None, "['tuple'][1]"),
+            (shared, "['tuple'][2]"),
+            ("arg", "['tuple'][2].arg"),
+            (7, "['int']"),
+        ])
 
   def test_walk_dataclass_default_traverser(self):
     config = {"dataclass": Foo(3, fdl.Config(sample_fn, "arg"))}
-    result = list(daglish_generate(config))
-    self.assertEqual(result, [
-        (config["dataclass"], (daglish.Key(key="dataclass"),)),
-    ])
+    self.assertEqual(
+        _iterate_path_strings(config), [
+            (config, ""),
+            (config["dataclass"], "['dataclass']"),
+        ])
 
   def test_walk_dataclass_dataclass_aware_traverser(self):
     config = {"dataclass": Foo(3, fdl.Config(sample_fn, "arg"))}
-    state = daglish.MemoizedTraversal(
-        daglish_generate, config, registry=dataclass_registry).initial_state()
-    result = list(daglish_generate(config, state=state))
-    self.assertEqual(result, [
-        (3, (daglish.Key(key="dataclass"), daglish.Attr(name="bar"))),
-        ("arg", (daglish.Key(key="dataclass"), daglish.Attr(name="baz"),
-                 daglish.Attr(name="arg"))),
-    ])
+    self.assertEqual(
+        _iterate_path_strings(config, registry=dataclass_registry), [
+            (config, ""),
+            (config["dataclass"], "['dataclass']"),
+            (3, "['dataclass'].bar"),
+            (fdl.Config(sample_fn, "arg"), "['dataclass'].baz"),
+            ("arg", "['dataclass'].baz.arg"),
+        ])
 
 
 if __name__ == "__main__":

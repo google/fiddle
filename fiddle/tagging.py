@@ -181,15 +181,11 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     value: Value to set for all parameters tagged with `tag`.
   """
 
-  def traverse(node_value, state: daglish.State):
-    if isinstance(node_value, config.Buildable):
-      for key, tags in node_value.__argument_tags__.items():
+  for node, _ in daglish.iterate(root):
+    if isinstance(node, config.Buildable):
+      for key, tags in node.__argument_tags__.items():
         if any(issubclass(t, tag) for t in tags):
-          setattr(node_value, key, value)
-    if state.is_traversable(node_value):
-      state.flattened_map_children(node_value)
-
-  daglish.MemoizedTraversal.run(traverse, root)
+          setattr(node, key, value)
 
 
 def list_tags(
@@ -208,14 +204,10 @@ def list_tags(
   """
   tags = set()
 
-  def _inner(value, state: daglish.State):
+  for value, _ in daglish.iterate(root):
     if isinstance(value, config.Buildable):
       for node_tags in value.__argument_tags__.values():
         tags.update(node_tags)
-    if state.is_traversable(value):
-      state.flattened_map_children(value)
-
-  daglish.MemoizedTraversal.run(_inner, root)
 
   # Add superclasses if desired.
   if add_superclasses:

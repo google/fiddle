@@ -657,3 +657,40 @@ def collect_paths_by_id(structure,
 
   BasicTraversal.run(traverse, structure)
   return paths_by_id
+
+
+def iterate(
+    value: Any,
+    memoized: bool = True,
+    registry: NodeTraverserRegistry = _default_traverser_registry,
+) -> Iterable[Tuple[Any, Path]]:
+  """Iterates through values in a DAG.
+
+  This API is suitable for read-only access and small/reasonable edits to a
+  configuration DAG. If a transformation seeks to change the type of nodes, then
+  we recommend using the functional traversal API.
+
+  Often, when mutation can be used, it will preserve history better, so this
+  API is not discouraged for modifying configuration.
+
+  Args:
+    value: fdl.Buildable or collection of buildables.
+    memoized: Whether to yield shared nodes only once. Defaults to True. With
+      this setting, you will only see one path (which is somewhat arbitrary) to
+      shared nodes.
+    registry: Override to the NodeTraverserRegistry; this is a low-level setting
+      for traversing into custom data types.
+
+  Returns:
+    Iterable of (value, path) tuples.
+  """
+
+  def _traverse(node, state: State):
+    yield node, state.current_path
+    if state.is_traversable(node):
+      for sub_result in state.flattened_map_children(node).values:
+        yield from sub_result
+
+  traversal_cls = MemoizedTraversal if memoized else BasicTraversal
+  traversal: Traversal = traversal_cls(_traverse, value, registry=registry)
+  return _traverse(value, traversal.initial_state())
