@@ -23,16 +23,16 @@ from typing import Any, Callable, Dict, List, Set, Tuple
 
 from fiddle import config
 from fiddle import daglish
+from fiddle import diffing
 from fiddle.codegen import import_manager as import_manager_lib
 from fiddle.codegen import namespace as namespace_lib
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.experimental import daglish_legacy
-from fiddle.experimental import diff as fdl_diff
 
 import libcst as cst
 
 
-def fiddler_from_diff(diff: fdl_diff.Diff,
+def fiddler_from_diff(diff: diffing.Diff,
                       old: Any = None,
                       func_name: str = 'fiddler',
                       param_name: str = 'cfg'):
@@ -114,7 +114,7 @@ def fiddler_from_diff(diff: fdl_diff.Diff,
           converter=functools.partial(
               _convert_module, import_manager=import_manager)),
       py_val_to_cst_converter.ValueConverter(
-          matcher=fdl_diff.Reference,
+          matcher=diffing.Reference,
           priority=200,
           converter=functools.partial(
               _convert_reference,
@@ -193,7 +193,7 @@ def _cst_for_moved_value_variables(
   return [cst.SimpleStatementLine([stmt]) for stmt in statements]
 
 
-def _find_used_paths(diff: fdl_diff.Diff) -> Set[daglish.Path]:
+def _find_used_paths(diff: diffing.Diff) -> Set[daglish.Path]:
   """Returns a list of paths referenced in `diff`.
 
   This list includes paths for any values we might need to create aliases
@@ -211,11 +211,11 @@ def _find_used_paths(diff: fdl_diff.Diff) -> Set[daglish.Path]:
   def collect_ref_targets(path, node):
     del path  # Unused.
     yield
-    if isinstance(node, fdl_diff.Reference) and node.root == 'old':
+    if isinstance(node, diffing.Reference) and node.root == 'old':
       used_paths.add(node.target)
 
   for change in diff.changes:
-    if isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
+    if isinstance(change, (diffing.SetValue, diffing.ModifyValue)):
       daglish_legacy.traverse_with_path(collect_ref_targets, change.new_value)
   daglish_legacy.traverse_with_path(collect_ref_targets, diff.new_shared_values)
 
@@ -245,10 +245,10 @@ def _add_path_aliases(paths: Set[daglish.Path], structure: Any):
       paths.update(id_to_paths[id(value)])
 
 
-ChangesByParent = List[Tuple[daglish.Path, List[fdl_diff.DiffOperation]]]
+ChangesByParent = List[Tuple[daglish.Path, List[diffing.DiffOperation]]]
 
 
-def _group_changes_by_parent(diff: fdl_diff.Diff) -> ChangesByParent:
+def _group_changes_by_parent(diff: diffing.Diff) -> ChangesByParent:
   """Returns a sorted list of changes in `diff`, grouped by their parent."""
   # Group changes by parent path.
   changes_by_parent = collections.defaultdict(list)
@@ -263,7 +263,7 @@ def _group_changes_by_parent(diff: fdl_diff.Diff) -> ChangesByParent:
       changes_by_parent.items(), key=lambda item: daglish.path_str(item[0]))
 
 
-def _cst_for_changes(diff: fdl_diff.Diff, param_name: str,
+def _cst_for_changes(diff: diffing.Diff, param_name: str,
                      moved_value_names: Dict[daglish.Path, str],
                      pyval_to_cst: PyValToCstFunc) -> List[cst.CSTNode]:
   """Returns a list of CST nodes that apply the changes described in `diff`.
@@ -300,7 +300,7 @@ def _cst_for_changes(diff: fdl_diff.Diff, param_name: str,
       child_cst = _cst_for_child(parent_cst, child_path_elt, pyval_to_cst)
 
       if isinstance(child_path_elt, daglish.BuildableFnOrCls):
-        assert isinstance(change, fdl_diff.ModifyValue)
+        assert isinstance(change, diffing.ModifyValue)
         assert update_callable is None
         new_value_cst = pyval_to_cst(change.new_value)
         update_callable = cst.Expr(
@@ -309,10 +309,10 @@ def _cst_for_changes(diff: fdl_diff.Diff, param_name: str,
                 args=[cst.Arg(parent_cst),
                       cst.Arg(new_value_cst)]))
 
-      elif isinstance(change, fdl_diff.DeleteValue):
+      elif isinstance(change, diffing.DeleteValue):
         deletes.append(cst.Del(target=child_cst))
 
-      elif isinstance(change, fdl_diff.RemoveTag):
+      elif isinstance(change, diffing.RemoveTag):
         arg_name = change.target[-1].name
         deletes.append(
             cst.Expr(
@@ -324,13 +324,13 @@ def _cst_for_changes(diff: fdl_diff.Diff, param_name: str,
                         cst.Arg(pyval_to_cst(change.tag))
                     ])))
 
-      elif isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
+      elif isinstance(change, (diffing.SetValue, diffing.ModifyValue)):
         new_value_cst = pyval_to_cst(change.new_value)
         assigns.append(
             cst.Assign(
                 targets=[cst.AssignTarget(child_cst)], value=new_value_cst))
 
-      elif isinstance(change, fdl_diff.AddTag):
+      elif isinstance(change, diffing.AddTag):
         arg_name = change.target[-1].name
         assigns.append(
             cst.Expr(

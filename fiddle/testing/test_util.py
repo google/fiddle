@@ -21,8 +21,8 @@ from typing import Any, Dict, Set
 from absl.testing import absltest
 from fiddle import config
 from fiddle import daglish
+from fiddle import diffing
 from fiddle.experimental import daglish_legacy
-from fiddle.experimental import diff
 
 
 def parse_path(path_str: str) -> daglish.Path:
@@ -65,9 +65,9 @@ def parse_path(path_str: str) -> daglish.Path:
 
 
 # Helper function to make expected References easier to write (and read).
-def parse_reference(root: str, path: str) -> diff.Reference:
-  """Build a diff.Reference from a string."""
-  return diff.Reference(root, parse_path(path))
+def parse_reference(root: str, path: str) -> diffing.Reference:
+  """Build a diffing.Reference from a string."""
+  return diffing.Reference(root, parse_path(path))
 
 
 def get_shared_paths(structure: Any) -> Set[Set[daglish.Path]]:

@@ -28,11 +28,11 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, 
 
 from fiddle import config as fdl
 from fiddle import daglish
+from fiddle import diffing
 from fiddle import tag_type
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
 from fiddle.experimental import daglish_legacy
-from fiddle.experimental import diff as fdl_diff
 import graphviz
 import typing_extensions
 
@@ -474,17 +474,17 @@ class _GraphvizRenderer:
     ellipsis_td = self.tag('td', rowspan=2)
 
     type_name = type(sequence).__name__
-    if isinstance(sequence, fdl_diff.ListPrefix):
+    if isinstance(sequence, diffing.ListPrefix):
       type_name = 'Sequence'
 
-    if not sequence and not isinstance(sequence, fdl_diff.ListPrefix):
+    if not sequence and not isinstance(sequence, diffing.ListPrefix):
       return '[]'
 
     cells, indices = [], []
     for i, value in enumerate(sequence):
       cells.append(td(self._render_nested_value(value)))
       indices.append(index_td(index_font(i)))
-    if isinstance(sequence, fdl_diff.ListPrefix):
+    if isinstance(sequence, diffing.ListPrefix):
       sequence = list(sequence) + ['...']
       cells.append(ellipsis_td('...'))
     row_stride = self._max_sequence_elements_per_row
@@ -593,7 +593,7 @@ def render(config: Any) -> graphviz.Graph:
   return _GraphvizRenderer().render(config)
 
 
-def render_diff(diff: Optional[fdl_diff.Diff] = None,
+def render_diff(diff: Optional[diffing.Diff] = None,
                 *,
                 old: Optional[Any] = None,
                 new: Optional[Any] = None) -> graphviz.Graph:
@@ -623,9 +623,9 @@ def render_diff(diff: Optional[fdl_diff.Diff] = None,
         '  * render_diff(diff=..., old=...)\n'
         '  * render_diff(old=..., new=...)')
   if diff is None:
-    diff = fdl_diff.build_diff(old, new)
+    diff = diffing.build_diff(old, new)
   if old is None:
-    old = fdl_diff.skeleton_from_diff(diff)
+    old = diffing.skeleton_from_diff(diff)
   config = _record_changed_values_from_diff(diff, old)
   old_value_ids = _find_old_value_ids(config)
   new_value_ids = _find_new_value_ids(config)
@@ -649,7 +649,7 @@ class _OldAndNewSharedValues(NamedTuple):
   new_shared_values: List[Any]
 
 
-def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
+def _record_changed_values_from_diff(diff: diffing.Diff, old: Any) -> Any:
   """Returns a copy of `old`, with `_ChangedValue` nodes used to show changes.
 
   Args:
@@ -663,7 +663,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
     if you traverse through `_ChangedValue` objects.
   """
   # Update `diff` to replace any references with the objects they point to.
-  diff = fdl_diff.resolve_diff_references(diff, old)
+  diff = diffing.resolve_diff_references(diff, old)
 
   # Index changes by their parent node.
   changes_by_parent = collections.defaultdict(list)
@@ -705,23 +705,23 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
     for path in paths:
       for change in changes_by_parent.get(path, ()):
         path_elt = change.target[-1]
-        if (isinstance(change, fdl_diff.ModifyValue) and
+        if (isinstance(change, diffing.ModifyValue) and
             isinstance(path_elt, daglish.BuildableFnOrCls)):
           transformed_value.new_callable = change.new_value
           continue
 
-        if isinstance(change, fdl_diff.AddTag):
+        if isinstance(change, diffing.AddTag):
           tags = transformed_value.tags.setdefault(path_elt.name, set())
           tags.add(_AddedTag(change.tag))
           continue
 
-        elif isinstance(change, fdl_diff.RemoveTag) and change.target:
+        elif isinstance(change, diffing.RemoveTag) and change.target:
           tags = transformed_value.tags.setdefault(path_elt.name, set())
           tags.difference_update([change.tag])
           tags.add(_RemovedTag(change.tag))
           continue
 
-        if isinstance(change, fdl_diff.SetValue):
+        if isinstance(change, diffing.SetValue):
           old_child = _NoValue()
         else:
           if isinstance(transformed_value, _ChangedBuildable):
@@ -763,7 +763,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
   # pass, because the graph can contain cycles, and we need to make sure that
   # we use the transformed version of each new_value.
   for changed_value, change in changed_values:
-    if isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
+    if isinstance(change, (diffing.SetValue, diffing.ModifyValue)):
       if daglish.is_memoizable(changed_value.new_value):
         changed_value.new_value = original_to_transformed[id(change.new_value)]
 

@@ -26,9 +26,9 @@ from typing import Any, Dict, Iterable, List, TypeVar
 
 from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle import diffing
 from fiddle import graphviz
 from fiddle.experimental import daglish_legacy
-from fiddle.experimental import diff
 
 
 def _raise_error():
@@ -148,7 +148,7 @@ def depth_over(config: Any, depth: int) -> List[config_lib.Buildable]:
   ]
 
 
-_any_value = diff.AnyValue()
+_any_value = diffing.AnyValue()
 
 
 def structure(config: _T) -> _T:
