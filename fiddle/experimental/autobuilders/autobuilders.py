@@ -182,6 +182,13 @@ class Registry:
     entry.skeleton_fn(base_config)
     return base_config
 
+  def partial(self,
+              fn_or_cls: FnOrCls[T],
+              require_skeleton: bool = True) -> config_lib.Partial[T]:
+    """Creates a fdl.Partial instance of a given function or class."""
+    return config_lib.cast(config_lib.Partial,
+                           self.config(fn_or_cls, require_skeleton))
+
   def skeleton(
       self, fn_or_cls: FnOrCls[T]) -> Callable[[SkeletonFn[T]], SkeletonFn[T]]:
     """Registers a function as a skeleton for a given type.
@@ -318,6 +325,7 @@ class Registry:
 # module level.
 _default_registry = Registry()
 config = _default_registry.config
+partial = _default_registry.partial
 skeleton = _default_registry.skeleton
 auto_skeleton = _default_registry.auto_skeleton
 validator = _default_registry.validator
