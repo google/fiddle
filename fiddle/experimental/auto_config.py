@@ -229,7 +229,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     return self._handle_control_flow(node)
 
   def visit_Raise(self, node: ast.Try):
-    return self._handle_control_flow(node)
+    return self._handle_control_flow(node, activatable=True)
 
   def visit_With(self, node: ast.With):
     return self._handle_control_flow(node)

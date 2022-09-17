@@ -626,6 +626,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         r'Control flow \(Raise\) is unsupported by auto_config\.'):
       auto_config.auto_config(test_config)
 
+    auto_config.auto_config(test_config, experimental_allow_control_flow=True)
+
   def test_disallow_with(self):
 
     def test_config():
