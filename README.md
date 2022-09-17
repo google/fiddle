@@ -25,7 +25,7 @@ Install Fiddle from source:
 ```shell
 git clone https://github.com/google/fiddle
 cd fiddle
-python -m setup.py install
+python -m setup install
 ```
 
 Import Fiddle:
