@@ -64,7 +64,8 @@ When our example program is executed, the following steps occur:
 
 6.  **The base configuration is created**: `create_buildable_from_flags`
     identifies the function on the supplied module the user has requested as the
-    base configuration based on the `fdl_config` command line option.
+    base configuration based on the `--fdl_config` or `--fdl_config_file`
+    command line options.
 
 7.  **Apply Fiddlers**: The `--fiddler` flag can be supplied multiple times; a
     function on the supplied module that corresponds to each `--fiddler` flag
@@ -88,7 +89,9 @@ When our example program is executed, the following steps occur:
 The Fiddle flag integration supports the following flag syntax:
 
 -   **Base Config**: The base configuration function is specified with the flag
-    `--fdl_config`. Example: `--fdl_config=simple`.
+    `--fdl_config`. Example: `--fdl_config=simple`. Alternatively, a
+    JSON-serialized configuration can be read from a file via with the flag
+    `--fdl_config_file`. Example: `--fdl_config_file='/some/path/config.json'`.
 
 -   **Fiddlers**: Fiddlers are specified on the command line with the
     `--fiddler=` flag. This flag can be specified multiple times. Example:
