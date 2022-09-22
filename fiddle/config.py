@@ -30,6 +30,7 @@ from fiddle import daglish
 from fiddle import history
 from fiddle import tag_type
 from fiddle._src import field_metadata
+from fiddle.experimental import arg_factory
 
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
@@ -143,13 +144,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     if dataclasses.is_dataclass(self.__fn_or_cls__):
       fields = dataclasses.fields(self.__fn_or_cls__)
-      for field in fields:
-        metadata = field_metadata.field_metadata(field)
-        if metadata:
-          for tag in metadata.tags:
-            add_tag(self, field.name, tag)
-          if (metadata.buildable_initializer and field.name not in arguments):
-            setattr(self, field.name, metadata.buildable_initializer())
+      _add_dataclass_tags(self, fields)
+      _expand_dataclass_default_factories(self, fields, arguments)
 
     for name, value in arguments.items():
       setattr(self, name, value)
@@ -408,6 +404,173 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
                          inspect.signature(self.__fn_or_cls__))
 
 
+def _add_dataclass_tags(buildable, fields):
+  """Adds tags to arguments as indicated by dataclass fields.
+
+  If any dataclass field in `fields` has metadata indicating that the field
+  should be given one or more tags, then add those tags to the argument
+  corresponding to the field.
+
+  Args:
+    buildable: The buildable that should be updated.
+    fields: The dataclass fields for buildable.__fn_or_cls__.
+  """
+  for field in fields:
+    metadata = field_metadata.field_metadata(field)
+    if metadata:
+      for tag in metadata.tags:
+        add_tag(buildable, field.name, tag)
+
+
+def _expand_dataclass_default_factories(buildable, fields, arguments):
+  """Expand default-valued args for dataclass fields with default-factories.
+
+  If an argument has no value supplied when initializing a dataclass, but the
+  corresponding field has a default factory, then that factory will be used to
+  construct the argument's value. Thus, when creating a `fdl.Buildable` for the
+  dataclass, it may be possible to fill in the value for the argument with
+  `Config(factory)`, without changing the value that will be built by
+  `buildable` when calling `fdl.build`.  This is useful because it makes the
+  argument "deeply configurable" -- i.e., if the factory has any optional
+  arguments, then this makes it possible to configure those objects. And in the
+  special case where `factory` is an `@auto_config`'d function, we can make the
+  argument even more deeply configurable by inlining the factory.
+
+  However, expanding default-valued args into `Buildable`s should only be
+  performed when it can be done safely -- i.e., without changing the value
+  that will be built by `buildable`. In particular, we need to be careful
+  not to create any "unintentional sharing," where the value built by the
+  default factory is used by multiple instances of the dataclass.
+
+  If we are not able to do the expansion safely, then we raise an exception.
+  Note that it would be "safe" to leave the argument empty, in so far as the
+  original semantics would be preserved.  But having the argument be
+  unexpectedly unconfigurable could lead to difficult-to-diagnose issues.
+  E.g., any nested dataclasses with `fdl.Tag`s associated with fields will
+  not be accessable.
+
+  One case where it *is* safe to expand default factories is when
+  `type(buildable)` is `fdl.Config`.  In that case, we know that a single
+  dataclass object will be built from `buildable`, so we are guaranteed that the
+  value built by the default factory will only be used by that one object.
+
+  However, if `type(buildable)` is `fdl.Partial`, then the function built from
+  `buildable` can be used to generate multiple dataclass instances; and we need
+  to ensure that the default factory is called for each instance.  For this
+  case, we use `ArgFactory(factory)` rather than `Config(factory)` to expand the
+  argument.  This ensures that the factory is called each time the partial is
+  called.  We also need to replace any nested `Config`s with `ArgFactory`s, to
+  ensure that the nested values are created each time as well.
+
+  Similarly, if `type(buildable) is `fdl.ArgFactory`, then the factory function
+  built from `buildable` can be used to generate multiple dataclass instances,
+  so we use `ArgFactory(factory)` to expand arguments.
+
+  In the case where `type(buildable)` is `fdl.Partial` or `fdl.ArgFactory`,
+  there is one additional corner case to consider, which occurs when multiple
+  nested partials makes it impossible for Fiddle to describe the correct
+  instance sharing pattern with its current `Buildable` subclasses.  This corner
+  case is demonstrated by the following example:
+
+  ```
+  def f(x):
+    return x
+  def g():
+    return object()
+  @auto_config.auto_config
+  def make_fn():
+    return functools.partial(f, x=g())
+  @dataclasses.dataclass
+  class A:
+    fn: Callable[[], object] = fdl_field(default_factory=make_fn)
+  p = functools.partial(A)
+  ```
+
+  Here, if we write `a1 = p()` to create an instance of `A`, then calling
+  `a1.fn()` multiple times will always return the same object, while another
+  instance `a2 = p()` will return a different object when calling `a2.fn()`:
+
+  ```
+  a1, a2 = p(), p()              # call the partial function twice.
+  assert a1.fn() is a1.fn()      # a1.fn always returns the same object.
+  assert a1.fn() is not a2.fn()  # a1 and a2 return different objects.
+  ```
+
+  However, if we construct `fdl.Partial(A)`, and try to make `f` and `g`
+  deeply configurable, then there's no way to generate the same behavior
+  using Fiddle `Buildable`s:
+
+  * If we use `fdl.Partial(A, fdl.Partial(f, fdl.Config(g)))`, then all
+    instances of `A` generated by `p` will return the same instance
+    (namely, the instance constructed by `fdl.build(fdl.Config(g))`.
+  * If we use `fdl.Partial(A, fdl.Partial(f, fdl.ArgFactory(g)))`, then
+    every call to `A.fn` will return a new object.
+
+  Therefore, since is not possible to make the field `A.fn` deeply
+  configurable while preserving the original semantics, we instead raise
+  an exception.  If you believe you have a valid use-case for this, please
+  contact the Fiddle team.
+
+  The precise circumstances that cause this problem are: when we are building
+  a `Partial` (or `ArgFactory`), and the default factory expands into an
+  expression containing a `Partial` (or `ArgFactory`) that contains a `Config`
+  -- in that case, the object built for the `Config` should be shared for each
+  call to the inner partial; but should *not* be shared for each call to
+  the outer partial.
+
+  Args:
+    buildable: The buildable that should be updated.
+    fields: The dataclass fields for buildable.__fn_or_cls__.
+    arguments: The arguments that are being used to construct this `Buildable`.
+      If any argument has no value, and the corresponding field has a default
+      factory, then the argument will be expanded into an equivalent `Buildable`
+      if it's possible to do so without changing the semantics of
+      `fdl.build(buildable)`.
+  """
+
+  def convert_to_arg_factory(value, state):
+    """Converts `cfg` and any nested `Config` objects to ArgFactory."""
+    if not isinstance(value, Partial):  # Don't recurse into partials.
+      value = state.map_children(value)
+    if isinstance(value, Config):
+      # TODO: Update this to use fdl.cast, once available.
+      value = ArgFactory(value)
+    return value
+
+  def contains_partial_that_contains_config(value, state):
+    """True if value contains a Partial/ArgFactory that contains a Config."""
+    if isinstance(value, (Partial, ArgFactory)):
+      return any(isinstance(v, Config) for v, _ in daglish.iterate(value))
+    elif state.is_traversable(value):
+      return any(state.flattened_map_children(value).values)
+    else:
+      return False
+
+  for field in fields:
+    if field.name in arguments:
+      continue  # We have an explicit value for this argument.
+    metadata = field_metadata.field_metadata(field)
+    if not (metadata and metadata.buildable_initializer):
+      continue
+    field_config = metadata.buildable_initializer()
+    if daglish.MemoizedTraversal.run(contains_partial_that_contains_config,
+                                     field_config):
+      cls_name = getattr(buildable.__fn_or_cls__, '__qualname__',
+                         repr(buildable.__fn_or_cls__))
+      raise ValueError(
+          f'Unable to safely replace {cls_name}.{field.name} with '
+          'a `fdl.Buildable`, because its default factory contains a '
+          '`fdl.Partial` that contains a `fdl.Config`.  This makes it '
+          'difficult for Fiddle to describe the correct instance-sharing '
+          'pattern. If you believe that you have a valid use-case for this, '
+          'please contact the Fiddle team.')
+    if (isinstance(field_config, Config) and isinstance(buildable,
+                                                        (Partial, ArgFactory))):
+      field_config = daglish.MemoizedTraversal.run(convert_to_arg_factory,
+                                                   field_config)
+    arguments[field.name] = field_config
+
+
 class Config(Generic[T], Buildable[T]):
   """A mutable representation of a function or class's parameters.
 
@@ -490,6 +653,138 @@ class Config(Generic[T], Buildable[T]):
     return self.__fn_or_cls__(*args, **kwargs)
 
 
+@dataclasses.dataclass(frozen=True)
+class _BuiltArgFactory:
+  """The result of building an `ArgFactory`.
+
+  This wrapper is returned by `ArgFactory.__build__`, and then consumed by the
+  `__build__` method of the containing `Partial` or `ArgFactory` object.
+  """
+  factory: Callable[..., Any]
+
+
+def _contains_arg_factory(value: Any) -> bool:
+  """Returns true if `value` contains any `_BuiltArgFactory` instances."""
+
+  def visit(node, state):
+    if isinstance(node, _BuiltArgFactory):
+      return True
+    elif state.is_traversable(node):
+      return any(state.flattened_map_children(node).values)
+    else:
+      return False
+
+  return daglish.MemoizedTraversal.run(visit, value)
+
+
+def _invoke_arg_factories(value: Any) -> Any:
+  """Returns a copy of value with any _BuiltArgFactory `f` replaced by `f()`.
+
+  The copy is "shallow" in the sense that only containers that (directly or
+  indirectly) contain _BuiltArgFactories are replaced.  E.g.:
+
+  >>> x = []
+  >>> value = [[], _BuiltArgFactory(list)]
+  >>> result = _invoke_arg_factories(value)
+  >>> assert value[0] is result[0]  # not replaced
+
+  Args:
+    value: The structured value containing _BuiltArgFactories.
+  """
+
+  def visit(node, state: daglish.State):
+    if isinstance(node, _BuiltArgFactory):
+      return node.factory()
+    elif state.is_traversable(node):
+      subtraversal = state.flattened_map_children(node)
+      old_vals, _ = subtraversal.node_traverser.flatten(node)
+      no_child_changed = all(
+          [old is new for (old, new) in zip(old_vals, subtraversal.values)])
+      return node if no_child_changed else subtraversal.unflatten()
+    else:
+      return node
+
+  return daglish.MemoizedTraversal.run(visit, value)
+
+
+def _promote_arg_factory(arg: Any) -> Any:
+  """Converts a structure-of-ArgFactory's to an ArgFactory-of-structure.
+
+  If `arg` is a `_BuiltArgFactory`, or is a nested structure that doesn't
+  contain any `_BuiltArgFactory`s, then return it as-is.
+
+  Othewise, return a new `_BuiltArgFactory` whose factory returns a copy of
+  `arg` with any `_BuiltArgFactory` `f` replaced by `f()`.
+
+  Args:
+    arg: The argument value to convert.
+
+  Returns:
+    `arg`; or a `_BuiltArgFactory` whose factory returns a copy of `arg` with
+    any `_BuiltArgFactory` `f` replaced by `f()`.
+  """
+  if isinstance(arg, _BuiltArgFactory) or not _contains_arg_factory(arg):
+    return arg
+  else:
+    return _BuiltArgFactory(functools.partial(_invoke_arg_factories, arg))
+
+
+def _build_partial(fn: Callable[..., Any], args: Tuple[Any],
+                   kwargs: Dict[str, Any]) -> functools.partial:
+  """Returns `functools.partial` or `arg_factory.partial` for `fn`.
+
+  If `args` or `kwargs` contain any `ArgFactory` instances, then return
+  `arg_factory.partial(fn, *args, **kwargs)`.  Otherwise, return
+  `functools.partial(fn, *args, **kwargs)`.  If any `args` or `kwargs`
+  are nested structures that contain one or more `ArgFactory`s, then
+  convert them to an `ArgFactory` that returns a copy of that structure with
+  the nested `ArgFactory`s invoked.
+
+  Args:
+    fn: The function argument for the partial.
+    args: The positional arguments for the partial.
+    kwargs: The keyword arguments for the partial.
+  """
+
+  def is_arg_factory(value):
+    return isinstance(value, _BuiltArgFactory)
+
+  # If there are nested structures containing _BuiltArgFactory objects,
+  # then promote them.
+  args = [_promote_arg_factory(arg) for arg in args]
+  kwargs = {name: _promote_arg_factory(arg) for name, arg in kwargs.items()}
+
+  # Split the keyword args into those that should be handled by functools vs.
+  # arg_factory.
+  arg_factory_kwargs = {
+      name: arg.factory for name, arg in kwargs.items() if is_arg_factory(arg)
+  }
+  functool_kwargs = {
+      name: arg
+      for name, arg in kwargs.items()
+      if not isinstance(arg, _BuiltArgFactory)
+  }
+
+  # Group positional args by whether they are factories; and add partial
+  # wrappers for each group.  Note: this never actually gets exercised by
+  # fdl.build, since `fdl.build` calls `__build__(**arguments)`, and doesn't
+  # pass in any positional arguments; so `args` will always be empty when
+  # this is executed by `fdl.build()`.
+  result = fn
+  for is_factory, arg_values in itertools.groupby(args, is_arg_factory):
+    if is_factory:
+      arg_values = [arg.factory for arg in arg_values]
+      result = arg_factory.partial(result, *arg_values, **arg_factory_kwargs)
+      arg_factory_kwargs = {}
+    else:
+      result = functools.partial(result, *arg_values, **functool_kwargs)
+      functool_kwargs = {}
+
+  if arg_factory_kwargs:
+    result = arg_factory.partial(result, **arg_factory_kwargs)
+  return functools.partial(result, **functool_kwargs)
+
+
 class Partial(Generic[T], Buildable[T]):
   """A `Partial` config creates a partial function or class when built.
 
@@ -531,10 +826,55 @@ class Partial(Generic[T], Buildable[T]):
       **kwargs: Keyword arguments to partially bind to `self.__fn_or_cls__`.
 
     Returns:
-      A `functools.partial` or instance with `args` and `kwargs` bound to
-      `self.__fn_or_cls__`.
+      A partial object (`functools.partial` or `arg_factory.partial`) for the
+      callable `self.__fn_or_cls__`, which binds the positional arguments `args`
+      and the keyword arguments `kwargs`.
     """
-    return functools.partial(self.__fn_or_cls__, *args, **kwargs)
+    return _build_partial(self.__fn_or_cls__, args, kwargs)
+
+
+class ArgFactory(Generic[T], Buildable[T]):
+  """A configuration that creates an argument factory when built.
+
+  When an `ArgFactory` is used as a parameter for a `fdl.Partial`, the
+  partial function built from that `fdl.Partial` will construct a new value for
+  the parameter each time it is called.  For example:
+
+  >>> def f(x, noise): return x + noise
+  >>> cfg = fdl.Partial(f, noise=fdl.ArgFactory(random.random))
+  >>> p = fdl.build(cfg)
+  >>> p(5) == p(5)  # noise has a different value for each call to `p`.
+  False
+
+  In contrast, if we replaced `fdl.ArgFactory` with `fdl.Config` in the
+  above example, then the same noise value would be added each time `p` is
+  called, since `random.random` would be called when `fdl.build(cfg)` is called.
+
+  `ArgFactory`s can also be nested inside containers that are parameter values
+  for a `Partial`.  In this case, the partial function will construct the
+  parameter value by copying the containers and replacing any `ArgFactory` with
+  the result of calling its factory.  Only the containers that (directly or
+  indirectly) contain `ArgFactory`s are copied; any elements of the containers
+  that do not contain `ArgFactory`s are not copied.
+
+  `ArgFactory` can also be used as the parameter for another `ArgFactory`,
+  in which case a new value will be constructed for the child argument
+  each time the parent argument is created.
+
+  `ArgFactory` should *not* be used as a top-level configuration object, or
+  as the argument to a `fdl.Config`.
+  """
+  # TODO: Update build to raise an exception if ArgFactory is built
+  # in an inappropriate context.
+
+  # NOTE: We currently need to repeat this annotation for pytype.
+  __fn_or_cls__: TypeOrCallableProducingT
+
+  def __build__(self, *args, **kwargs):
+    if args or kwargs:
+      return _BuiltArgFactory(_build_partial(self.__fn_or_cls__, args, kwargs))
+    else:
+      return _BuiltArgFactory(self.__fn_or_cls__)
 
 
 def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):

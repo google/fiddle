@@ -27,6 +27,7 @@ import fiddle as fdl
 from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import history
+from fiddle.experimental import arg_factory
 from fiddle.experimental import daglish_legacy
 
 import pytype_extensions
@@ -1219,6 +1220,178 @@ class OrderedArgumentsTest(absltest.TestCase):
       self.assertEqual(
           metadata.argument_names,
           tuple(path_element.name for path_element in path_elements))
+
+
+class ArgFactoryTest(absltest.TestCase):
+
+  def test_build_argfactory(self):
+    """Build an ArgFactory(...)."""
+    cfg = fdl.ArgFactory(SampleClass, arg1=5)
+    value = fdl.build(cfg)
+    self.assertIsInstance(value.factory, functools.partial)
+    self.assertIs(value.factory.func, SampleClass)
+    self.assertEqual(value.factory.keywords, dict(arg1=5))
+    self.assertEqual(value.factory.args, ())
+
+  def test_build_partial_argfactory(self):
+    """Build a Partial(..., ArgFactory(...))."""
+    cfg = fdl.Partial(basic_fn, fdl.ArgFactory(DataclassChild))
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertPartialsEqual(partial_fn,
+                             arg_factory.partial(basic_fn, arg1=DataclassChild))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn(arg2=3)
+    v2 = partial_fn(arg2=3)
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1, dict(arg1=DataclassChild(), arg2=3, kwarg1=None, kwarg2=None))
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+
+  def test_build_partial_argfactory_argfactory(self):
+    """Build a Partial(..., ArgFactory(..., ArgFactory(...)))."""
+    cfg = fdl.Partial(basic_fn,
+                      fdl.ArgFactory(basic_fn, fdl.ArgFactory(DataclassChild)))
+    cfg.arg1.arg2 = 2
+    cfg.arg2 = 3
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertPartialsEqual(
+        partial_fn,
+        functools.partial(
+            arg_factory.partial(
+                basic_fn,
+                arg1=functools.partial(
+                    arg_factory.partial(basic_fn, arg1=DataclassChild),
+                    arg2=2)),
+            arg2=3))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1=dict(arg1=DataclassChild(), arg2=2, kwarg1=None, kwarg2=None),
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    self.assertIsInstance(v1['arg1'], dict)
+    self.assertIsInstance(v1['arg1']['arg1'], DataclassChild)
+
+    # Neither the dict nor the DataclassChild is shared.
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIsNot(v1['arg1']['arg1'], v2['arg1']['arg1'])
+
+  def test_build_partial_argfactory_config(self):
+    """Build a Partial(..., ArgFactory(..., Config(...)))."""
+    cfg = fdl.Partial(basic_fn,
+                      fdl.ArgFactory(basic_fn, fdl.Config(DataclassChild)))
+    cfg.arg1.arg2 = 2
+    cfg.arg2 = 3
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertPartialsEqual(
+        partial_fn,
+        functools.partial(
+            arg_factory.partial(
+                basic_fn,
+                arg1=functools.partial(basic_fn, arg1=DataclassChild(),
+                                       arg2=2)),
+            arg2=3))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1=dict(arg1=DataclassChild(), arg2=2, kwarg1=None, kwarg2=None),
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    self.assertIsInstance(v1['arg1'], dict)
+    self.assertIsInstance(v1['arg1']['arg1'], DataclassChild)
+
+    # The dict is not shared, but the DataclassChild *is* shared.
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIs(v1['arg1']['arg1'], v2['arg1']['arg1'])
+
+  def test_build_partial_tree_argfactory(self):
+    """Build a Partial(..., Tree(..., ArgFactory(...)))."""
+    cfg = fdl.Partial(basic_fn, {
+        'x': [[fdl.Config(object)],
+              fdl.ArgFactory(DataclassChild)],
+        'y': [1, 2, 3]
+    })
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn(arg2=3)
+    v2 = partial_fn(arg2=3)
+    self.assertEqual(v1, v2)
+    obj = v1['arg1']['x'][0][0]  # created from fdl.Config(object)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1={
+                'x': [[obj], DataclassChild()],
+                'y': [1, 2, 3]
+            },
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    # The DataclassChild and its ancestors are not shared:
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIsNot(v1['arg1']['x'], v2['arg1']['x'])
+    self.assertIsNot(v1['arg1']['x'][1], v2['arg1']['x'][1])
+    # But other parts of the tree (including the object created
+    # by fdl.Config) are shared:
+    self.assertIs(v1['arg1']['x'][0], v2['arg1']['x'][0])
+    self.assertIs(v1['arg1']['x'][0][0], obj)
+    self.assertIs(v2['arg1']['x'][0][0], obj)
+    self.assertIs(v1['arg1']['y'], v2['arg1']['y'])
+
+  def test_build_varargs(self):
+    config = fdl.Partial(fn_with_var_args)
+    list_factory = fdl.build(fdl.ArgFactory(list))
+
+    # Call __build__ with positional args.  (Note: fdl.build only calls
+    # __build__ with keyword args; so we need to use __call__ directly to
+    # test this.)
+    partial_fn = config.__build__(list_factory, 2, [], list_factory, 5)
+
+    # Since we called __build__ with positional arguments that alternate back
+    # and forth between values and factories, it will need to
+    # construct a nested partial object with the following structure.  (Note:
+    # functools.partial automatically merges when its `func` is a partial, so
+    # this ends up being 2 partial objects, not 4.)
+    expected = functools.partial(
+        arg_factory.partial(
+            functools.partial(
+                arg_factory.partial(fn_with_var_args, list), 2, []), list), 5)
+    self.assertPartialsEqual(expected, partial_fn)
+
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, {'arg1': [], 'args': (2, [], [], 5), 'kwarg1': None})
+    self.assertEqual(v2, {'arg1': [], 'args': (2, [], [], 5), 'kwarg1': None})
+    self.assertIsNot(v1['arg1'], v2['arg1'])  # from list_factory
+    self.assertIs(v1['args'][1], v2['args'][1])  # literal list
+    self.assertIsNot(v1['args'][2], v2['args'][2])  # from list_factory
+
+    v3 = partial_fn(10, kwarg1=20)
+    self.assertEqual(v3, {'arg1': [], 'args': (2, [], [], 5, 10), 'kwarg1': 20})
+
+  def assertPartialsEqual(self, x, y):
+    # Compare using reprs, since `==` will consider different instances of
+    # functools.partial to be different even if they have the same function
+    # and args.
+    self.assertEqual(repr(x), repr(y))
 
 
 if __name__ == '__main__':

@@ -16,8 +16,9 @@
 """Tests for dataclasses."""
 
 import dataclasses
+import functools
 import types
-from typing import Any, Dict
+from typing import Any, Dict, Callable
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -91,6 +92,56 @@ class ParentPair:
       default_factory=Parent, configurable_factory=True)
   second: Parent = fdl_dc.field(
       default_factory=Parent, configurable_factory=True)
+
+
+@dataclasses.dataclass
+class A:
+  x: int = 0
+
+
+@dataclasses.dataclass
+class B:
+  a: A = fdl_dc.field(default_factory=A, configurable_factory=True)
+
+
+@dataclasses.dataclass
+class C:
+  b: B = fdl_dc.field(default_factory=B, configurable_factory=True)
+
+  @auto_config.auto_config
+  @classmethod
+  def factory(cls):
+    return functools.partial(cls)
+
+  @auto_config.auto_config
+  @classmethod
+  def factory2(cls):
+    return functools.partial(cls, b=B())
+
+
+@dataclasses.dataclass
+class D:
+  c_factory: Callable[..., C] = fdl_dc.field(default_factory=C.factory)
+
+  @auto_config.auto_config
+  @classmethod
+  def factory(cls):
+    return functools.partial(cls)
+
+
+@dataclasses.dataclass
+class D2:
+  c_factory: Callable[..., C] = fdl_dc.field(default_factory=C.factory2)
+
+  @auto_config.auto_config
+  @classmethod
+  def factory(cls):
+    return functools.partial(cls)
+
+
+@dataclasses.dataclass
+class E:
+  d_factory: Callable[..., D2] = fdl_dc.field(default_factory=D2.factory)
 
 
 class DataclassesTest(test_util.TestCase):
@@ -205,6 +256,47 @@ class DataclassesTest(test_util.TestCase):
         "be used with auto_config'ed functions"):
       fdl_dc.field(
           default_factory=AnAutoconfigType.default, configurable_factory=True)
+
+  def test_nested_dataclass_default_factories(self):
+    with self.subTest('config_value'):
+      cfg = fdl.Config(D)
+      expected = fdl.Config(
+          D, c_factory=fdl.Partial(C, fdl.ArgFactory(B, fdl.ArgFactory(A))))
+      self.assertDagEqual(cfg, expected)
+
+    with self.subTest('built_value_identity'):
+      for d in [D(), fdl.build(fdl.Config(D))]:
+        c1 = d.c_factory()
+        c2 = d.c_factory()
+        self.assertIsNot(c1, c2)
+        self.assertIsNot(c1.b, c2.b)
+        self.assertIsNot(c1.b.a, c2.b.a)
+
+    with self.subTest('change_arg_factory_to_config'):
+      cfg = fdl.Config(D)
+      cfg.c_factory.b = fdl.Config(B)  # Now this will be shared.
+      d = fdl.build(cfg)
+      c1 = d.c_factory()
+      c2 = d.c_factory()
+      self.assertIsNot(c1, c2)
+      self.assertIs(c1.b, c2.b)
+      self.assertIs(c1.b.a, c2.b.a)
+
+    with self.subTest('double_partial'):
+      with self.assertRaisesRegex(ValueError, 'Unable to safely replace'):
+        fdl.Config(E)
+
+    with self.subTest('expand_dataclass_default_factories_docstring'):
+      f = lambda x: x
+      g = lambda v=0: [v]
+      make_fn = auto_config.auto_config(lambda: functools.partial(f, x=g()))
+
+      @dataclasses.dataclass
+      class Test:
+        fn: Callable[[], object] = fdl_dc.field(default_factory=make_fn)
+
+      with self.assertRaisesRegex(ValueError, 'Unable to safely replace'):
+        fdl.Partial(Test)
 
 
 if __name__ == '__main__':

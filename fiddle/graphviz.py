@@ -245,6 +245,12 @@ class _GraphvizRenderer:
     header_td = self.tag('td', colspan=colspan, bgcolor=bgcolor, style=style)
     return tr(header_td(header))
 
+  def _config_header_style(self, config: fdl.Buildable) -> str:
+    if isinstance(config, (fdl.Partial, fdl.ArgFactory)):
+      return 'dashed'
+    else:
+      return 'solid'
+
   def render(self, value: Any) -> graphviz.Graph:
     """Renders the given value, recursively rendering any nested values."""
     self._find_shared_value_ids(value)
@@ -324,7 +330,7 @@ class _GraphvizRenderer:
   def _render_config(self, config: fdl.Buildable, bgcolor: str) -> str:
     """Returns an HTML string rendering the Buildable `config`."""
     # Generate the header row.
-    style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
+    style = self._config_header_style(config)
     type_font = self.tag('font', point_size=8)
     type_name = config.__class__.__name__
     fn_or_cls_name = getattr(
@@ -352,7 +358,7 @@ class _GraphvizRenderer:
                                 bgcolor: str) -> str:
     """Returns an HTML string rendering the Buildable `config`."""
     # Generate the header row.
-    style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
+    style = self._config_header_style(config)
     type_font = self.tag('font', point_size=8)
     type_name = config.buildable_type.__name__
     table = self.tag('table', cellborder='0')
@@ -457,7 +463,7 @@ class _GraphvizRenderer:
     self._dot.edge(f'{self._current_id}:{port}:c', f'{node_id}:c', **edge_attrs)
 
     # Return a table with a single colored cell, using the port name from above.
-    style = 'dashed' if isinstance(value, fdl.Partial) else 'solid'
+    style = self._config_header_style(value)
     table = self.tag('table', style=style)
     tr = self.tag('tr')
     td = self.tag('td', port=port, bgcolor=self._color(value), style=style)
