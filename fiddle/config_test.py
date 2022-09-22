@@ -388,9 +388,9 @@ class ConfigTest(absltest.TestCase):
     fn_config1 = fdl.Config(basic_fn, *fn_config1_args.values())
 
     class_config = fdl.Config(
-        SampleClass, arg1=fdl.Partial(fn_config1), arg2=fn_config1)
+        SampleClass, arg1=fdl.cast(fdl.Partial, fn_config1), arg2=fn_config1)
     fn_config2 = fdl.Config(
-        basic_fn, arg1=fdl.Partial(class_config), arg2=class_config)
+        basic_fn, arg1=fdl.cast(fdl.Partial, class_config), arg2=class_config)
 
     fn_config2_args = fdl.build(fn_config2)
 
@@ -522,8 +522,8 @@ class ConfigTest(absltest.TestCase):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
     fn_config = fdl.Config(
         basic_fn,
-        arg1=fdl.Config(class_partial),
-        arg2=fdl.Config(class_partial))
+        arg1=fdl.cast(fdl.Config, class_partial),
+        arg2=fdl.cast(fdl.Config, class_partial))
     self.assertIsNot(fn_config.arg1, fn_config.arg2)
     fn_config_copy = copy.deepcopy(fn_config)
     self.assertIsNot(fn_config_copy.arg1, fn_config_copy.arg2)
@@ -546,9 +546,9 @@ class ConfigTest(absltest.TestCase):
           kwarg1='kw1',
           kwarg2='kw2')
       class_config = fdl.Config(
-          SampleClass, arg1=fdl.Partial(fn_config1), arg2=fn_config1)
+          SampleClass, arg1=fdl.cast(fdl.Partial, fn_config1), arg2=fn_config1)
       fn_config2 = fdl.Config(
-          basic_fn, arg1=fdl.Partial(class_config), arg2=class_config)
+          basic_fn, arg1=fdl.cast(fdl.Partial, class_config), arg2=class_config)
       return fn_config2
 
     cfg1 = make_nested_config()
@@ -571,14 +571,14 @@ class ConfigTest(absltest.TestCase):
     self.assertNotEqual(cfg, 5)
 
     # Compare to a `Partial`.
-    partial = fdl.Partial(cfg)
+    partial = fdl.cast(fdl.Partial, cfg)
     self.assertNotEqual(cfg, partial)
 
     # Compare to a `Config` subclass.
     class ConfigSubClass(fdl.Config):
       pass
 
-    cfg_subclass = ConfigSubClass(cfg)
+    cfg_subclass = fdl.cast(ConfigSubClass, cfg)
     self.assertNotEqual(cfg, cfg_subclass)
     # The logic governing how __eq__ is actually invoked from an == comparison
     # actually takes subclassing relationships into account and always calls
@@ -760,8 +760,10 @@ class ConfigTest(absltest.TestCase):
 
   def test_convert_partial(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
-    class_config = fdl.Config(class_partial, 'new_arg1', kwarg1='new_kwarg1')
+    class_config = fdl.cast(fdl.Config, class_partial)
+    class_config.arg1 = 'new_arg1'
     class_config.arg2 = 'new_arg2'
+    class_config.kwarg1 = 'new_kwarg1'
     self.assertEqual(class_partial.arg2, 'arg2')
     instance = fdl.build(class_config)
     self.assertEqual(instance.arg1, 'new_arg1')
@@ -770,8 +772,8 @@ class ConfigTest(absltest.TestCase):
 
   def test_convert_partial_nested(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
-    class_config = fdl.Config(SampleClass, fdl.Config(class_partial),
-                              fdl.Config(class_partial))
+    class_config = fdl.Config(SampleClass, fdl.cast(fdl.Config, class_partial),
+                              fdl.cast(fdl.Config, class_partial))
     instance = fdl.build(class_config)
     self.assertEqual(instance.arg1.arg1, 'arg1')
     self.assertEqual(instance.arg1.arg2, 'arg2')
@@ -1088,6 +1090,68 @@ class ConfigTest(absltest.TestCase):
     cfg = fdl.Config(basic_fn)
     with self.assertRaisesRegex(TypeError, 'not_there'):
       fdl.assign(cfg, arg1=1, not_there=2)
+
+  def test_cast(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+    cfg2 = fdl.cast(fdl.Partial, cfg1)
+    self.assertIsInstance(cfg2, fdl.Partial)
+    self.assertEqual(cfg1.__fn_or_cls__, cfg2.__fn_or_cls__)
+    self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
+    self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
+
+  def test_copy_with(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+
+    expected_cfg1 = dict(arg1=1, kwarg1=2, kwargs=dict(c=[]))
+    expected_cfg2 = dict(arg1=5, kwarg1=2, kwargs=dict(a='a', b='b', c=[]))
+
+    with self.subTest('cfg1_value'):
+      self.assertEqual(expected_cfg1, fdl.build(cfg1))
+
+    with self.subTest('shallow_copy'):
+      cfg2 = fdl.copy_with(cfg1, arg1=5, a='a', b='b')
+      self.assertIsNot(cfg1, cfg2)
+      self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
+      self.assertIsNot(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertIs(cfg1.c, cfg2.c)  # Shallow copy.
+      self.assertEqual(expected_cfg2, fdl.build(cfg2))
+
+    with self.subTest('deep_copy'):
+      cfg2 = fdl.deepcopy_with(cfg1, arg1=5, a='a', b='b')
+      self.assertIsNot(cfg1, cfg2)
+      self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
+      self.assertIsNot(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertIsNot(cfg1.c, cfg2.c)  # Deep copy.
+      self.assertEqual(expected_cfg2, fdl.build(cfg2))
+
+  def test_deprecated_copy_constructor(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+    cfg2 = fdl.Partial(cfg1)
+    self.assertIsInstance(cfg2, fdl.Partial)
+    self.assertEqual(cfg1.__fn_or_cls__, cfg2.__fn_or_cls__)
+    self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
+    self.assertEmpty(cfg2.__argument_tags__)  # tags are not copied.
+
+  def test_deprecated_copy_constructor_with_updates(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+    cfg2 = fdl.Config(cfg1, 5, a='a', b='b')
+
+    expected_cfg1 = dict(arg1=1, kwarg1=2, kwargs=dict(c=[]))
+    expected_cfg2 = dict(arg1=5, kwarg1=2, kwargs=dict(a='a', b='b', c=[]))
+
+    self.assertIsNot(cfg1, cfg2)
+    self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
+    self.assertEmpty(cfg2.__argument_tags__)  # tags are not copied.
+    self.assertIs(cfg1.c, cfg2.c)  # Shallow copy.
+
+    self.assertEqual(expected_cfg1, fdl.build(cfg1))
+    self.assertEqual(expected_cfg2, fdl.build(cfg2))
 
   def test_dataclass_default_factory(self):
 

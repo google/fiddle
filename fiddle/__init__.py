@@ -20,8 +20,11 @@ from fiddle.building import BuildError
 from fiddle.config import add_tag
 from fiddle.config import assign
 from fiddle.config import Buildable
+from fiddle.config import cast
 from fiddle.config import clear_tags
 from fiddle.config import Config
+from fiddle.config import copy_with
+from fiddle.config import deepcopy_with
 from fiddle.config import get_tags
 from fiddle.config import Partial
 from fiddle.config import remove_tag

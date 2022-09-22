@@ -22,6 +22,8 @@ import copy
 import dataclasses
 import functools
 import inspect
+import itertools
+import logging
 import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
 from fiddle import daglish
@@ -92,17 +94,25 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       *args: Any positional arguments to configure for `fn_or_cls`.
       **kwargs: Any keyword arguments to configure for `fn_or_cls`.
     """
+    if isinstance(fn_or_cls, Buildable):
+      # TODO Turn this into a ValueError once code that uses this
+      # pattern has been updated to use fdl.cast or fdl.copy_with.
+      logging.warning(
+          'Using the Buildable constructor to convert a buildable to a new '
+          'type or to override arguments is deprecated; please use either '
+          '`fdl.cast(new_type, buildable)` (for casting) or '
+          '`fdl.copy_with(buildable, **kwargs)` (for overriding arguments).')
+      copy_constructor_arguments = fn_or_cls.__arguments__
+      fn_or_cls = fn_or_cls.__fn_or_cls__
+    else:
+      copy_constructor_arguments = None
+
     # Using `super().__setattr__` here because assigning directly would trigger
     # our `__setattr__` override. Using `super().__setattr__` instead of special
     # casing these attribute names in `__setattr__` also has the effect of
     # making them easily gettable but not as easily settable by user code.
-    if isinstance(fn_or_cls, Buildable):
-      initial_arguments = fn_or_cls.__arguments__.copy()
-      fn_or_cls = fn_or_cls.__fn_or_cls__
-    else:
-      initial_arguments = {}
     super().__setattr__('__fn_or_cls__', fn_or_cls)
-    super().__setattr__('__arguments__', initial_arguments)
+    super().__setattr__('__arguments__', {})
     signature = inspect.signature(fn_or_cls)
     super().__setattr__('__signature__', signature)
     has_var_keyword = any(param.kind == param.VAR_KEYWORD
@@ -123,6 +133,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         raise NotImplementedError(err_msg)
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
+
+    if copy_constructor_arguments:
+      for name, value in copy_constructor_arguments.items():
+        arguments.setdefault(name, value)
 
     if hasattr(fn_or_cls, '__fiddle_init__'):
       fn_or_cls.__fiddle_init__(self)
@@ -582,7 +596,7 @@ def update_callable(buildable: Buildable,
 
 
 def assign(buildable: Buildable, /, **kwargs):
-  """Assigns multiple arguments to cfg.
+  """Assigns multiple arguments to `buildable`.
 
   Although this function does not enable a caller to do something they can't
   already do with other syntax, this helper function can be useful when
@@ -607,6 +621,35 @@ def assign(buildable: Buildable, /, **kwargs):
   """
   for name, value in kwargs.items():
     setattr(buildable, name, value)
+
+
+def copy_with(buildable: Buildable, /, **kwargs):
+  """Returns a shallow copy of `buildable` with updates to arguments.
+
+  Args:
+    buildable: A `Buildable` (e.g. a `fdl.Config`) to copy and mutate.
+    **kwargs: The arguments and values to assign.
+  """
+  buildable = copy.copy(buildable)
+  assign(buildable, **kwargs)
+  return buildable
+
+
+def deepcopy_with(buildable: Buildable, /, **kwargs):
+  """Returns a deep copy of `buildable` with updates to arguments.
+
+  Note: if any `Config`s inside `buildable` are shared with `Config`s outside
+  of `buildable`, then they will no longer be shared in the returned value.
+  E.g., if `cfg1.x.y is cfg2` is `True`, then
+  `fdl.deepcopy_with(cfg1, ...).x.y is cfg2` will be `False`.
+
+  Args:
+    buildable: A `Buildable` (e.g. a `fdl.Config`) to copy and mutate.
+    **kwargs: The arguments and values to assign.
+  """
+  buildable = copy.deepcopy(buildable)
+  assign(buildable, **kwargs)
+  return buildable
 
 
 def ordered_arguments(buildable: Buildable) -> Dict[str, Any]:
@@ -663,3 +706,41 @@ def clear_tags(buildable: Buildable, argument: str) -> None:
 def get_tags(buildable: Buildable,
              argument: str) -> FrozenSet[tag_type.TagType]:
   return frozenset(buildable.__argument_tags__[argument])
+
+
+_SUPPORTED_CASTS = set()
+BuildableT = TypeVar('BuildableT', bound=Buildable)
+
+
+def cast(new_type: Type[BuildableT], buildable: Buildable) -> BuildableT:
+  """Returns a copy of `buildable` that has been converted to `new_type`.
+
+  Requires that `type(buildable)` and `type(new_type)` be compatible.
+  If the types may not be compatible, a warning will be issued, but the
+  conversion will be attempted.
+
+  Args:
+    new_type: The type to convert to.
+    buildable: The `Buildable` that should be copied and converted.
+  """
+  if not isinstance(buildable, Buildable):
+    raise TypeError(f'Expected `buildable` to be a Buildable, got {buildable}')
+  if not isinstance(new_type, type) and issubclass(new_type, Buildable):
+    raise TypeError('Expected `new_type` to be a subclass of Buildable, '
+                    f'got {buildable}')
+  src_type = type(buildable)
+  if (src_type, new_type) not in _SUPPORTED_CASTS:
+    logging.warning(
+        'Conversion from %s to %s has not been marked as '
+        'officially supported.  If you think this conversion '
+        'should be supported, contact the Fiddle team.', src_type, new_type)
+  return new_type.__unflatten__(*buildable.__flatten__())
+
+
+def register_supported_cast(src_type, dst_type):
+  _SUPPORTED_CASTS.add((src_type, dst_type))
+
+
+# TODO: Add ArgFactory to this list.
+for _src_type, _dst_type in itertools.product([Config, Partial], repeat=2):
+  register_supported_cast(_src_type, _dst_type)
