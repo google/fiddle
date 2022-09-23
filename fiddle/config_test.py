@@ -24,10 +24,10 @@ from typing import Any, Callable, Dict
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import arg_factory
 from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import history
-from fiddle.experimental import arg_factory
 from fiddle.experimental import daglish_legacy
 
 import pytype_extensions

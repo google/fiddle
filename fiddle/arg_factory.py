@@ -58,8 +58,8 @@ arguments.  Consider a function with signature `f(x, y, /)`:
 
 A final difference is that `@arg_factory.default_factory_for` may only be used
 to provide default factories for positional and keyword parameters in the
-wrapped function's signature; it may not be used to add factories for with var-
-positional (`*args`) or var-keyword (**kwargs`) parameters. But
+wrapped function's signature; it may not be used to add factories for functions
+with var-positional (`*args`) or var-keyword (**kwargs`) parameters. But
 `arg_factory.partial` *can* be used to provide a default for a var-positional or
 var-keyword argument.  E.g.:
 
@@ -84,8 +84,8 @@ def partial(func, /, *args, **kwargs):
 
   `arg_factory.partial` is similar to `functools.partial`, except that it binds
   arguments to *factory functions* rather than *values*.  These factory
-  functions are used to construct value for an argument each time the partial is
-  called.
+  functions are used to construct a value for an argument each time the partial
+  is called.
 
   Example:
 
@@ -106,6 +106,12 @@ def partial(func, /, *args, **kwargs):
 
   Since we used `arg_factory.partial`, each call to `g` will call the
   `random.random`, and so will use a different value for `noise`.
+
+  If you need to define a partial function that specifies some parameters using
+  values and other parameters using factories, then you should do so by
+  composing `functools.partial` with `arg_factory.partial`.  E.g.:
+
+  >>> h = functools.partial(arg_factory.partial(f, noise=random.random), x=4)
 
   Args:
     func: The function whose arguments should be bound to factories.
@@ -149,7 +155,7 @@ class _ArgFactory:
   This wrapper is used by `arg_factory.partial` to define arguments whose
   value should should be built each time the partial is called.  It is also
   used in as the default value in the signatures for `arg_factory.partial`
-  and `arg_factory.CallableWithDefaultFactory`.
+  and `arg_factory.CallableWithDefaultFactories`.
   """
   _factory: Callable[[], Any]
 
@@ -200,16 +206,16 @@ def _arg_factory_value(value):
   return value.factory() if isinstance(value, _ArgFactory) else value
 
 
-class CallableWithDefaultFactory(Generic[T]):
+class CallableWithDefaultFactories(Generic[T]):
   """A function wrapper that uses default factories for function parameters.
 
   Each time the wrapper is called, any missing parameter with a default factory
   has its value filled in by calling the factory.
 
-  `arg_factory.CallableWithDefaultFactory` is often created by the
-  `@arg_factory.default_factory` decorator.  But it can also be useful
-  to construct `CallableWithDefaultFactory` directly.  In the following example,
-  `CallableWithDefaultFactory` is used to create a factory function for a
+  `arg_factory.CallableWithDefaultFactories` is often created by the
+  `@arg_factory.default_factory_for` decorator.  But it can also be useful to
+  construct `CallableWithDefaultFactories` directly.  In the following example,
+  `CallableWithDefaultFactories` is used to create a factory function for a
   `dataclass` that overrides the `default_factory` for one of its fields:
 
   >>> @dataclasses.dataclass
@@ -221,10 +227,14 @@ class CallableWithDefaultFactory(Generic[T]):
   >>> @dataclasses.dataclass
   ... class HybridEngine(Engine):
   ...   torque: float = 300
-  >>> HybridCar = arg_factory.CallableWithDefaultFactory(
+  >>> HybridCar = arg_factory.CallableWithDefaultFactories(
   ...     Car, engine=HybridEngine)
   >>> HybridCar()
   Car(engine=HybridEngine(capacity=2.0, torque=300))
+
+  This wrapper does *not* automatically copy attributes such as `__name__` and
+  `__doc__` from the wrapped `func`; if you want to have these attributes
+  copied, then you can use `functools.update_wrapper`.
   """
   _func: Callable[..., T]
   _default_factories: Dict[str, Callable[..., Any]]
@@ -232,7 +242,7 @@ class CallableWithDefaultFactory(Generic[T]):
 
   def __init__(self, func: Callable[..., T], /,
                **default_factories: Callable[..., Any]):
-    """Constructs a `CallableWithDefaultFactory`.
+    """Constructs a `CallableWithDefaultFactories`.
 
     Args:
       func: The function that should be wrapped.
@@ -246,7 +256,7 @@ class CallableWithDefaultFactory(Generic[T]):
       ValueError: If any key of `default_factories` is not a positional
         or keyword parameter to `func`.
     """
-    if isinstance(func, CallableWithDefaultFactory):
+    if isinstance(func, CallableWithDefaultFactories):
       default_factories = {**func.default_factories, **default_factories}
       func = func.func
 
@@ -277,7 +287,7 @@ class CallableWithDefaultFactory(Generic[T]):
 
   @property
   def func(self):
-    """The function wrapped by this CallableWithDefaultFactory."""
+    """The function wrapped by this CallableWithDefaultFactories."""
     return self._func
 
   @property
@@ -351,7 +361,7 @@ def _signature_for_callable_with_default_factories(
 
 def default_factory_for(
     **param_factories
-) -> Callable[[Callable[..., T]], CallableWithDefaultFactory[T]]:
+) -> Callable[[Callable[..., T]], CallableWithDefaultFactories[T]]:
   """Decorator that defines default factories for a function's parameters.
 
   Each time the decorated function is called, any missing parameter with a
@@ -371,6 +381,9 @@ def default_factory_for(
   >>> def add_noise(value, noise):
   ...   return value + noise**2
 
+  This decorator uses `functools.update_wrapper` to copy fields such as
+  `__name__` and `__doc__` from the wrapped function to the wrapper function.
+
   Args:
     **param_factories: Default factories for the wrapped function's parameters.
       Keys may be the names of positional-only parameters, keyword-only
@@ -383,10 +396,12 @@ def default_factory_for(
       or keyword parameter to the wrapped function.
 
   Returns:
-    A decorator that returns a `CallableWithDefaultFactory`.
+    A decorator that returns a `CallableWithDefaultFactories`.
   """
 
   def decorator(func):
-    return CallableWithDefaultFactory(func, **param_factories)
+    result = CallableWithDefaultFactories(func, **param_factories)
+    functools.update_wrapper(result, func)
+    return result
 
   return decorator
