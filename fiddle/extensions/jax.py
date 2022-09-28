@@ -81,7 +81,7 @@ _nn_type_importables = (
 
 def is_jnp_device_array(value):
   """Returns true if `value` is a JAX numpy `DeviceArray`."""
-  return isinstance(value, jnp.DeviceArray)
+  return isinstance(value, jax.Array)
 
 
 def convert_jnp_device_array_to_cst(value, convert_child):
