@@ -346,7 +346,11 @@ def _convert_tagged_value(value: Any,
   return node
 
 
-@register_py_val_to_cst_converter(types.ModuleType)
+# Note: we use `isinstance` for the matcher here because we want this to also
+# apply to subclasses of `types.ModuleType`.  (In particular, we want it to
+# apply to TensorFlow's `TFModuleWrapper` type.)
+@register_py_val_to_cst_converter(
+    lambda value: isinstance(value, types.ModuleType))
 def _convert_module(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a module to CST."""
   del conversion_fn  # Unused.

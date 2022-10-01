@@ -109,7 +109,7 @@ def fiddler_from_diff(diff: diffing.Diff,
   # Construct a PyValToCstConverter to convert constants to CST.
   value_converters = [
       py_val_to_cst_converter.ValueConverter(
-          matcher=types.ModuleType,
+          matcher=lambda value: isinstance(value, types.ModuleType),
           priority=200,
           converter=functools.partial(
               _convert_module, import_manager=import_manager)),
