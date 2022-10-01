@@ -15,6 +15,7 @@
 
 """Utility functions for tests that use fiddle.experimental.daglish."""
 
+import contextlib
 import re
 from typing import Any, Dict, Set
 
@@ -23,6 +24,7 @@ from fiddle import config
 from fiddle import daglish
 from fiddle import diffing
 from fiddle.experimental import daglish_legacy
+from fiddle.experimental import serialization
 
 
 def parse_path(path_str: str) -> daglish.Path:
@@ -219,3 +221,28 @@ class TestCase(absltest.TestCase):
     # test cases not have false positives.
     self.assertEqual(x, y)
     self.assertEqual(get_shared_paths(x), get_shared_paths(y))
+
+
+@contextlib.contextmanager
+def test_serialization_register_constant():
+  """Context manager used to test `serialization.register_constant`.
+
+  Saves the registered serialization constants when the context manager is
+  entered, and restores them when it is exited.  This makes it possible to
+  "temporarily" register a serialization constant (for the scope of a test).
+
+  Yields:
+    None
+  """
+  # pylint: disable=protected-access
+  old_serialization_constants_by_id = dict(
+      serialization._serialization_constants_by_id)
+  old_serialization_constants_by_value = dict(
+      serialization._serialization_constants_by_value)
+  try:
+    yield
+  finally:
+    serialization._serialization_constants_by_id = (
+        old_serialization_constants_by_id)
+    serialization._serialization_constants_by_value = (
+        old_serialization_constants_by_value)

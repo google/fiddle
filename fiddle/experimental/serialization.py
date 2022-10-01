@@ -264,7 +264,8 @@ class DefaultPyrefPolicy(PyrefPolicy):
   def allows_value(self, value) -> bool:
     is_serializable_type = (
         isinstance(value, type) and find_node_traverser(value) is not None)
-    is_builtin = inspect.getmodule(value).__name__ in sys.builtin_module_names
+    module_name = getattr(inspect.getmodule(value), '__name__', None)
+    is_builtin = module_name in sys.builtin_module_names
     return is_serializable_type or not is_builtin
 
 
@@ -307,6 +308,70 @@ def import_symbol(policy: PyrefPolicy, module: str, symbol: str):
 def _to_snake_case(name: str) -> str:
   """Converts a camel or studly-caps name to a snake_case name."""
   return re.sub(r'(?<=[^_A-Z])(?=[A-Z])', '_', name).lower()
+
+
+@dataclasses.dataclass
+class SerializationConstant:
+  module: str
+  symbol: str
+
+  def to_pyref(self):
+    return {
+        _TYPE_KEY: _PYREF_TYPE,
+        _MODULE_KEY: self.module,
+        _NAME_KEY: self.symbol
+    }
+
+
+_serialization_constants_by_id: Dict[int, SerializationConstant] = {}
+_serialization_constants_by_value: Dict[Any, SerializationConstant] = {}
+
+
+def register_constant(module: str, symbol: str, compare_by_identity: bool):
+  """Registers a module-level constant value for serialization.
+
+  The specified value will be serialized as a pyref (python reference), meaning
+  that its value will be deserialized by reading the specified symbol from the
+  specified module.
+
+  Args:
+    module: The name of the module containing the constant symbol.
+    symbol: The symbol in `module` that contains a constant value.
+    compare_by_identity: If True, then only use a pyref to serialize a value `x`
+      if `x is <module>.<symbol>`.  If False, then use a pyref to serialize any
+      value `x` where `x == <module>.<symbol>`.  If `compare_by_identity` is
+      False, then the value must be hashable.
+
+  Raises:
+    PyrefError: If `module` can't be found, or 'symbol' can't be accessed on
+      `module`, or if a `PyrefPolicyError` is raised (since `PyrefPolicyError`
+      is a subclass of `PyrefError`).
+    ValueError: If registration is unnecessary for `<module>.<symbol>` (e.g.,
+      because it is a `type` or `function`).
+  """
+  value = import_symbol(DefaultPyrefPolicy(), module, symbol)
+
+  # Perform some sanity checks.
+  if isinstance(value, (type, types.FunctionType)):
+    raise ValueError(
+        f'Can not register {module}.{symbol} as a serialization constant '
+        f'because it is a type or function (so registration is unnecessary).')
+  if _is_leaf_type(type(value)):
+    raise ValueError(
+        f'Can not register {module}.{symbol} as a serialization constant '
+        f'because it is a JSON-representable primitive type (so registration '
+        'is unnecessary).')
+  if find_node_traverser(type(value)) is not None:
+    raise ValueError(
+        f'Can not register {module}.{symbol} as a serialization constant '
+        f'because it is a daglish-traversable type (so registration '
+        'is unnecessary).')
+
+  serialization_constant = SerializationConstant(module, symbol)
+  if compare_by_identity:
+    _serialization_constants_by_id[id(value)] = serialization_constant
+  else:
+    _serialization_constants_by_value[value] = serialization_constant
 
 
 # The following constants define the keys (and some values) in the
@@ -526,6 +591,11 @@ class Serialization:
         output = self._leaf(value)
       elif isinstance(value, (type, types.FunctionType)):
         output = self._pyref(value)
+      elif id(value) in _serialization_constants_by_id:
+        output = _serialization_constants_by_id[id(value)].to_pyref()
+      elif (isinstance(value, collections.Hashable) and
+            value in _serialization_constants_by_value):
+        output = _serialization_constants_by_value[value].to_pyref()
       else:
         raise UnserializableValueError(value, current_path)
     else:  # We have a traverser; serialize value's flattened elements.
