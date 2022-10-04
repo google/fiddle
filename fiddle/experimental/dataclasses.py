@@ -106,3 +106,17 @@ def field(
   # pylint: enable=protected-access
   return dataclasses.field(
       default_factory=default_factory, metadata=metadata, **kwargs)
+
+
+def field_has_tag(dc_field: dataclasses.Field, tag: tag_type.TagType) -> bool:  # pylint: disable=g-bare-generic
+  """Returns True if buildables will attach `tag` to the corresponding arg.
+
+  In particular, `field_has_tag(field(..., tags=tags), tag)` is True if
+  `tag in tags`.
+
+  Args:
+    dc_field: A dataclass field, describing an argument for a dataclass.
+    tag: The tag that should be checked.
+  """
+  metadata = field_metadata.field_metadata(dc_field)
+  return metadata is not None and tag in metadata.tags

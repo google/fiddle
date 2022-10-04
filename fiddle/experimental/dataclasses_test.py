@@ -298,6 +298,17 @@ class DataclassesTest(test_util.TestCase):
       with self.assertRaisesRegex(ValueError, 'Unable to safely replace'):
         fdl.Partial(Test)
 
+  def test_field_has_tag(self):
+    self.assertTrue(
+        fdl_dc.field_has_tag(fdl_dc.field(tags=SampleTag), SampleTag))
+    self.assertTrue(
+        fdl_dc.field_has_tag(
+            fdl_dc.field(tags=(SampleTag, AdditionalTag)), SampleTag))
+    self.assertFalse(
+        fdl_dc.field_has_tag(fdl_dc.field(tags=AdditionalTag), SampleTag))
+    self.assertFalse(fdl_dc.field_has_tag(fdl_dc.field(), SampleTag))
+    self.assertFalse(fdl_dc.field_has_tag(dataclasses.field(), SampleTag))
+
 
 if __name__ == '__main__':
   absltest.main()
