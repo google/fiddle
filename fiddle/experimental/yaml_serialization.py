@@ -50,10 +50,7 @@ def _config_representer(dumper, data, type_name="fdl.Config"):
     raise ValueError("It is not supported to dump objects of functions/classes "
                      "that have a __fn_or_cls__ parameter.")
 
-  value["__fn_or_cls__"] = {
-      "module": inspect.getmodule(data.__fn_or_cls__).__name__,
-      "name": data.__fn_or_cls__.__qualname__,
-  }
+  value["__fn_or_cls__"] = data.__fn_or_cls__
   return dumper.represent_mapping(f"!{type_name}", value)
 
 
@@ -67,10 +64,23 @@ def _fixture_representer(dumper, data):
 
 
 def _taggedvalue_representer(dumper, data):
-  return dumper.represent_mapping("!fdl.TaggedValue", {
+  return dumper.represent_mapping("!fdl.TaggedValueCls", {
       "tags": [tag.name for tag in data.tags],
       "value": data.value,
   })
+
+
+def _custom_object_representer(dumper, data):
+  """Representer for arbitrary Python objects."""
+  if inspect.isclass(data) or inspect.isfunction(data):
+    return dumper.represent_scalar(
+        "!class" if inspect.isclass(data) else "!function",
+        f"{data.__module__}.{data.__qualname__}",
+        style="'")
+  else:
+    attrs = {k: v for k, v in data.__dict__.items() if not k.startswith("_")}
+    attrs["__type__"] = f"{type(data).__module__}.{type(data).__qualname__}"
+    return dumper.represent_mapping("!object", attrs)
 
 
 yaml.SafeDumper.add_representer(config.Config, _config_representer)
@@ -78,6 +88,14 @@ yaml.SafeDumper.add_representer(config.Partial, _partial_representer)
 yaml.SafeDumper.add_representer(fixture_node.FixtureNode, _fixture_representer)
 yaml.SafeDumper.add_representer(tagging.TaggedValueCls,
                                 _taggedvalue_representer)
+yaml.SafeDumper.add_representer(None, _custom_object_representer)
+
+
+class _CustomSafeDumper(yaml.SafeDumper):
+
+  def ignore_aliases(self, data):
+    return (super().ignore_aliases(data) or inspect.isclass(data) or
+            inspect.isfunction(data))
 
 
 def dump_yaml(value: Any) -> str:
@@ -85,8 +103,5 @@ def dump_yaml(value: Any) -> str:
 
   Args:
     value: The value to serialize.
-
-  Raises:
-    PyrefError: If an error is encountered while serializing a Python reference.
   """
-  return yaml.safe_dump(value)
+  return yaml.dump(value, Dumper=_CustomSafeDumper)
