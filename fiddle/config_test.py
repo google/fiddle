@@ -1039,42 +1039,6 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(1, obj)
     self.assertEqual(3, output)
 
-  def test_update_callable(self):
-    cfg = fdl.Config(basic_fn, 1, 'xyz', kwarg1='abc')
-    fdl.update_callable(cfg, SampleClass)
-    cfg.kwarg2 = '123'
-    obj = fdl.build(cfg)
-    self.assertIsInstance(obj, SampleClass)
-    self.assertEqual(1, obj.arg1)
-    self.assertEqual('xyz', obj.arg2)
-    self.assertEqual('abc', obj.kwarg1)
-    self.assertEqual('123', obj.kwarg2)
-
-  def test_update_callable_invalid_arg(self):
-    cfg = fdl.Config(fn_with_var_kwargs, abc='123', xyz='321')
-    with self.assertRaisesRegex(TypeError,
-                                r"have invalid arguments \['abc', 'xyz'\]"):
-      fdl.update_callable(cfg, SampleClass)
-
-  def test_update_callable_new_kwargs(self):
-    cfg = fdl.Config(SampleClass)
-    cfg.arg1 = 1
-    fdl.update_callable(cfg, fn_with_var_kwargs)
-    cfg.abc = '123'  # A **kwargs value should now be allowed.
-    self.assertEqual({
-        'arg1': 1,
-        'kwarg1': None,
-        'kwargs': {
-            'abc': '123'
-        }
-    }, fdl.build(cfg))
-
-  def test_update_callable_varargs(self):
-    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
-    with self.assertRaisesRegex(NotImplementedError,
-                                'Variable positional arguments'):
-      fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
-
   def test_assign(self):
     cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
     fdl.assign(cfg, a='a', b='b')
@@ -1189,6 +1153,49 @@ class ConfigTest(absltest.TestCase):
 
     cfg2 = fdl.Config(f, self=5, fn_or_cls=1)  # pytype: disable=wrong-arg-types
     self.assertEqual(fdl.build(cfg2), 6)
+
+
+class CallableApisTest(absltest.TestCase):
+
+  def test_update_callable(self):
+    cfg = fdl.Config(basic_fn, 1, 'xyz', kwarg1='abc')
+    fdl.update_callable(cfg, SampleClass)
+    cfg.kwarg2 = '123'
+    obj = fdl.build(cfg)
+    self.assertIsInstance(obj, SampleClass)
+    self.assertEqual(1, obj.arg1)
+    self.assertEqual('xyz', obj.arg2)
+    self.assertEqual('abc', obj.kwarg1)
+    self.assertEqual('123', obj.kwarg2)
+
+  def test_update_callable_invalid_arg(self):
+    cfg = fdl.Config(fn_with_var_kwargs, abc='123', xyz='321')
+    with self.assertRaisesRegex(TypeError,
+                                r"have invalid arguments \['abc', 'xyz'\]"):
+      fdl.update_callable(cfg, SampleClass)
+
+  def test_update_callable_new_kwargs(self):
+    cfg = fdl.Config(SampleClass)
+    cfg.arg1 = 1
+    fdl.update_callable(cfg, fn_with_var_kwargs)
+    cfg.abc = '123'  # A **kwargs value should now be allowed.
+    self.assertEqual({
+        'arg1': 1,
+        'kwarg1': None,
+        'kwargs': {
+            'abc': '123'
+        }
+    }, fdl.build(cfg))
+
+  def test_update_callable_varargs(self):
+    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
+    with self.assertRaisesRegex(NotImplementedError,
+                                'Variable positional arguments'):
+      fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
+
+  def test_get_callable(self):
+    cfg = fdl.Config(basic_fn)
+    self.assertIs(fdl.get_callable(cfg), basic_fn)
 
 
 class OrderedArgumentsTest(absltest.TestCase):

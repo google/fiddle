@@ -26,6 +26,7 @@ from fiddle.config import clear_tags
 from fiddle.config import Config
 from fiddle.config import copy_with
 from fiddle.config import deepcopy_with
+from fiddle.config import get_callable
 from fiddle.config import get_tags
 from fiddle.config import Partial
 from fiddle.config import remove_tag

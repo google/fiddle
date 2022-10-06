@@ -992,6 +992,11 @@ def deepcopy_with(buildable: Buildable, /, **kwargs):
   return buildable
 
 
+def get_callable(buildable: Buildable[T]) -> Union[Callable[..., T], Type[T]]:
+  """Returns the callable of a Buildable."""
+  return buildable.__fn_or_cls__
+
+
 def ordered_arguments(buildable: Buildable) -> Dict[str, Any]:
   """Returns arguments of a Buildable, ordered by the signature."""
   result = {}
