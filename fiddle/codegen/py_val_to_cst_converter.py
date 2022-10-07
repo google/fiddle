@@ -21,7 +21,7 @@ import inspect
 import types
 from typing import Any, Callable, Union, Type, List, Optional, NamedTuple, Sequence
 
-from fiddle import config
+from fiddle import config as config_lib
 from fiddle import tagging
 from fiddle.experimental import daglish_legacy
 
@@ -321,11 +321,11 @@ def _convert_namedtuple(value: Any,
       ])
 
 
-@register_py_val_to_cst_converter([config.Config, config.Partial])
+@register_py_val_to_cst_converter([config_lib.Config, config_lib.Partial])
 def _convert_buildable(value: Any,
                        conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a fdl.Config or fdl.Partial to CST."""
-  args = [cst.Arg(conversion_fn(value.__fn_or_cls__))]
+  args = [cst.Arg(conversion_fn(config_lib.get_callable(value)))]
   for (arg_name, arg_val) in value.__arguments__.items():
     if arg_name in value.__argument_tags__:
       for tag in value.__argument_tags__[arg_name]:

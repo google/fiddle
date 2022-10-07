@@ -18,9 +18,9 @@
 import abc
 import copy
 import dataclasses
-
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
-from fiddle import config
+
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import tag_type
 from fiddle.experimental import daglish_legacy
@@ -145,7 +145,7 @@ class ModifyValue(DiffOperation):
   def apply(self, parent: Any, child: daglish.PathElement):
     """Replaces `child.follow(parent)` with self.new_value."""
     if isinstance(child, daglish.BuildableFnOrCls):
-      config.update_callable(parent, self.new_value)
+      config_lib.update_callable(parent, self.new_value)
     elif isinstance(child, daglish.Attr):
       setattr(parent, child.name, self.new_value)
     elif isinstance(child, daglish.Index):
@@ -185,7 +185,7 @@ class AddTag(DiffOperation):
 
   def apply(self, parent: Any, child: daglish.PathElement):
     if isinstance(child, daglish.Attr):
-      config.add_tag(parent, child.name, self.tag)
+      config_lib.add_tag(parent, child.name, self.tag)
     else:
       raise ValueError(f'DeleteValue does not support {child}.')
 
@@ -201,7 +201,7 @@ class RemoveTag(DiffOperation):
 
   def apply(self, parent: Any, child: daglish.PathElement):
     if isinstance(child, daglish.Attr):
-      config.remove_tag(parent, child.name, self.tag)
+      config_lib.remove_tag(parent, child.name, self.tag)
     else:
       raise ValueError(f'DeleteValue does not support {child}.')
 
@@ -358,7 +358,7 @@ class DiffAlignment:
       return False
     if isinstance(old_value, Sequence) and len(old_value) != len(new_value):
       return False
-    if (not isinstance(old_value, (list, tuple, dict, config.Buildable)) and
+    if (not isinstance(old_value, (list, tuple, dict, config_lib.Buildable)) and
         old_value != new_value):
       return False
     return True
@@ -386,7 +386,7 @@ class DiffAlignment:
         raise AlignmentError(
             f'Aligning sequences with different lengths is not '
             f'currently supported.  ({len(old_value)} vs {len(new_value)})')
-    if (not isinstance(old_value, (list, tuple, dict, config.Buildable)) and
+    if (not isinstance(old_value, (list, tuple, dict, config_lib.Buildable)) and
         old_value != new_value):
       raise AlignmentError(
           f'Values of type {type(old_value)} may only be aligned if they are '
@@ -564,7 +564,7 @@ class _DiffFromAlignmentBuilder:
       # may be aligned, so old_value must be memoizable here.)
       old_value = self.alignment.old_from_new(new_value)
       old_path = self.paths_by_old_id[id(old_value)][0]
-      if isinstance(new_value, config.Buildable):
+      if isinstance(new_value, config_lib.Buildable):
         self.record_buildable_diffs(old_path, old_value, new_value, diff_value)
       elif isinstance(new_value, Dict):
         self.record_dict_diffs(old_path, old_value, new_value, diff_value)
@@ -574,14 +574,14 @@ class _DiffFromAlignmentBuilder:
       return Reference(root='old', target=old_path)
 
   def record_buildable_diffs(self, old_path: daglish.Path,
-                             old_value: config.Buildable,
-                             new_value: config.Buildable,
-                             diff_value: config.Buildable):
+                             old_value: config_lib.Buildable,
+                             new_value: config_lib.Buildable,
+                             diff_value: config_lib.Buildable):
     """Records changes needed to turn Buildable `old_value` into `new_value`."""
-    if old_value.__fn_or_cls__ != new_value.__fn_or_cls__:
+    if config_lib.get_callable(old_value) != config_lib.get_callable(new_value):
       old_callable_path = old_path + (daglish.BuildableFnOrCls(),)
       self.changes.append(
-          ModifyValue(old_callable_path, new_value.__fn_or_cls__))
+          ModifyValue(old_callable_path, config_lib.get_callable(new_value)))
 
     if old_value.__argument_tags__ != new_value.__argument_tags__:
       self.record_tag_diffs(old_path, old_value, new_value)
@@ -603,8 +603,8 @@ class _DiffFromAlignmentBuilder:
         self.changes.append(SetValue(old_child_path, getattr(diff_value, name)))
 
   def record_tag_diffs(self, old_path: daglish.Path,
-                       old_value: config.Buildable,
-                       new_value: config.Buildable):
+                       old_value: config_lib.Buildable,
+                       new_value: config_lib.Buildable):
     """Records changes to tags between `old_value` and `new_value`."""
     old_arg_tags = old_value.__argument_tags__
     new_arg_tags = new_value.__argument_tags__
@@ -882,7 +882,7 @@ def _path_element_is_compatible(child: daglish.PathElement, parent: Any):
   return ((isinstance(child, daglish.Index) and isinstance(parent, Sequence)) or
           (isinstance(child, daglish.Key) and isinstance(parent, Dict)) or
           (isinstance(child, (daglish.Attr, daglish.BuildableFnOrCls)) and
-           isinstance(parent, config.Buildable)))
+           isinstance(parent, config_lib.Buildable)))
 
 
 def _child_has_value(parent: Any, child: daglish.PathElement):
@@ -967,7 +967,7 @@ def skeleton_from_diff(diff: Diff):
     if isinstance(change, (ModifyValue, SetValue)):
       daglish_legacy.traverse_with_path(add_reference_target, change.new_value)
     if isinstance(change, RemoveTag):
-      config.add_tag(
+      config_lib.add_tag(
           daglish.follow_path(root, change.target[:-1]), change.target[-1].name,
           change.tag)
   daglish_legacy.traverse_with_path(add_reference_target,
@@ -990,7 +990,7 @@ def _add_path_to_skeleton(skeleton, path, skip_leaf=False):
   # Replace `skeleton` with a type that can be used as a parent for path[0].
   if isinstance(skeleton, AnyValue):
     if isinstance(path[0], (daglish.Attr, daglish.BuildableFnOrCls)):
-      skeleton = config.Config(AnyCallable())
+      skeleton = config_lib.Config(AnyCallable())
     elif isinstance(path[0], daglish.Index):
       skeleton = ListPrefix()
     elif isinstance(path[0], daglish.Key):
@@ -1001,7 +1001,7 @@ def _add_path_to_skeleton(skeleton, path, skip_leaf=False):
 
   # Add child element at path[0], if it's not present.
   if isinstance(path[0], daglish.Attr):
-    assert isinstance(skeleton, config.Config)
+    assert isinstance(skeleton, config_lib.Config)
     if path[0].name not in skeleton.__arguments__:
       setattr(skeleton, path[0].name, AnyValue())
   elif isinstance(path[0], daglish.Index):
@@ -1017,7 +1017,7 @@ def _add_path_to_skeleton(skeleton, path, skip_leaf=False):
   # Recurse to the child element.
   child = _add_path_to_skeleton(path[0].follow(skeleton), path[1:], skip_leaf)
   if isinstance(path[0], daglish.Attr):
-    assert isinstance(skeleton, config.Config)
+    assert isinstance(skeleton, config_lib.Config)
     setattr(skeleton, path[0].name, child)
   elif isinstance(path[0], daglish.Index):
     assert isinstance(skeleton, ListPrefix)

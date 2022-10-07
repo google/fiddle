@@ -26,7 +26,7 @@ import types
 
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Type, Union
 
-from fiddle import config as fdl
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import diffing
 from fiddle import tag_type
@@ -113,7 +113,7 @@ class _RemovedTag:
 @dataclasses.dataclass
 class _ChangedBuildable:
   """Node to visualize a buildable that was changed by a diff."""
-  buildable_type: Type[fdl.Buildable]
+  buildable_type: Type[config_lib.Buildable]
   old_callable: Any
   new_callable: Any
   arguments: Dict[str, Union[Any, _ChangedValue]]
@@ -245,8 +245,8 @@ class _GraphvizRenderer:
     header_td = self.tag('td', colspan=colspan, bgcolor=bgcolor, style=style)
     return tr(header_td(header))
 
-  def _config_header_style(self, config: fdl.Buildable) -> str:
-    if isinstance(config, (fdl.Partial, fdl.ArgFactory)):
+  def _config_header_style(self, config: config_lib.Buildable) -> str:
+    if isinstance(config, (config_lib.Partial, config_lib.ArgFactory)):
       return 'dashed'
     else:
       return 'solid'
@@ -296,7 +296,7 @@ class _GraphvizRenderer:
     self._current_id = next(self._config_counter)
     self._node_id_by_value_id[id(value)] = self._current_id
     html_label = self._render_value(value, self._color(value))
-    already_tabular_types = (fdl.Buildable, dict, list, tuple,
+    already_tabular_types = (config_lib.Buildable, dict, list, tuple,
                              _ChangedBuildable)
     if not (isinstance(value, already_tabular_types) or
             daglish_legacy.is_namedtuple_instance(value)):
@@ -312,7 +312,7 @@ class _GraphvizRenderer:
 
     self._current_id = last_id
 
-  def _render_tagged_value(self, tagged_value: fdl.Buildable,
+  def _render_tagged_value(self, tagged_value: config_lib.Buildable,
                            bgcolor: str) -> str:
     """Returns an HTML string rendering `tagged_value`."""
     type_font = self.tag('font', point_size=8)
@@ -327,15 +327,17 @@ class _GraphvizRenderer:
     rendered_value = self._render_nested_value(tagged_value.value)
     return table([header, tr([value_td(rendered_value)])])
 
-  def _render_config(self, config: fdl.Buildable, bgcolor: str) -> str:
+  def _render_config(self, config: config_lib.Buildable, bgcolor: str) -> str:
     """Returns an HTML string rendering the Buildable `config`."""
     # Generate the header row.
     style = self._config_header_style(config)
     type_font = self.tag('font', point_size=8)
     type_name = config.__class__.__name__
     fn_or_cls_name = getattr(
-        config.__fn_or_cls__, '__qualname__',
-        getattr(config.__fn_or_cls__, '__name__', repr(config.__fn_or_cls__)))
+        config_lib.get_callable(config), '__qualname__',
+        getattr(
+            config_lib.get_callable(config), '__name__',
+            repr(config_lib.get_callable(config))))
     title = (
         type_font(html.escape(f'{type_name}:')) + '&nbsp;' +
         html.escape(fn_or_cls_name))
@@ -354,7 +356,7 @@ class _GraphvizRenderer:
       label = table([header, self._header_row(italics('no arguments'))])
     return label
 
-  def _render_changed_buildable(self, config: fdl.Buildable,
+  def _render_changed_buildable(self, config: config_lib.Buildable,
                                 bgcolor: str) -> str:
     """Returns an HTML string rendering the Buildable `config`."""
     # Generate the header row.
@@ -398,7 +400,7 @@ class _GraphvizRenderer:
       return value.__render_value__(self)
     elif isinstance(value, tagging.TaggedValueCls):
       return self._render_tagged_value(value, color)
-    elif isinstance(value, fdl.Buildable):
+    elif isinstance(value, config_lib.Buildable):
       return self._render_config(value, color)
     elif isinstance(value, _ChangedValue):
       return self._render_changed_value(value)
@@ -437,7 +439,7 @@ class _GraphvizRenderer:
     """
     # If this is not a Buildable or shared value, then render it using
     # _render_value.
-    buildable_types = (fdl.Buildable, _ChangedBuildable)
+    buildable_types = (config_lib.Buildable, _ChangedBuildable)
     if not (id(value) in self._shared_value_ids or
             (isinstance(value, buildable_types) and
              not isinstance(value, CustomGraphvizBuildable))):
@@ -692,11 +694,11 @@ def _record_changed_values_from_diff(diff: diffing.Diff, old: Any) -> Any:
     paths = [p[1:] for p in paths if p and p[0].name == 'old']
 
     # If the value is a Buildable, then convert it to a _ChangedBuildable.
-    if isinstance(original_value, fdl.Buildable):
+    if isinstance(original_value, config_lib.Buildable):
       transformed_value = _ChangedBuildable(
           buildable_type=type(transformed_value),
-          old_callable=transformed_value.__fn_or_cls__,
-          new_callable=transformed_value.__fn_or_cls__,
+          old_callable=config_lib.get_callable(transformed_value),
+          new_callable=config_lib.get_callable(transformed_value),
           arguments=transformed_value.__arguments__,
           tags=copy.deepcopy(transformed_value.__argument_tags__))
 

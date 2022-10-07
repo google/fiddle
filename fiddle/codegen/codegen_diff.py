@@ -21,7 +21,7 @@ import re
 import types
 from typing import Any, Callable, Dict, List, Set, Tuple
 
-from fiddle import config
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import diffing
 from fiddle.codegen import import_manager as import_manager_lib
@@ -305,7 +305,7 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         new_value_cst = pyval_to_cst(change.new_value)
         update_callable = cst.Expr(
             cst.Call(
-                func=pyval_to_cst(config.update_callable),
+                func=pyval_to_cst(config_lib.update_callable),
                 args=[cst.Arg(parent_cst),
                       cst.Arg(new_value_cst)]))
 
@@ -317,7 +317,7 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         deletes.append(
             cst.Expr(
                 cst.Call(
-                    func=pyval_to_cst(config.remove_tag),
+                    func=pyval_to_cst(config_lib.remove_tag),
                     args=[
                         cst.Arg(parent_cst),
                         cst.Arg(pyval_to_cst(arg_name)),
@@ -335,7 +335,7 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         assigns.append(
             cst.Expr(
                 value=cst.Call(
-                    func=pyval_to_cst(config.add_tag),
+                    func=pyval_to_cst(config_lib.add_tag),
                     args=[
                         cst.Arg(parent_cst),
                         cst.Arg(pyval_to_cst(arg_name)),
@@ -394,8 +394,8 @@ def _camel_to_snake(name: str) -> str:
 
 def _name_for_value(value: Any) -> str:
   """Returns a name for a value, based on its type."""
-  if isinstance(value, config.Buildable):
-    return _camel_to_snake(value.__fn_or_cls__.__name__)
+  if isinstance(value, config_lib.Buildable):
+    return _camel_to_snake(config_lib.get_callable(value).__name__)
   else:
     return _camel_to_snake(type(value).__name__)
 

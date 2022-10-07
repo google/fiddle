@@ -22,11 +22,11 @@ which are hard questions to answer well at the Fiddle library level.
 
 from typing import Any
 
-from fiddle import config as fdl_config
+from fiddle import config as config_lib
 from fiddle.experimental import daglish_legacy
 
 
-class FixtureNode(fdl_config.Buildable):
+class FixtureNode(config_lib.Buildable):
 
   def __build__(self, /, *args: Any, **kwargs: Any):
     raise ValueError(
@@ -52,7 +52,7 @@ def materialize(config: Any):
     if isinstance(new_value, FixtureNode):
       # TODO: If this proposal is taken forward, preserve
       # __argument_history__ as well.
-      return new_value.__fn_or_cls__(**new_value.__arguments__)
+      return config_lib.get_callable(new_value)(**new_value.__arguments__)
     else:
       return new_value
 

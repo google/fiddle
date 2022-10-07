@@ -32,7 +32,7 @@ import dataclasses
 import typing
 from typing import Any, Type
 
-from fiddle import config
+from fiddle import config as config_lib
 
 
 def _is_autofillable(annotation: Type[Any]) -> bool:
@@ -53,7 +53,7 @@ def _is_autofillable(annotation: Type[Any]) -> bool:
           hasattr(annotation, '__fiddle_init__'))
 
 
-def autofill(cfg: config.Buildable):
+def autofill(cfg: config_lib.Buildable):
   """Recursively instantiates `fdl.Config`'s for arguments.
 
   For any argument that does not already have an assigned value, an autofilled
@@ -66,7 +66,7 @@ def autofill(cfg: config.Buildable):
       in-place.
   """
   # TODO: Explore adding a configurable policy argument.
-  type_hints = typing.get_type_hints(cfg.__fn_or_cls__)
+  type_hints = typing.get_type_hints(config_lib.get_callable(cfg))
   for param in cfg.__signature__.parameters.values():
 
     if param.name in cfg.__arguments__:
@@ -94,6 +94,6 @@ def autofill(cfg: config.Buildable):
       # Policy doesn't allow for autobuilding.
       continue
 
-    child = config.Config(annotation)
+    child = config_lib.Config(annotation)
     autofill(child)
     setattr(cfg, param.name, child)

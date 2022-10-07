@@ -19,7 +19,7 @@ import collections
 import dataclasses
 from typing import Any, Dict, List, Sequence
 
-from fiddle import config as fdl
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle.codegen import import_manager as import_manager_lib
 from fiddle.codegen import mini_ast
@@ -59,7 +59,8 @@ class _VarReference:
     return self.name
 
 
-def _get_shared_buildables(buildable: fdl.Buildable) -> List[fdl.Buildable]:
+def _get_shared_buildables(
+    buildable: config_lib.Buildable) -> List[config_lib.Buildable]:
   """Finds any sub-buildable nodes which are referenced by multiple parents."""
   # Find shared nodes.
   to_count = collections.Counter()
@@ -67,7 +68,7 @@ def _get_shared_buildables(buildable: fdl.Buildable) -> List[fdl.Buildable]:
 
   def traverse(value, state: daglish.State):
     # N.B. don't memoize or we'll never count the duplicates!
-    if isinstance(value, fdl.Buildable):
+    if isinstance(value, config_lib.Buildable):
       to_count[id(value)] += 1
       children_by_id[id(value)] = value
     if state.is_traversable(value):
@@ -87,7 +88,7 @@ def _has_child_buildables(value: Any) -> bool:
 
   def traverse(sub_value, state: daglish.State):
     nonlocal result
-    result = result or isinstance(sub_value, fdl.Buildable)
+    result = result or isinstance(sub_value, config_lib.Buildable)
     if not result and state.is_traversable(sub_value):
       state.flattened_map_children(sub_value)
 
@@ -105,17 +106,17 @@ class SharedBuildableManager:
       default_factory=list)
   instance_names_by_id: Dict[int, str] = dataclasses.field(default_factory=dict)
 
-  def __contains__(self, buildable: fdl.Buildable):
+  def __contains__(self, buildable: config_lib.Buildable):
     return id(buildable) in self.instance_names_by_id
 
-  def add(self, name: str, buildable: fdl.Buildable,
+  def add(self, name: str, buildable: config_lib.Buildable,
           decl: mini_ast.CodegenNode) -> None:
     """Adds a shared instance.
 
     Args:
       name: Variable name for code representing this instance.
-      buildable: Actual Python fdl.Buildable object represented by the code
-        being generated.
+      buildable: Actual Python Buildable object represented by the code being
+        generated.
       decl: Code declaration for this instance.
     """
     self.instances.append(decl)
@@ -153,7 +154,7 @@ class SharedBuildableManager:
       state = state or daglish.BasicTraversal.begin(traverse, child)
       if child in self:
         return _VarReference(self.instance_names_by_id[id(child)])
-      elif isinstance(child, fdl.Buildable):
+      elif isinstance(child, config_lib.Buildable):
         used_not_implemented = True
         return _VarReference("NotImplemented")
       elif state.is_traversable(child):
@@ -194,11 +195,11 @@ def _configure_shared_objects(
     """Generates code for a shared instance."""
     if state.is_traversable(child):
       state.flattened_map_children(child)
-    if isinstance(child, fdl.Buildable):
+    if isinstance(child, config_lib.Buildable):
       # Name this better..
       name = shared_manager.namespace.get_new_name(
-          child.__fn_or_cls__.__name__, prefix=variable_name_prefix)
-      relname = import_manager.add(child.__fn_or_cls__)
+          config_lib.get_callable(child).__name__, prefix=variable_name_prefix)
+      relname = import_manager.add(config_lib.get_callable(child))
       buildable_subclass_str = import_manager.add(child.__class__)
       nodes = [
           mini_ast.Assignment(name, f"{buildable_subclass_str}({relname})")
@@ -216,7 +217,7 @@ def _configure_shared_objects(
   traverse(shared_objects, traverser.initial_state())
 
 
-def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
+def codegen_dot_syntax(buildable: config_lib.Buildable) -> mini_ast.CodegenNode:
   """Generates code, preferring nested dot-attribute assignment when possible.
 
   Example code output (abbreviated and with additional comments):
@@ -256,9 +257,9 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
   # becomes a tree.
   main_tree_blocks = []
 
-  def configure_main_tree_block(child: fdl.Buildable, path: List[Any]):
+  def configure_main_tree_block(child: config_lib.Buildable, path: List[Any]):
     """Configures a tree node for the main configuration block."""
-    relname = import_manager.add(child.__fn_or_cls__)
+    relname = import_manager.add(config_lib.get_callable(child))
     buildable_subclass_str = import_manager.add(child.__class__)
     nodes = [
         mini_ast.Assignment(
@@ -279,12 +280,14 @@ def codegen_dot_syntax(buildable: fdl.Buildable) -> mini_ast.CodegenNode:
       full_path = [*path, *state.current_path]
       if len(state.current_path) > 1 and not _has_child_buildables(value):
         pass
-      elif isinstance(value, fdl.Buildable) and value not in shared_manager:
+      elif isinstance(value,
+                      config_lib.Buildable) and value not in shared_manager:
         deferred.append((value, full_path))
       else:
         nodes.append(shared_manager.assign("root", full_path, value))
 
-      if state.is_traversable(value) and not isinstance(value, fdl.Buildable):
+      if state.is_traversable(value) and not isinstance(value,
+                                                        config_lib.Buildable):
         state.flattened_map_children(value)
 
     daglish.BasicTraversal.run(handle_child_attr, child)

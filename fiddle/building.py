@@ -19,7 +19,7 @@ import threading
 
 from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, overload
 
-from fiddle import config
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import tag_type
 
@@ -52,7 +52,7 @@ def _in_build():
 
 class BuildError(ValueError):
   """Error raised when building a Config fails."""
-  buildable: config.Buildable
+  buildable: config_lib.Buildable
   path_from_config_root: str
   original_error: Exception
   args: Tuple[Any, ...]
@@ -60,7 +60,7 @@ class BuildError(ValueError):
 
   def __init__(
       self,
-      buildable: config.Buildable,
+      buildable: config_lib.Buildable,
       path_from_config_root: str,
       original_error: Exception,
       args: Tuple[Any, ...],
@@ -74,7 +74,7 @@ class BuildError(ValueError):
     self.kwargs = kwargs
 
   def __str__(self) -> str:
-    fn_or_cls_name = self.buildable.__fn_or_cls__.__qualname__
+    fn_or_cls_name = config_lib.get_callable(self.buildable).__qualname__
     return (f'Failed to construct or call {fn_or_cls_name} '
             f'(at {self.path_from_config_root}) with arguments\n'
             f'    args: {self.args}\n'
@@ -83,31 +83,31 @@ class BuildError(ValueError):
 
 # Define typing overload for `build(Partial[T])`
 @overload
-def build(buildable: config.Partial[T]) -> CallableProducingT:
+def build(buildable: config_lib.Partial[T]) -> CallableProducingT:
   ...
 
 
 # Define typing overload for `build(Partial)`
 @overload
-def build(buildable: config.Partial) -> Callable[..., Any]:
+def build(buildable: config_lib.Partial) -> Callable[..., Any]:
   ...
 
 
 # Define typing overload for `build(Config[T])`
 @overload
-def build(buildable: config.Config[T]) -> T:
+def build(buildable: config_lib.Config[T]) -> T:
   ...
 
 
 # Define typing overload for `build(Config)`
 @overload
-def build(buildable: config.Config) -> Any:
+def build(buildable: config_lib.Config) -> Any:
   ...
 
 
 # Define typing overload for `build(Buildable)`
 @overload
-def build(buildable: config.Buildable) -> Any:
+def build(buildable: config_lib.Buildable) -> Any:
   ...
 
 
@@ -121,9 +121,9 @@ def _build(value: Any, state: Optional[daglish.State] = None) -> Any:
   """Inner method / implementation of build()."""
   state = state or daglish.MemoizedTraversal.begin(_build, value)
 
-  if isinstance(value, config.Buildable):
+  if isinstance(value, config_lib.Buildable):
     sub_traversal = state.flattened_map_children(value)
-    metadata: config.BuildableTraverserMetadata = sub_traversal.metadata
+    metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
     arguments = metadata.arguments(sub_traversal.values)
     try:
       return value.__build__(**arguments)

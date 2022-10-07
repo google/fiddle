@@ -34,15 +34,15 @@ import sys
 import types
 from typing import Any, Dict, Iterable, List, Optional, Type
 
-from fiddle import config
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle.experimental import daglish_legacy
 
 _VERSION = '0.0.1'
 
 
-def clear_argument_history(buildable: config.Buildable):
-  """Creates a copy of a config, clearing its history.
+def clear_argument_history(buildable: config_lib.Buildable):
+  """Creates a copy of a buildable, clearing its history.
 
   This can be useful when a Config's history contains a non-picklable value.
 
@@ -55,7 +55,7 @@ def clear_argument_history(buildable: config.Buildable):
 
   def traverse(value: Any, state: daglish.State) -> Any:
     if state.is_traversable(value):
-      if isinstance(value, config.Buildable):
+      if isinstance(value, config_lib.Buildable):
         sub_results = state.flattened_map_children(value)
         metadata = sub_results.metadata.without_history()
         return sub_results.node_traverser.unflatten(sub_results.values,
@@ -508,8 +508,8 @@ class Serialization:
     """Creates a unique and informative name for `value`."""
     try:
       hint_type = type(value)
-      if isinstance(value, config.Buildable):
-        hint_type = value.__fn_or_cls__
+      if isinstance(value, config_lib.Buildable):
+        hint_type = config_lib.get_callable(value)
       hint = hint_type.__name__
     except AttributeError:
       hint = re.sub(r"[<>()\[\] '\"]", '', str(type(value)))
@@ -615,7 +615,7 @@ class Serialization:
         serialized_item = (f'{path_element!r}', serialized_value)
         serialized_items.append(serialized_item)
 
-      if isinstance(metadata, config.BuildableTraverserMetadata):
+      if isinstance(metadata, config_lib.BuildableTraverserMetadata):
         metadata = metadata.without_history()
       serialized_metadata = self._serialize(
           metadata, current_path + (MetadataElement(),), all_paths=None)

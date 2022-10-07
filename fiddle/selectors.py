@@ -25,7 +25,7 @@ import copy
 import dataclasses
 from typing import Any, Callable, Iterator, Optional, Type, Union
 
-from fiddle import config
+from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import tag_type
 from fiddle._src import mutate_buildable
@@ -95,12 +95,12 @@ class NodeSelection(Selection):
   to structure-altering modifications right now; please do not depend on such
   behavior.
   """
-  cfg: config.Buildable
+  cfg: config_lib.Buildable
   fn_or_cls: Optional[FnOrClass]
   match_subclasses: bool
-  buildable_type: Type[config.Buildable]
+  buildable_type: Type[config_lib.Buildable]
 
-  def _matches(self, node: config.Buildable) -> bool:
+  def _matches(self, node: config_lib.Buildable) -> bool:
     """Helper for __iter__ function, determining if a node matches."""
 
     # Implementation note: To allow for future expansion of this class, checks
@@ -110,7 +110,7 @@ class NodeSelection(Selection):
       return False
 
     if self.fn_or_cls is not None:
-      if self.fn_or_cls != node.__fn_or_cls__:
+      if self.fn_or_cls != config_lib.get_callable(node):
         # Determines if subclass matching is allowed, and if the node is a
         # subclass of `self.fn_or_cls`. We check whether both are instances
         # of `type` to avoid `issubclass` errors when either side is actually a
@@ -118,14 +118,14 @@ class NodeSelection(Selection):
         is_subclass = (
             self.match_subclasses  #
             and isinstance(self.fn_or_cls, type)  #
-            and isinstance(node.__fn_or_cls__, type)  #
-            and issubclass(node.__fn_or_cls__, self.fn_or_cls))
+            and isinstance(config_lib.get_callable(node), type)  #
+            and issubclass(config_lib.get_callable(node), self.fn_or_cls))
         if not is_subclass:
           return False
 
     return True
 
-  def __iter__(self) -> Iterator[config.Buildable]:
+  def __iter__(self) -> Iterator[config_lib.Buildable]:
     """Yields all selected nodes.
 
     Nodes that are reachable via multiple paths are yielded only once.
@@ -148,7 +148,7 @@ class NodeSelection(Selection):
       elif state.is_traversable(node):
         # TODO: Consider moving this into Daglish.
         result = state.map_children(node)
-        if isinstance(node, config.Buildable):
+        if isinstance(node, config_lib.Buildable):
           mutate_buildable.move_buildable_internals(
               source=result, destination=node)
         else:
@@ -187,14 +187,14 @@ class NodeSelection(Selection):
 class TagSelection(Selection):
   """Represents a selection of fields tagged by a given tag."""
 
-  cfg: config.Buildable
+  cfg: config_lib.Buildable
   tag: tag_type.TagType
 
   def __iter__(self) -> Iterator[Any]:
     """Yields all values for the selected tag."""
 
     for value in _memoized_walk_leaves_first(self.cfg):
-      if isinstance(value, config.Buildable):
+      if isinstance(value, config_lib.Buildable):
         for name, tags in value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
             yield getattr(value, name)
@@ -202,7 +202,7 @@ class TagSelection(Selection):
   def replace(self, value: Any, deepcopy: bool = True) -> None:
 
     for node_value in _memoized_walk_leaves_first(self.cfg):
-      if isinstance(node_value, config.Buildable):
+      if isinstance(node_value, config_lib.Buildable):
         for name, tags in node_value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
             to_set = value if not deepcopy else copy.deepcopy(value)
@@ -220,12 +220,12 @@ class TagSelection(Selection):
 
 
 def select(
-    cfg: config.Buildable,
+    cfg: config_lib.Buildable,
     fn_or_cls: Optional[FnOrClass] = None,
     *,
     tag: Optional[tag_type.TagType] = None,
     match_subclasses: bool = True,
-    buildable_type: Type[config.Buildable] = config.Buildable,
+    buildable_type: Type[config_lib.Buildable] = config_lib.Buildable,
 ) -> Selection:
   """Selects sub-buildables or fields within a configuration DAG.
 
