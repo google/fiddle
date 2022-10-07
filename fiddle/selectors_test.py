@@ -198,7 +198,7 @@ class NodeSelectionTest(absltest.TestCase):
   def test_matches_function_call(self):
     cfg = encoder_decoder_config()
     for cfg_node in selectors.select(cfg, fake_init_fn):
-      self.assertIs(cfg_node.__fn_or_cls__, fake_init_fn)
+      self.assertIs(fdl.get_callable(cfg_node), fake_init_fn)
 
   def test___iter__(self):
     cfg = encoder_decoder_config()

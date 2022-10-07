@@ -1061,7 +1061,7 @@ class ConfigTest(absltest.TestCase):
     fdl.add_tag(cfg1, 'arg1', Tag1)
     cfg2 = fdl.cast(fdl.Partial, cfg1)
     self.assertIsInstance(cfg2, fdl.Partial)
-    self.assertEqual(cfg1.__fn_or_cls__, cfg2.__fn_or_cls__)
+    self.assertEqual(fdl.get_callable(cfg1), fdl.get_callable(cfg2))
     self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
     self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
 
@@ -1098,7 +1098,7 @@ class ConfigTest(absltest.TestCase):
     fdl.add_tag(cfg1, 'arg1', Tag1)
     cfg2 = fdl.Partial(cfg1)
     self.assertIsInstance(cfg2, fdl.Partial)
-    self.assertEqual(cfg1.__fn_or_cls__, cfg2.__fn_or_cls__)
+    self.assertEqual(fdl.get_callable(cfg1), fdl.get_callable(cfg2))
     self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
     self.assertEmpty(cfg2.__argument_tags__)  # tags are not copied.
 

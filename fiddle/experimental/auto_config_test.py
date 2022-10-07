@@ -315,7 +315,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     instance = MyClass()
     cfg = instance.my_fn.as_buildable(x=3, y=5)
 
-    self.assertEqual(SampleClass, cfg.__fn_or_cls__)
+    self.assertEqual(SampleClass, fdl.get_callable(cfg))
     self.assertEqual(3, cfg.arg1)
     self.assertEqual(5, cfg.arg2)
 
@@ -353,14 +353,14 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       pass
 
     cfg = MyClass.simple.as_buildable()
-    self.assertEqual(MyClass, cfg.__fn_or_cls__)
+    self.assertEqual(MyClass, fdl.get_callable(cfg))
     self.assertEqual(1, cfg.x)
     self.assertEqual('1', cfg.y)
     self.assertEqual(1.0, cfg.z)
 
     class_instance = MyClass(1, '2')
     cfg = class_instance.simple.as_buildable()
-    self.assertEqual(MyClass, cfg.__fn_or_cls__)
+    self.assertEqual(MyClass, fdl.get_callable(cfg))
     self.assertEqual(1, cfg.x)
     self.assertEqual('1', cfg.y)
     self.assertEqual(1.0, cfg.z)
@@ -400,7 +400,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     instance = MyClass()
     cfg = instance.my_fn.as_buildable(x=3, y=5)
 
-    self.assertEqual(MyClass, cfg.__fn_or_cls__)
+    self.assertEqual(MyClass, fdl.get_callable(cfg))
 
     obj = fdl.build(cfg)
 
@@ -464,7 +464,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
     instance = MyClass()
     cfg = instance.my_fn.as_buildable('a')
-    self.assertEqual(cfg.__fn_or_cls__, basic_fn)
+    self.assertEqual(fdl.get_callable(cfg), basic_fn)
     self.assertEqual(cfg.arg, 'a')
     self.assertEqual(cfg.kwarg, fdl.Config(super(MyClass, instance).method))
 
@@ -816,10 +816,10 @@ class InlineTest(test_util.TestCase):
     orig = fdl.build(cfg)
     auto_config.inline(cfg)
 
-    self.assertEqual(SampleClass, cfg.__fn_or_cls__)
+    self.assertEqual(SampleClass, fdl.get_callable(cfg))
     self.assertEqual(cfg.arg2, 'y')
     self.assertIsInstance(cfg.arg1, fdl.Config)
-    self.assertEqual(basic_fn, cfg.arg1.__fn_or_cls__)
+    self.assertEqual(basic_fn, fdl.get_callable(cfg.arg1))
     self.assertEqual(4, cfg.arg1.arg)
     self.assertEqual(orig, fdl.build(cfg))
 
@@ -839,7 +839,7 @@ class InlineTest(test_util.TestCase):
     orig = fdl.build(cfg)
     auto_config.inline(cfg)
 
-    self.assertEqual(AutoConfigClass, cfg.__fn_or_cls__)
+    self.assertEqual(AutoConfigClass, fdl.get_callable(cfg))
     self.assertEqual(cfg.x, 5)
     self.assertEqual(cfg.y, 7)
     self.assertEqual(orig, fdl.build(cfg))

@@ -211,7 +211,8 @@ class PathElementTest(absltest.TestCase):
     self.assertIs(daglish.follow_path(root, path6), root[1]["a"])
 
     path7 = (daglish.Index(2), daglish.Index(2), daglish.BuildableFnOrCls())
-    self.assertIs(daglish.follow_path(root, path7), root[2][2].__fn_or_cls__)
+    self.assertIs(
+        daglish.follow_path(root, path7), fdl.get_callable(root[2][2]))
 
     bad_path_1 = (daglish.Key("a"), daglish.Key("b"))
     with self.assertRaisesRegex(

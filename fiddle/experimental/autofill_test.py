@@ -71,9 +71,9 @@ class AutoFillTest(absltest.TestCase):
     autofill.autofill(cfg)
 
     self.assertIsInstance(cfg.child1, fdl.Config)
-    self.assertEqual(cfg.child1.__fn_or_cls__, Child)
+    self.assertEqual(fdl.get_callable(cfg.child1), Child)
     self.assertIsInstance(cfg.child2, fdl.Config)
-    self.assertEqual(cfg.child2.__fn_or_cls__, ChildDC)
+    self.assertEqual(fdl.get_callable(cfg.child2), ChildDC)
 
   def test_autofill_with_string_annotations(self):
     cfg = fdl.Config(StringTypeAnnotations)
@@ -83,9 +83,9 @@ class AutoFillTest(absltest.TestCase):
     autofill.autofill(cfg)
 
     self.assertIsInstance(cfg.x, fdl.Config)
-    self.assertEqual(cfg.x.__fn_or_cls__, Child)
+    self.assertEqual(fdl.get_callable(cfg.x), Child)
     self.assertIsInstance(cfg.y, fdl.Config)
-    self.assertEqual(cfg.y.__fn_or_cls__, ChildDC)
+    self.assertEqual(fdl.get_callable(cfg.y), ChildDC)
 
   def test_recursive_autofill(self):
 
@@ -100,11 +100,11 @@ class AutoFillTest(absltest.TestCase):
     autofill.autofill(cfg)
 
     self.assertIsInstance(cfg.parent, fdl.Config)
-    self.assertEqual(cfg.parent.__fn_or_cls__, ParentDC)
+    self.assertEqual(fdl.get_callable(cfg.parent), ParentDC)
     self.assertIsInstance(cfg.parent.child1, fdl.Config)
-    self.assertEqual(cfg.parent.child1.__fn_or_cls__, Child)
+    self.assertEqual(fdl.get_callable(cfg.parent.child1), Child)
     self.assertIsInstance(cfg.parent.child2, fdl.Config)
-    self.assertEqual(cfg.parent.child2.__fn_or_cls__, ChildDC)
+    self.assertEqual(fdl.get_callable(cfg.parent.child2), ChildDC)
 
   def test_skip_if_no_annotation(self):
 
@@ -130,9 +130,9 @@ class AutoFillTest(absltest.TestCase):
     autofill.autofill(cfg)
 
     self.assertIsInstance(cfg.child1, fdl.Config)
-    self.assertEqual(cfg.child1.__fn_or_cls__, ChildDC)
+    self.assertEqual(fdl.get_callable(cfg.child1), ChildDC)
     self.assertIsInstance(cfg.child2, fdl.Config)
-    self.assertEqual(cfg.child2.__fn_or_cls__, ChildDC)
+    self.assertEqual(fdl.get_callable(cfg.child2), ChildDC)
 
   def test_skip_if_default(self):
 
