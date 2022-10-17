@@ -1093,30 +1093,17 @@ class ConfigTest(absltest.TestCase):
       self.assertIsNot(cfg1.c, cfg2.c)  # Deep copy.
       self.assertEqual(expected_cfg2, fdl.build(cfg2))
 
-  def test_deprecated_copy_constructor(self):
+  def test_copy_constructor_errors(self):
     cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
     fdl.add_tag(cfg1, 'arg1', Tag1)
-    cfg2 = fdl.Partial(cfg1)
-    self.assertIsInstance(cfg2, fdl.Partial)
-    self.assertEqual(fdl.get_callable(cfg1), fdl.get_callable(cfg2))
-    self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
-    self.assertEmpty(cfg2.__argument_tags__)  # tags are not copied.
+    with self.assertRaises(ValueError):
+      fdl.Partial(cfg1)
 
-  def test_deprecated_copy_constructor_with_updates(self):
+  def test_copy_constructor_with_updates_errors(self):
     cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])
     fdl.add_tag(cfg1, 'arg1', Tag1)
-    cfg2 = fdl.Config(cfg1, 5, a='a', b='b')
-
-    expected_cfg1 = dict(arg1=1, kwarg1=2, kwargs=dict(c=[]))
-    expected_cfg2 = dict(arg1=5, kwarg1=2, kwargs=dict(a='a', b='b', c=[]))
-
-    self.assertIsNot(cfg1, cfg2)
-    self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
-    self.assertEmpty(cfg2.__argument_tags__)  # tags are not copied.
-    self.assertIs(cfg1.c, cfg2.c)  # Shallow copy.
-
-    self.assertEqual(expected_cfg1, fdl.build(cfg1))
-    self.assertEqual(expected_cfg2, fdl.build(cfg2))
+    with self.assertRaises(ValueError):
+      fdl.Partial(cfg1, 5, a='a', b='b')
 
   def test_dataclass_default_factory(self):
 

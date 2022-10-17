@@ -44,11 +44,11 @@ def _config_constructor(loader, node):
 
 
 def _partial_constructor(loader, node):
-  return fdl.Partial(_config_constructor(loader, node))
+  return fdl.cast(fdl.Partial, _config_constructor(loader, node))
 
 
 def _fixture_constructor(loader, node):
-  return fixture_node.FixtureNode(_config_constructor(loader, node))
+  return fdl.cast(fixture_node.FixtureNode, _config_constructor(loader, node))
 
 
 class SemiSafeLoader(yaml.SafeLoader):

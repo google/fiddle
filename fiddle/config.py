@@ -96,17 +96,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       **kwargs: Any keyword arguments to configure for `fn_or_cls`.
     """
     if isinstance(fn_or_cls, Buildable):
-      # TODO Turn this into a ValueError once code that uses this
-      # pattern has been updated to use fdl.cast or fdl.copy_with.
-      logging.warning(
+      raise ValueError(
           'Using the Buildable constructor to convert a buildable to a new '
-          'type or to override arguments is deprecated; please use either '
+          'type or to override arguments is forbidden; please use either '
           '`fdl.cast(new_type, buildable)` (for casting) or '
           '`fdl.copy_with(buildable, **kwargs)` (for overriding arguments).')
-      copy_constructor_arguments = fn_or_cls.__arguments__
-      fn_or_cls = fn_or_cls.__fn_or_cls__
-    else:
-      copy_constructor_arguments = None
 
     # Using `super().__setattr__` here because assigning directly would trigger
     # our `__setattr__` override. Using `super().__setattr__` instead of special
@@ -134,10 +128,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         raise NotImplementedError(err_msg)
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
-
-    if copy_constructor_arguments:
-      for name, value in copy_constructor_arguments.items():
-        arguments.setdefault(name, value)
 
     if hasattr(fn_or_cls, '__fiddle_init__'):
       fn_or_cls.__fiddle_init__(self)
@@ -547,8 +537,7 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
     if not isinstance(value, Partial):  # Don't recurse into partials.
       value = state.map_children(value)
     if isinstance(value, Config):
-      # TODO: Update this to use fdl.cast, once available.
-      value = ArgFactory(value)
+      value = cast(ArgFactory, value)
     return value
 
   def contains_partial_that_contains_config(value, state):
