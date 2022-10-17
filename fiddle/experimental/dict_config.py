@@ -27,7 +27,7 @@ def _kwargs_to_dict(**kwargs):
 class DictConfig(config.Config):
   """A Config instance that builds a `dict` accepting any keys/values."""
 
-  def __init__(self, /, *args, **kwargs):
+  def __init__(self, *args, **kwargs):
     super().__init__(_kwargs_to_dict, *args, **kwargs)
 
   @classmethod

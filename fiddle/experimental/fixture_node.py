@@ -28,7 +28,7 @@ from fiddle.experimental import daglish_legacy
 
 class FixtureNode(config_lib.Buildable):
 
-  def __build__(self, /, *args: Any, **kwargs: Any):
+  def __build__(self, *args: Any, **kwargs: Any):
     raise ValueError(
         "You must first materialize a Fiddle configuration that contains "
         "`FixtureNode`s. Please call "

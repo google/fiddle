@@ -90,9 +90,11 @@ class ArgFactoryPartialTest(parameterized.TestCase):
     self.assertEqual(p(arg1=1, arg2=2), (1, 2, 0, None))
     self.assertEqual(p(arg1=5), (5, 'counter_2', 0, None))
 
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_positional_only_args(self):
 
-    def f(x, /, **kwargs):
+    def f(x, **kwargs):
+      # Use (x, /, **kwargs) when test is enabled.
       return x, kwargs
 
     # Note: `x` is passed in kwargs, and doesn't go to the positional-only
@@ -147,10 +149,11 @@ class ArgFactoryPartialTest(parameterized.TestCase):
     self.assertIsNot(a.children, b.children)  # child list is not shared
     self.assertIsNot(a.children[0], b.children[0])  # child not shared
 
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_param_named_self(self):
     # Note: this test succeeds because _InvokeArgFactoryWrapper.__call__
-    # declares `self` as a positional-only parameter.  Otherwise, __call__ would
-    # fail with "multiple values for argument 'self'".
+    # declares `self` as a positional-only parameter.  Otherwise, __call__
+    # would fail with "multiple values for argument 'self'".
     def f(self, other):
       return self + other
 
@@ -158,9 +161,9 @@ class ArgFactoryPartialTest(parameterized.TestCase):
     self.assertEqual(p(self=5), 15)
 
   def test_param_named_func(self):
-    # Note: this test succeeds because arg_factory.partial declares `func` as a
-    # positional-only parameter.  Otherwise, it would fail with "multiple values
-    # for argument 'func'".
+    # Note: this test succeeds because arg_factory.partial declares `func` as
+    # a positional-only parameter.  Otherwise, it would fail with "multiple
+    # values for argument 'func'".
     def f(func, args, kwargs):
       return (func, args, kwargs)
 
@@ -305,6 +308,7 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertIsNot(a.children, b.children)  # child list is not shared
     self.assertIsNot(a.children[0], b.children[0])  # child not shared
 
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_no_multiple_value_errors(self):
     # Check that all parameter names are supported, including names such
     # as `self` and `func` that are used in the signature of the constructor
@@ -314,10 +318,12 @@ class DefaultFactoryTest(parameterized.TestCase):
     def f(self, func, args, kwargs):
       return self + func + args + kwargs
 
-    p = arg_factory.CallableWithDefaultFactories(
-        f, self=lambda: 1, func=lambda: 10)  # pytype: disable=wrong-arg-types
+    p = arg_factory.CallableWithDefaultFactories(  # pytype: disable=duplicate-keyword-argument
+        f,
+        self=lambda: 1,
+        func=lambda: 10)
     self.assertEqual(p(args=100, kwargs=1000), 1111)
-    self.assertEqual(p(self=4, func=30, args=200, kwargs=1000), 1234)  # pytype: disable=wrong-arg-types
+    self.assertEqual(p(self=4, func=30, args=200, kwargs=1000), 1234)  # pytype: disable=duplicate-keyword-argument
 
   def test_param_named_func(self):
     # Note: this test succeeds because CallableWithDefaultFactories declares
@@ -422,8 +428,8 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertEqual(f(1, 2), (1, 2))
 
   def test_no_defaults_for_varargs(self):
-    with self.assertRaisesRegex(
-        TypeError, 'takes 2 positional arguments but 3 were given'):
+    with self.assertRaisesRegex(ValueError,
+                                r'too many values to unpack \(expected 1'):
       arg_factory.CallableWithDefaultFactories(varargs_fn, list)  # pytype: disable=wrong-arg-count
 
   def test_no_defaults_for_var_kwargs(self):

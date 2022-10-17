@@ -104,7 +104,7 @@ class LingvoParamsAdapter:
       self.is_nested = False
     self.__signature__ = _make_signature_from_lingvo_params(self.params)
 
-  def __call__(self, /, *args, **kwargs):
+  def __call__(self, *args, **kwargs):
     if args:
       raise AssertionError(
           f"*args not empty, please file a bug with repro steps; args: {args}.")
@@ -129,7 +129,7 @@ class LingvoConfig(config.Config):
   """
 
   def __init__(self, params_or_cls: Union["LingvoConfig", LingvoParamsAdapter,
-                                          ParamInitable, hyperparams.Params], /,
+                                          ParamInitable, hyperparams.Params],
                *args, **kwargs):
     if (isinstance(params_or_cls, LingvoParamsAdapter) or
         isinstance(params_or_cls, LingvoConfig)):

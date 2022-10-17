@@ -715,6 +715,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     # But if we access it via the class, we get the (unbound) AutoConfig:
     self.assertIsInstance(SampleClass.autoconfig_method, auto_config.AutoConfig)
 
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_can_pass_self_as_keyword(self):
     x = SampleClass(1, 2)
     self.assertEqual(

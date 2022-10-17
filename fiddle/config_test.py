@@ -1134,6 +1134,7 @@ class ConfigTest(absltest.TestCase):
       cfg.child.x = 5  # now it's ok to configure child.
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
 
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_config_for_fn_with_special_arg_names(self):
     # The reason that these tests pass is that we use positional-only
     # parameters for self, etc. in functions such as Config.__build__.
@@ -1148,10 +1149,10 @@ class ConfigTest(absltest.TestCase):
     cfg.fn_or_cls = 200
     self.assertEqual(fdl.build(cfg), 300)
 
-    fdl.assign(cfg, buildable=10)  # pytype: disable=wrong-arg-types
+    fdl.assign(cfg, buildable=10)  # pytype: disable=duplicate-keyword-argument
     self.assertEqual(fdl.build(cfg), 310)
 
-    cfg2 = fdl.Config(f, self=5, fn_or_cls=1)  # pytype: disable=wrong-arg-types
+    cfg2 = fdl.Config(f, self=5, fn_or_cls=1)  # pytype: disable=duplicate-keyword-argument
     self.assertEqual(fdl.build(cfg2), 6)
 
 

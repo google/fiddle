@@ -52,7 +52,7 @@ class Selection(metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
   @abc.abstractmethod
-  def set(self, /, **kwargs) -> None:
+  def set(self, **kwargs) -> None:
     """Sets attributes on nodes matching this selection.
 
     Args:
@@ -160,7 +160,7 @@ class NodeSelection(Selection):
     mutate_buildable.move_buildable_internals(
         source=new_config, destination=self.cfg)
 
-  def set(self, /, **kwargs) -> None:
+  def set(self, **kwargs) -> None:
     """Sets multiple attributes on nodes matching this selection.
 
     Args:
@@ -213,7 +213,7 @@ class TagSelection(Selection):
         "To iterate through values of a TagSelection, use __iter__ instead "
         "of get().")
 
-  def set(self, /, **kwargs) -> None:
+  def set(self, **kwargs) -> None:
     raise NotImplementedError(
         "You can't set named attributes on tagged values, you can only replace "
         "them. Please call replace() instead of set().")
