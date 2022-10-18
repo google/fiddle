@@ -118,6 +118,7 @@ class _ChangedBuildable:
   new_callable: Any
   arguments: Dict[str, Union[Any, _ChangedValue]]
   tags: Dict[str, Set[Union[tag_type.TagType, _AddedTag, _RemovedTag]]]
+  trimmed: bool = False
 
 
 # Function mapping value -> (header_color, edge_color).
@@ -383,7 +384,10 @@ class _GraphvizRenderer:
     header = self._header_row(title, bgcolor=bgcolor, style=style)
 
     # Generate the arguments table.
-    if config.arguments:
+    if config.trimmed:
+      table = self.tag('table')
+      label = table([header, self._header_row(self.tag('i')('(trimmed...)'))])
+    elif config.arguments:
       label = self._render_dict(
           config.arguments, header=header, key_format_fn=str, tags=config.tags)
     else:
@@ -604,7 +608,8 @@ def render(config: Any) -> graphviz.Graph:
 def render_diff(diff: Optional[diffing.Diff] = None,
                 *,
                 old: Optional[Any] = None,
-                new: Optional[Any] = None) -> graphviz.Graph:
+                new: Optional[Any] = None,
+                trim: bool = False) -> graphviz.Graph:
   """Renders the given diff as a `graphviz.Graph`.
 
   Should be called using one of the following signatures:
@@ -618,6 +623,8 @@ def render_diff(diff: Optional[diffing.Diff] = None,
     old: The structure modified by the diff.  If not specified, then use a
       minimal config that can be used as the source for the diff.
     new: The result of the diff.  May not be specified if `diff` is specified.
+    trim: If true, then trim any unchanged `Config` nodes in the rendered
+      result (i.e., do not display their arguments).
 
   Returns:
     A `graphviz.Graph` object containing the resulting rendering of the diff.
@@ -637,6 +644,8 @@ def render_diff(diff: Optional[diffing.Diff] = None,
   config = _record_changed_values_from_diff(diff, old)
   old_value_ids = _find_old_value_ids(config)
   new_value_ids = _find_new_value_ids(config)
+  if trim:
+    _trim_diff(config, old_value_ids, new_value_ids)
   fill_color = functools.partial(
       _diff_color,
       added_value_ids=new_value_ids - old_value_ids,
@@ -778,6 +787,50 @@ def _record_changed_values_from_diff(diff: diffing.Diff, old: Any) -> Any:
   return result
 
 
+def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int],
+               new_value_ids: Set[int]):
+  """Sets `trim=True` on any `_ChangedBuildable` with no changes.
+
+  A `_ChangedBuildable` is considered to have no changes if:
+
+  * It exists in both old_value_ids and new_value_ids (i.e., was not added or
+    deleted).
+  * Its tags and callable have not changed.
+  * None of its arguments contain a `_ChangedValue` or a `ChangedBuildable`
+    with changes.
+
+  Args:
+    structure_with_changed_values: The structure to trim.  Mutated in place.
+    old_value_ids: ids of all objects reachable via _ChangedValue.old_value.
+    new_value_ids: ids of all objects reachable via _ChangedValue.new_value.
+  """
+
+  def visit(value, state: daglish.State):
+    """Returns true if any child has changed."""
+    if state.is_traversable(value):
+      subtraversal = state.flattened_map_children(value)
+      any_changed = any(subtraversal.values)
+      return any_changed
+    elif isinstance(value, _ChangedValue):
+      state.call(value.old_value, daglish.Attr('old_value'))
+      state.call(value.new_value, daglish.Attr('new_value'))
+      return True
+    elif isinstance(value, _ChangedBuildable):
+      args_changed = state.call(value.arguments, daglish.Attr('args'))
+      callable_changed = value.old_callable != value.new_callable
+      tags_changed = any(
+          isinstance(tag, (_AddedTag, _RemovedTag)) for tag in value.tags)
+      changed = args_changed or callable_changed or tags_changed
+      if (id(value) in old_value_ids and id(value) in new_value_ids and
+          not changed):
+        value.trimmed = True
+      return changed
+    else:
+      return False
+
+  daglish.MemoizedTraversal.run(visit, structure_with_changed_values)
+
+
 def _find_new_value_ids(structure_with_changed_values: Any) -> Set[int]:
   """Returns ids of all objects reachable via _ChangedValue.new_value."""
   new_value_ids = set()
@@ -790,7 +843,7 @@ def _find_new_value_ids(structure_with_changed_values: Any) -> Set[int]:
       daglish_legacy.traverse_with_path(visit, value.new_value)
     elif isinstance(value, _ChangedBuildable):
       daglish_legacy.traverse_with_path(visit, value.arguments)
-    elif daglish.is_memoizable(value):
+    if daglish.is_memoizable(value):
       new_value_ids.add(id(value))
     return (yield)
 
@@ -810,7 +863,7 @@ def _find_old_value_ids(structure_with_changed_values: Any) -> Set[int]:
       daglish_legacy.traverse_with_path(visit, value.old_value)
     elif isinstance(value, _ChangedBuildable):
       daglish_legacy.traverse_with_path(visit, value.arguments)
-    elif daglish.is_memoizable(value):
+    if daglish.is_memoizable(value):
       old_value_ids.add(id(value))
     return (yield)
 
