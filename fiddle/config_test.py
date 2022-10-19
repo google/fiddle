@@ -673,6 +673,12 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(copied.__argument_history__['arg1'][-1].kind,
                      history.ChangeKind.NEW_VALUE)
 
+  def test_unbox_tags(self):
+    cfg = fdl.Config(SampleClass, Tag1.new(Tag2.new('arg1')), Tag2.new('arg2'))
+    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'arg1'))
+    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg, 'arg2'))
+    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'kwarg1'))
+
   def test_dir_simple(self):
     fn_config = fdl.Config(basic_fn)
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(fn_config))

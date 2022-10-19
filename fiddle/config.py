@@ -242,6 +242,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __setattr__(self, name: str, value: Any):
     """Sets parameter `name` to `value`."""
+    # TODO: Refactor to avoid circular dependency.
+    while type(value).__name__ == 'TaggedValueCls':
+      tags = get_tags(value, 'value')
+      value = value.value
+      set_tags(self, name, tags)
 
     self.__validate_param_name__(name)
 
