@@ -354,6 +354,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     another does not, the two will still be considered equal (motivated by the
     fact that calls to the function or class being configured will be the same).
 
+    Argument tags are compared.  I.e., if two buildables have different tags
+    for an argument, they will not be considered equal.
+
     Argument history is not compared (i.e., it doesn't matter how the
     `Buildable`s being compared reached their current state).
 
@@ -370,6 +373,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     assert self._has_var_keyword == other._has_var_keyword, (
         'Internal invariant violated: has_var_keyword should be the same if '
         "__fn_or_cls__'s are the same.")
+
+    if self.__argument_tags__ != other.__argument_tags__:
+      return False
 
     missing = object()
     for key in set(self.__arguments__) | set(other.__arguments__):
