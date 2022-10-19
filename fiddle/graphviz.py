@@ -118,7 +118,7 @@ class _ChangedBuildable:
   new_callable: Any
   arguments: Dict[str, Union[Any, _ChangedValue]]
   tags: Dict[str, Set[Union[tag_type.TagType, _AddedTag, _RemovedTag]]]
-  trimmed: bool = False
+  trimmed: int = 0  # Number of trimmed arguments.
 
 
 # Function mapping value -> (header_color, edge_color).
@@ -382,19 +382,21 @@ class _GraphvizRenderer:
               td_new(html.escape(config.new_callable.__name__))
           ]))
     header = self._header_row(title, bgcolor=bgcolor, style=style)
+    if config.trimmed:
+      footer = self._header_row(
+          self.tag('i')(f'(trimmed {config.trimmed} args)'))
+    elif not config.arguments:
+      footer = self._header_row(self.tag('i')('no arguments'))
+    else:
+      footer = None
 
     # Generate the arguments table.
-    if config.trimmed:
-      table = self.tag('table')
-      label = table([header, self._header_row(self.tag('i')('(trimmed...)'))])
-    elif config.arguments:
-      label = self._render_dict(
-          config.arguments, header=header, key_format_fn=str, tags=config.tags)
-    else:
-      table = self.tag('table')
-      italics = self.tag('i')
-      label = table([header, self._header_row(italics('no arguments'))])
-    return label
+    return self._render_dict(
+        config.arguments,
+        header=header,
+        footer=footer,
+        key_format_fn=str,
+        tags=config.tags)
 
   def _render_value(self, value: Any, color=_DEFAULT_HEADER_COLOR) -> str:
     """Returns an HTML string rendering `value`."""
@@ -510,6 +512,7 @@ class _GraphvizRenderer:
       self,
       dict_: Dict[str, Any],
       header: Optional[str] = None,
+      footer: Optional[str] = None,
       key_format_fn: Callable[[Any], str] = repr,
       tags: Optional[Dict[str, Set[tag_type.TagType]]] = None) -> str:
     """Renders the given `dict_` as an HTML table.
@@ -518,6 +521,7 @@ class _GraphvizRenderer:
       dict_: The `dict` to render.
       header: A table row containing a header row to include. The table row's
         table cell should have colspan="2" to render properly in the table.
+      footer: A table row containing a footer row to include.
       key_format_fn: A function to apply to dictionary keys to conver them into
         a string representation. Defaults to `repr`.
       tags: Optional tags for dictionary entries.
@@ -541,6 +545,8 @@ class _GraphvizRenderer:
       if key_tags:
         key_str = self._render_tags(key_str, key_tags)
       rows.append(tr([key_td(key_str), value_td(value_str)]))
+    if footer is not None:
+      rows.append(footer)
     return table(rows)
 
   def _render_tags(self, arg_name, tags) -> str:
@@ -623,8 +629,8 @@ def render_diff(diff: Optional[diffing.Diff] = None,
     old: The structure modified by the diff.  If not specified, then use a
       minimal config that can be used as the source for the diff.
     new: The result of the diff.  May not be specified if `diff` is specified.
-    trim: If true, then trim any unchanged `Config` nodes in the rendered
-      result (i.e., do not display their arguments).
+    trim: If true, then trim any unchanged `Config` nodes in the rendered result
+      (i.e., do not display their arguments).
 
   Returns:
     A `graphviz.Graph` object containing the resulting rendering of the diff.
@@ -645,7 +651,7 @@ def render_diff(diff: Optional[diffing.Diff] = None,
   old_value_ids = _find_old_value_ids(config)
   new_value_ids = _find_new_value_ids(config)
   if trim:
-    _trim_diff(config, old_value_ids, new_value_ids)
+    _trim_diff(config, old_value_ids)
   fill_color = functools.partial(
       _diff_color,
       added_value_ids=new_value_ids - old_value_ids,
@@ -787,14 +793,14 @@ def _record_changed_values_from_diff(diff: diffing.Diff, old: Any) -> Any:
   return result
 
 
-def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int],
-               new_value_ids: Set[int]):
-  """Sets `trim=True` on any `_ChangedBuildable` with no changes.
+def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
+  """Trims unchanged values from `structure_with_changed_values`.
 
+  Trims unchanged arguments w/ unmemoizable type (int, str, etc.).
+  Trims all arguments from `_ChangedBuildable`s with no changes.
   A `_ChangedBuildable` is considered to have no changes if:
 
-  * It exists in both old_value_ids and new_value_ids (i.e., was not added or
-    deleted).
+  * It exists in old_value_ids (i.e., it was not added).
   * Its tags and callable have not changed.
   * None of its arguments contain a `_ChangedValue` or a `ChangedBuildable`
     with changes.
@@ -802,7 +808,6 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int],
   Args:
     structure_with_changed_values: The structure to trim.  Mutated in place.
     old_value_ids: ids of all objects reachable via _ChangedValue.old_value.
-    new_value_ids: ids of all objects reachable via _ChangedValue.new_value.
   """
 
   def visit(value, state: daglish.State):
@@ -821,9 +826,23 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int],
       tags_changed = any(
           isinstance(tag, (_AddedTag, _RemovedTag)) for tag in value.tags)
       changed = args_changed or callable_changed or tags_changed
-      if (id(value) in old_value_ids and id(value) in new_value_ids and
-          not changed):
-        value.trimmed = True
+      if id(value) in old_value_ids and value.arguments:
+        if not changed:
+          # This value is unchanged by the diff; trim all arguments.
+          value.trimmed = len(value.arguments)
+          value.arguments.clear()
+        else:
+          # Trim out any unchanged args w/ unmemoizable type (int, str, etc.)
+          # if it will save space.
+          remaining_args = {
+              name: val
+              for (name, val) in value.arguments.items()
+              if daglish.is_memoizable(val)
+          }
+          num_trimmed = len(value.arguments) - len(remaining_args)
+          if num_trimmed > 1:
+            value.trimmed = num_trimmed
+            value.arguments = remaining_args
       return changed
     else:
       return False
