@@ -62,7 +62,7 @@ from __future__ import annotations
 import collections
 import inspect
 import typing
-from typing import Any, Collection, FrozenSet, Generic, Optional, TypeVar, Union
+from typing import Any, Collection, FrozenSet, Generic, Optional, Set, TypeVar, Union
 
 from fiddle import config
 from fiddle import daglish
@@ -128,13 +128,25 @@ class Tag(metaclass=TagType):
 T = TypeVar('T')
 
 
-def tagged_value_identity_fn(value: Union[T, _NoValue] = NO_VALUE) -> T:
+def tagged_value_fn(value: Union[T, _NoValue] = NO_VALUE,
+                    tags: Optional[Set[TagType]] = None) -> T:
+  """Identity function to return value if set, and raise an error if not.
+
+  Args:
+    value: The value to return.
+    tags: The tags associated with the value. (Used in generating error messages
+      if `value` is not set.)
+
+  Returns:
+    The value `value` passed to it.
+  """
   if value is NO_VALUE:
-    raise TaggedValueNotFilledError(
-        'Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
-        'calls, but one was not set.')
-  else:
-    return value
+    msg = ('Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
+           'calls, but one was not set.')
+    if tags:
+      msg += ' Unset tags: ' + str(tags)
+    raise TaggedValueNotFilledError(msg)
+  return value
 
 
 class TaggedValueCls(Generic[T], config.Config[T]):
@@ -143,6 +155,12 @@ class TaggedValueCls(Generic[T], config.Config[T]):
   @property
   def tags(self):
     return self.__argument_tags__['value']
+
+  def __build__(self, *args: Any, **kwargs: Any) -> T:
+    if self.__fn_or_cls__ is not tagged_value_fn:
+      raise RuntimeError('Unexpected __fn_or_cls__ in TaggedValueCls; found:'
+                         f'{self.__fn_or_cls__}')
+    return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
 
 
 def TaggedValue(  # pylint: disable=invalid-name
@@ -164,7 +182,7 @@ def TaggedValue(  # pylint: disable=invalid-name
   Raises:
     ValueError: If `tags` is empty.
   """
-  result = TaggedValueCls(tagged_value_identity_fn, value=default)
+  result = TaggedValueCls(tagged_value_fn, value=default)
   if not tags:
     raise ValueError('At least one tag must be provided.')
   for tag in tags:

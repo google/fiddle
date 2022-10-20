@@ -95,11 +95,18 @@ class TaggingTest(absltest.TestCase):
     with self.assertRaisesRegex(
         tagging.TaggedValueNotFilledError,
         "Expected.*TaggedValue.*replaced.*one was not set"):
-      tagging.tagged_value_identity_fn()
+      tagging.tagged_value_fn()
 
   def test_tagged_value_identity_fn_none_value(self):
     # Test that when the value is None, that's OK.
-    self.assertIsNone(tagging.tagged_value_identity_fn(value=None))
+    self.assertIsNone(tagging.tagged_value_fn(value=None))
+
+  def test_tagged_value_error_message(self):
+    cfg = tagging.TaggedValue(tags={tst.ParameterDType})
+    with self.assertRaisesRegex(
+        tagging.TaggedValueNotFilledError,
+        r"Unset tags: {fiddle.tagging_test_module.ParameterDType}"):
+      fdl.build(cfg)
 
   def test_taggedvalue_default_none(self):
     cfg = tagging.TaggedValue(tags={tst.ParameterDType}, default=None)
