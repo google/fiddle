@@ -26,9 +26,23 @@ from fiddle.codegen import codegen
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.codegen import special_value_codegen
 from fiddle.experimental import serialization
-import fiddle.extensions.tf
-import libcst as cst
-import tensorflow as tf
+
+try:
+  import fiddle.extensions.tf
+  import libcst as cst
+  import tensorflow as tf
+  TF_AVAILABLE = True
+except ImportError:
+  TF_AVAILABLE = False
+
+  # Fake out TF to avoid test definition errors below.
+  import types
+
+  tf = types.SimpleNamespace()
+  tf.bfloat16 = None
+  tf.int32 = None
+  tf.constant = lambda x: x
+  tf.TensorShape = lambda x: x
 
 
 def foo(dtype):
@@ -59,6 +73,7 @@ class TfTest(parameterized.TestCase):
     super().setUp()
     fiddle.extensions.tf.enable()
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_special_value_codegen(self):
     import_manager = NoopImportManager()
     float32_value = special_value_codegen.transform_py_value(
@@ -66,6 +81,7 @@ class TfTest(parameterized.TestCase):
     self.assertEqual(import_manager.calls, ["tensorflow"])
     self.assertEqual(repr(float32_value), "tensorflow.float32")
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_codegen(self):
     config = fdl.Config(foo, dtype=tf.bfloat16)
     code = "\n".join(codegen.codegen_dot_syntax(config).lines())
@@ -82,16 +98,19 @@ def build_config():
     """
     self.assertEqual(tokens(code), tokens(expected))
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_graphviz(self):
     config = fdl.Config(foo, dtype=tf.bfloat16)
     result = graphviz.render(config)
     self.assertIn("tf.bfloat16", result.source)
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_str_printing(self):
     config = fdl.Config(foo, dtype=tf.bfloat16)
     result = printing.as_str_flattened(config)
     self.assertEqual("dtype = tf.bfloat16", result)
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_history_printing(self):
     config = fdl.Config(foo, dtype=tf.float16)
     config.dtype = tf.float32
@@ -102,6 +121,7 @@ dtype = tf\.float32 @ .*/tf_test.py:\d+:test_history_printing
 """.strip()
     self.assertRegex(result, expected)
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_default_printing(self):
     config = fdl.Config(foo_with_default)
     result = printing.as_str_flattened(config)
@@ -115,11 +135,13 @@ dtype = tf\.float32 @ .*/tf_test.py:\d+:test_history_printing
       (tf.TensorShape([1, 2, 3]), "tensorflow.TensorShape([1, 2, 3])"),
       (tf.TensorShape([1, None, 3]), "tensorflow.TensorShape([1, None, 3])"),
   ])
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_py_val_to_cst_converter(self, value, expected):
     cst_expr = py_val_to_cst_converter.convert_py_val_to_cst(value)
     cst_module = cst.Module([cst.SimpleStatementLine([cst.Expr(cst_expr)])])
     self.assertEqual(cst_module.code.strip(), expected)
 
+  @absltest.skipIf(not TF_AVAILABLE, "TF not available.")
   def test_serialization(self):
     serialized_cfg = serialization.dump_json(fdl.Config(foo, tf.int32))
     deserialized_cfg = serialization.load_json(serialized_cfg)

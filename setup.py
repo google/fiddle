@@ -18,6 +18,7 @@
 See https://github.com/google/fiddle for documentation.
 """
 
+import sys
 from setuptools import find_packages
 from setuptools import setup
 
@@ -52,10 +53,10 @@ setup(
         'testing': [
             'absl-py',
             'fiddle[flags]',
+            'graphviz',
             'pytest',
             'pytype',
-            'seqio-nightly',
-        ]
+        ] + ['seqio-nightly'] if not sys.platform == 'darwin' else []
     },
     description='Fiddle: A Python-first configuration library',
     long_description=long_description,

@@ -20,8 +20,12 @@ from typing import List
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle.codegen import codegen
-import fiddle.extensions.seqio
-import seqio
+try:
+  import fiddle.extensions.seqio
+  import seqio
+  SEQIO_AVAILABLE = True
+except ImportError:
+  SEQIO_AVAILABLE = False
 
 
 def tokens(code: str) -> List[str]:
@@ -30,6 +34,7 @@ def tokens(code: str) -> List[str]:
 
 class SeqioTest(absltest.TestCase):
 
+  @absltest.skipIf(not SEQIO_AVAILABLE, "SeqIO not available.")
   def test_codegen(self):
     fiddle.extensions.seqio.enable()
     cfg = fdl.Config(
