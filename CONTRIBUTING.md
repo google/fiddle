@@ -62,6 +62,14 @@ venv && source venv/bin/activate`.
    dependencies: `pip install -e .[testing]`.
 5. Test to ensure everything's working: `pytest fiddle`.
 
+> Note: if you're developing on a mac, you'll need to exclude tests that
+> depend on seqio (which is not available on macOS):
+> 
+>      pytest \
+>        --ignore fiddle/extensions/tf_test.py \
+>        --ignore fiddle/extensions/seqio_test.py \
+>        fiddle
+
 ## Make your changes
 
 1. Create a branch where you will develop from:
