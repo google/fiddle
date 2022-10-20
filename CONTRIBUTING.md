@@ -50,6 +50,9 @@ https://github.com/$$YOUR_USERNAME$$/fiddle`.
 
 ### Python dependencies
 
+> Note: if you're developing on a mac, you'll need xcode installed. (Required
+> for PyType.)
+
 1. Install Python (>= 3.7) locally.
 2. Navigate to the directory containing your local clone of the git
    repository. (To ensure you're in the right directory, if you type
@@ -59,6 +62,14 @@ venv && source venv/bin/activate`.
 4. Use `pip` to install your fork from source, including all testing
    dependencies: `pip install -e .[testing]`.
 5. Test to ensure everything's working: `pytest fiddle`.
+
+> Note: if you're developing on a mac, you'll need to exclude tests that
+> depend on seqio (which is not available on macOS):
+>
+>      pytest \
+>        --ignore fiddle/extensions/tf_test.py \
+>        --ignore fiddle/extensions/seqio_test.py \
+>        fiddle
 
 ## Make your changes
 
