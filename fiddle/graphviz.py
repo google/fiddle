@@ -68,6 +68,17 @@ _DIFF_FILL_COLORS = {
 _DIFF_EDGE_COLORS = {'del': '#ff000030', 'add': '#00a00030', None: '#00000030'}
 
 
+class _TrimmedSentinel:
+  """Sentinel object used to flag trimmed dictionaries when rendering diffs.
+
+  `d` was trimmed if `_TRIMMED_SENTINEL in d`, and `d[_TRIMMED_SENTINEL]` is the
+  number of items that were trimmed.
+  """
+
+
+_TRIMMED_SENTINEL = _TrimmedSentinel()
+
+
 class GraphvizRendererApi(typing_extensions.Protocol):
   """API of _GraphvizRenderer exposed to CustomGraphvizBuildable subclasses."""
 
@@ -510,7 +521,7 @@ class _GraphvizRenderer:
 
   def _render_dict(
       self,
-      dict_: Dict[str, Any],
+      dict_: Dict[Union[str, _TrimmedSentinel], Any],
       header: Optional[str] = None,
       footer: Optional[str] = None,
       key_format_fn: Callable[[Any], str] = repr,
@@ -539,12 +550,18 @@ class _GraphvizRenderer:
 
     rows = [header] if header is not None else []
     for key, value in dict_.items():
+      if key is _TRIMMED_SENTINEL:
+        continue
       key_str = html.escape(key_format_fn(key))
       value_str = self._render_nested_value(value)
       key_tags = tags.get(key, ())
       if key_tags:
         key_str = self._render_tags(key_str, key_tags)
       rows.append(tr([key_td(key_str), value_td(value_str)]))
+    if _TRIMMED_SENTINEL in dict_:
+      rows.append(
+          self._header_row(
+              self.tag('i')(f'(trimmed {dict_[_TRIMMED_SENTINEL]} items)')))
     if footer is not None:
       rows.append(footer)
     return table(rows)
@@ -812,6 +829,19 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
 
   def visit(value, state: daglish.State):
     """Returns true if any child has changed."""
+    # Trim unchanged unmemoizable entries (int, str, etc.) from dicts.
+    if isinstance(value, dict) and id(value) in old_value_ids and value:
+      keep = {
+          name: val
+          for (name, val) in value.items()
+          if daglish.is_memoizable(val)
+      }
+      num_trimmed = len(value) - len(keep)
+      if num_trimmed > 1:
+        value.clear()
+        value.update(keep)
+        value[_TRIMMED_SENTINEL] = num_trimmed
+
     if state.is_traversable(value):
       subtraversal = state.flattened_map_children(value)
       any_changed = any(subtraversal.values)
