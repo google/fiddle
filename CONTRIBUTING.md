@@ -64,7 +64,7 @@ venv && source venv/bin/activate`.
 
 > Note: if you're developing on a mac, you'll need to exclude tests that
 > depend on seqio (which is not available on macOS):
-> 
+>
 >      pytest \
 >        --ignore fiddle/extensions/tf_test.py \
 >        --ignore fiddle/extensions/seqio_test.py \
