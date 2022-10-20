@@ -35,6 +35,7 @@ Python code.
 **Authors**: Dan Holtmann-Rice, Brennan Saeta, Sergio Guadarrama
 """
 
+# pylint: disable=g-long-ternary
 setup(
     name='fiddle',
     version=_VERSION,
@@ -56,7 +57,7 @@ setup(
             'graphviz',
             'pytest',
             'pytype',
-        ] + ['seqio-nightly'] if not sys.platform == 'darwin' else []
+        ] + ['seqio-nightly'] if sys.platform != 'darwin' else []
     },
     description='Fiddle: A Python-first configuration library',
     long_description=long_description,

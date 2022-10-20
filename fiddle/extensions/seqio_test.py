@@ -20,6 +20,8 @@ from typing import List
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle.codegen import codegen
+
+# pylint: disable=g-import-not-at-top
 try:
   import fiddle.extensions.seqio
   import seqio

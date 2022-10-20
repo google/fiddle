@@ -27,6 +27,7 @@ from fiddle.codegen import py_val_to_cst_converter
 from fiddle.codegen import special_value_codegen
 from fiddle.experimental import serialization
 
+# pylint: disable=g-import-not-at-top
 try:
   import fiddle.extensions.tf
   import libcst as cst
