@@ -50,7 +50,8 @@ https://github.com/$$YOUR_USERNAME$$/fiddle`.
 
 ### Python dependencies
 
-> Note: if you're developing on a mac, you'll need xcode installed. (Required for PyType.)
+> Note: if you're developing on a mac, you'll need xcode installed. (Required
+> for PyType.)
 
 1. Install Python (>= 3.7) locally.
 2. Navigate to the directory containing your local clone of the git
