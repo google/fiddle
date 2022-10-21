@@ -32,7 +32,9 @@ class SeqioTest(absltest.TestCase):
 
   def test_codegen(self):
     fiddle.extensions.seqio.enable()
-    cfg = fdl.Config(seqio.Evaluator)
+    cfg = fdl.Config(
+        seqio.Evaluator,
+        feature_converter=fdl.Config(seqio.DecoderFeatureConverter))
     code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
     expected = """
 import fiddle as fdl
@@ -41,6 +43,8 @@ import seqio
 
 def build_config():
   root = fdl.Config(seqio.Evaluator)
+
+  root.feature_converter = fdl.Config(seqio.DecoderFeatureConverter)
 
   return root
     """

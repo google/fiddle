@@ -24,93 +24,117 @@ will yield same object graph as the original function.
 
 import ast
 import builtins
+import dataclasses
 import functools
 import inspect
 import textwrap
 import types
-from typing import Any
+from typing import Any, Callable, cast, Optional, Union
 
+from fiddle import building
 from fiddle import config
-from fiddle.experimental import daglish
+from fiddle._src import mutate_buildable
+from fiddle.experimental import auto_config_policy
+from fiddle.experimental import daglish_legacy
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
+_CLOSURE_WRAPPER_ID = '__auto_config_closure_wrapper__'
+_EMPTY_ARGUMENTS = ast.arguments(
+    posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])
 _BUILTINS = frozenset([
     builtin for builtin in builtins.__dict__.values()
     if inspect.isroutine(builtin) or inspect.isclass(builtin)
 ])
 
 
-def _returns_buildable(signature: inspect.Signature) -> bool:
-  """Returns True iff the return annotation is a subclass of config.Buildable."""
-  return (signature.return_annotation is not signature.empty and
-          inspect.isclass(signature.return_annotation) and
-          issubclass(signature.return_annotation, config.Buildable))
+@dataclasses.dataclass(frozen=True)
+class AutoConfig:
+  """A function wrapper for auto_config'd functions.
 
-
-def _is_auto_config_eligible(fn_or_cls):
-  """Helper to determine if `fn_or_cls` is eligible for auto-config."""
-  try:
-    signature = inspect.signature(fn_or_cls)
-  except ValueError:
-    signature = None
-
-  try:
-    _ = hash(fn_or_cls)
-  except TypeError:
-    has_hash = False
-  else:
-    has_hash = True
-
-  is_buildable = (
-      inspect.isclass(fn_or_cls) and issubclass(fn_or_cls, config.Buildable))
-
-  return (
-      # We can find a signature...
-      signature is not None and
-      # It's not a builtin function...
-      not inspect.isbuiltin(fn_or_cls) and
-      # It's not a builtin type like range()...
-      (has_hash and fn_or_cls not in _BUILTINS) and
-      # It's not a `fdl.Buildable` already...
-      not is_buildable and
-      # It's not a method...
-      not inspect.ismethod(fn_or_cls) and
-      # It's not an `auto_config`ed function...
-      not hasattr(fn_or_cls, 'as_buildable') and
-      # It's not a function returning a `fdl.Buildable`...
-      not _returns_buildable(signature)
-  )  # pyformat: disable
-
-
-def auto_config_call_handler(fn_or_cls, *args, **kwargs):
-  """Handles calls in auto_config'ed functions.
-
-  This intercepts calls in an auto-configed function, and determines whether the
-  called `fn_or_cls` should be wrapped in a `Config` or `Partial`. If
-  `fn_or_cls` is `functools.partial`, the call will instead be converted into a
-  call to Fiddle's `Partial`. If it is "auto-config eligible" (see
-  `_is_auto_config_eligible`), then a `Config` will be create for `fn_or_cls`
-  with the provided arguments. Otherwise, `fn_or_cls` is called directly.
-
-  Args:
-    fn_or_cls: The function or class being called.
-    *args: The positional arguments with which `fn_or_cls` is being called.
-    **kwargs: The keyword arguments with which `fn_or_cls` is being called.
-
-  Returns:
-    Depending on `fn_or_cls`, either `Partial`, a `Config`, or the result of
-    calling `fn_or_cls` with the provided arguments.
+  In order to support auto_config'ing @classmethod's, we need to customize the
+  descriptor protocol for the auto_config'd function. This simple wrapper type
+  is designed to look like a simple `functool.wraps` wrapper, but implements
+  custom behavior for bound methods.
   """
-  if fn_or_cls is functools.partial:
-    return config.Partial(args[0], *args[1:], **kwargs)
+  func: Callable[..., Any]
+  buildable_func: Callable[..., config.Buildable]
+  always_inline: bool
 
-  if _is_auto_config_eligible(fn_or_cls):
-    return config.Config(fn_or_cls, *args, **kwargs)
+  def __post_init__(self):
+    # Must copy-over to correctly implement "functools.wraps"-like
+    # functionality.
+    for name in ('__module__', '__name__', '__qualname__', '__doc__',
+                 '__annotations__'):
+      try:
+        value = getattr(self.func, name)
+      except AttributeError:
+        pass
+      else:
+        object.__setattr__(self, name, value)
 
-  if hasattr(fn_or_cls, 'as_buildable'):
-    return fn_or_cls.as_buildable(*args, **kwargs)
+  def __call__(self, *args, **kwargs) -> Any:
+    return self.func(*args, **kwargs)
 
-  return fn_or_cls(*args, **kwargs)
+  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+    return self.buildable_func(*args, **kwargs)
+
+  def __get__(self, obj, objtype=None):
+    if obj is None:
+      return self
+    else:
+      return _BoundAutoConfig(self, obj)
+
+  @property
+  def __wrapped__(self):
+    return self.func
+
+  def __getattr__(self, name):
+    # Pass through extra things on the thing we wrapped. We use
+    # super().__getattribute__('func') here to avoid an infinite recursion.
+    return getattr(super().__getattribute__('func'), name)
+
+
+@dataclasses.dataclass(frozen=True)
+class _BoundAutoConfig:
+  """An `AutoConfig` bound to an object.
+
+  This parallels the function / bound method pair.
+  """
+  auto_config: AutoConfig
+  obj: Any
+
+  def __getattr__(self, name: str):
+    if name == '__qualname__':
+      # When `obj` is a class, it seems to provide __qualname__, but when it is
+      # an instance, we'll have to read this off the class, if available. If
+      # none of these are available, fall back to `func.__qualname__` instead of
+      # failing.
+      func = self.auto_config.func
+      try:
+        return f'{self.obj.__qualname__}.{func.__name__}'
+      except AttributeError:
+        try:
+          return f'{self.obj.__class__.__qualname__}.{func.__name__}'
+        except AttributeError:
+          return func.__qualname__
+    elif name in ('auto_config', 'obj'):
+      return super().__getattribute__(name)
+    else:
+      # Pass through extra things on the thing we wrapped.
+      return getattr(super().__getattribute__('auto_config'), name)
+
+  def __call__(self, *args, **kwargs) -> Any:
+    return self.auto_config.func(self.obj, *args, **kwargs)
+
+  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+    return self.auto_config.buildable_func(self.obj, *args, **kwargs)
+
+  @property
+  def always_inline(self) -> bool:
+    return self.auto_config.always_inline
+
+
+AutoConfigFn = Union[AutoConfig, _BoundAutoConfig]
 
 
 class UnsupportedLanguageConstructError(SyntaxError):
@@ -198,7 +222,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     return self._handle_control_flow(node)
 
   def visit_Raise(self, node: ast.Try):
-    return self._handle_control_flow(node)
+    return self._handle_control_flow(node, activatable=True)
 
   def visit_With(self, node: ast.With):
     return self._handle_control_flow(node)
@@ -246,13 +270,107 @@ def _contains_buildable(structure):
     else:
       yield  # Continue traversal.
 
-  daglish.traverse_with_path(traverse, structure)
+  daglish_legacy.traverse_with_path(traverse, structure)
   return contains_buildable
+
+
+def _wrap_ast_for_fn_with_closure_vars(
+    module: ast.Module,
+    fn: types.FunctionType,
+) -> ast.Module:
+  """Wraps `module.body` in a function that defines closure variables for `fn`.
+
+  If `fn` has any free variables (i.e., it's `__code__.co_freevars` is not
+  empty), we want to make sure that compiling its AST (assumed to be in the body
+  of `module`) will create the same set of free variables in the resulting code
+  object. However, by default this won't happen, since we would be compiling
+  `fn`'s AST in the absence of its original context (e.g., just compiling a
+  nested function, and not the containing one).
+
+  To work around this issue, this function wraps `module.body` in another
+  `FunctionDef` that defines dummy variables corresponding to `fn`'s free
+  variables. This causes the subsequent compile step to create the right set of
+  free variables, and allows us to use `fn.__closure__` directly when creating a
+  new function object via `types.FunctionType`.
+
+  Effectively, this wrapping looks like the following Python code:
+
+      def __auto_config_closure_wrapper__():
+        closure_var_1 = None
+        closure_var_2 = None
+        ...
+
+        def fn(...):  # Or some expression involving a lambda.
+          ...  # Contains references to the closure variables.
+
+  Args:
+    module: An `ast.Module` object whose body contains the function definition
+      for `fn` (e.g., as an `ast.FunctionDef` or `ast.Lambda`).
+    fn: The function to create dummy closure variables for (assumed to
+      correspond to the body of `module`).
+
+  Returns:
+    A new `ast.Module` containing an additional wrapper `ast.FunctionDef` that
+    defines dummy closure variables.
+  """
+  ast_name = lambda name: ast.Name(id=name, ctx=ast.Store())
+  ast_none = ast.Constant(value=None)
+  closure_var_definitions = [
+      ast.Assign(targets=[ast_name(var_name)], value=ast_none)
+      for var_name in fn.__code__.co_freevars
+  ]
+
+  wrapper_module = ast.Module(
+      body=[
+          ast.FunctionDef(
+              name=_CLOSURE_WRAPPER_ID,
+              args=_EMPTY_ARGUMENTS,
+              body=[
+                  *closure_var_definitions,
+                  *module.body,
+              ],
+              decorator_list=[])
+      ],
+      type_ignores=[],
+  )
+  wrapper_module = ast.fix_missing_locations(wrapper_module)
+  return wrapper_module
+
+
+def _find_function_code(code: types.CodeType, fn_name: str):
+  """Finds the code object within `code` corresponding to `fn_name`."""
+  code = [
+      const for const in code.co_consts
+      if inspect.iscode(const) and const.co_name == fn_name
+  ]
+  assert len(code) == 1, f"Couldn't find function code for {fn_name!r}."
+  return code[0]
+
+
+def _unwrap_code_for_fn(code: types.CodeType, fn: types.FunctionType):
+  """Unwraps `code` to find the code object for `fn`.
+
+  This function assumes `code` is the result of compiling an `ast.Module`
+  returned by `_wrap_node_for_fn_with_closure_vars`.
+
+  Args:
+    code: A code object containing code for `fn`.
+    fn: The function to find a code object for within `code`.
+
+  Returns:
+    The code object corresponding to `fn`.
+  """
+  code = _find_function_code(code, _CLOSURE_WRAPPER_ID)
+  code = _find_function_code(code, fn.__name__)
+  return code
 
 
 def auto_config(
     fn=None,
-    experimental_allow_control_flow=False
+    *,
+    experimental_allow_control_flow=False,
+    experimental_always_inline: Optional[bool] = None,
+    experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,  # pylint: disable=line-too-long
 ) -> Any:  # TODO: More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
@@ -318,22 +436,65 @@ def auto_config(
     experimental_allow_control_flow: Whether to allow control flow constructs in
       `fn`. By default, control flow constructs will cause an
       `UnsupportedLanguageConstructError` to be thrown.
+    experimental_always_inline: If true, this function (when called in an
+      `auto_config` context) will always be `inline`'d in-place. See the
+      documentation on `inline` for an example. The default (if unspecified) is
+      currently `False`, but this may change in the future.
+    experimental_exemption_policy: An optional policy to control which function
+      calls within the body of `fn` should be turned into `fdl.Config`s and
+      which ones should simply be executed normally during the `as_buildable`
+      interpretation of `fn`. This predicate should return `True` if the given
+      callable should be exempted from auto-configuration.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
     containing the rewritten function.
   """
+  if experimental_always_inline is None:
+    experimental_always_inline = True
+
+  if experimental_exemption_policy is None:
+    experimental_exemption_policy = auto_config_policy.latest
+
+  def auto_config_call_handler(fn_or_cls, *args, **kwargs):
+    """Handles calls in auto_config'ed functions.
+
+    This intercepts calls in an auto-configed function, and determines whether
+    the called `fn_or_cls` should be wrapped in a `Config` or `Partial`. If
+    `fn_or_cls` is `functools.partial`, the call will instead be converted into
+    a call to Fiddle's `Partial`. If it is "auto-config eligible" (see
+    `experimental_custom_call_policy`), then a `Config` will be create for
+    `fn_or_cls` with the provided arguments. Otherwise, `fn_or_cls` is called
+    directly.
+
+    Args:
+      fn_or_cls: The function or class being called.
+      *args: The positional arguments with which `fn_or_cls` is being called.
+      **kwargs: The keyword arguments with which `fn_or_cls` is being called.
+
+    Returns:
+      Depending on `fn_or_cls`, either `Partial`, a `Config`, or the result of
+      calling `fn_or_cls` with the provided arguments.
+    """
+    if (is_auto_config(fn_or_cls) and
+        cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline):
+      return fn_or_cls.as_buildable(*args, **kwargs)
+
+    if fn_or_cls is functools.partial:
+      return config.Partial(args[0], *args[1:], **kwargs)
+
+    if experimental_exemption_policy(fn_or_cls):
+      return fn_or_cls(*args, **kwargs)
+
+    return config.Config(fn_or_cls, *args, **kwargs)
 
   def make_auto_config(fn):
-    if isinstance(fn, staticmethod):
-      raise TypeError(
-          'Please order the decorators such that `@staticmethod` is on top (as '
-          'the outermost decorator). Example:\n'
-          '@staticmethod\n@auto_config.auto_config\ndef my_fn():\n  ...')
+    if isinstance(fn, (staticmethod, classmethod)):
+      return type(fn)(make_auto_config(fn.__func__))
 
     if not inspect.isfunction(fn):
-      raise ValueError('`auto_config` is only compatible with functions and '
-                       '`@staticmethod`s.')
+      raise ValueError('`auto_config` is only compatible with functions, '
+                       '`@classmethod`s, and `@staticmethod`s.')
 
     # Get the source code of the function, and remove any indentation which
     # would cause parsing issues when creating the AST (indentation generally is
@@ -360,35 +521,30 @@ def auto_config(
     node = node_transformer.visit(node)
     node = ast.fix_missing_locations(node)
     node = ast.increment_lineno(node, line_offset)
+    assert isinstance(node, ast.Module)
 
+    # In order to allow us to use the original function closure below when
+    # constructing a new function object, we have to nest our modified AST
+    # within an outer `FunctionDef` that defines variables corresponding to the
+    # free variables in `fn`.
+    node = _wrap_ast_for_fn_with_closure_vars(node, fn)
     # Compile the modified AST, and then find the function code object within
-    # the returned module-level code object. Generally, the function is present
-    # at `code.co_consts[0]`, but the comprehension below finds it by name.
-    # Assuming compilation was successful, the function should really be there,
-    # so an assert is used to verify that it was found.
+    # the returned module-level code object.
     code = compile(node, inspect.getsourcefile(fn), 'exec')
-    code = [
-        const for const in code.co_consts  # pytype: disable=attribute-error
-        if inspect.iscode(const) and const.co_name == fn.__name__
-    ]
-    assert len(code) == 1, "Couldn't find modified function code."
-    code = code[0]
+    code = _unwrap_code_for_fn(code, fn)
 
-    # Make sure that the proper globals and closure variables are available to
-    # the newly created function, and also add in `auto_config_call_handler`,
-    # which is referenced from the modified AST via the `_CALL_HANDLER_ID` (see
-    # `ast.Name` node in `_AutoConfigNodeTransformer.visit_Call()`).
-    closure_vars = inspect.getclosurevars(fn)
-    scope = {
+    # Make sure that the proper globals are available to the newly created
+    # function, and also add in `auto_config_call_handler`, which is referenced
+    # from the modified AST via the `_CALL_HANDLER_ID` (see `ast.Name` node in
+    # `_AutoConfigNodeTransformer.visit_Call()`).
+    globals_ = {
         **fn.__globals__,
-        **closure_vars.globals,
-        **closure_vars.nonlocals,
         _CALL_HANDLER_ID: auto_config_call_handler,
     }
 
     # Then, create a function from the compiled function code object, providing
-    # the scope.
-    auto_config_fn = types.FunctionType(code, scope)
+    # the globals and the original function's closure.
+    auto_config_fn = types.FunctionType(code, globals_, closure=fn.__closure__)
     auto_config_fn.__defaults__ = fn.__defaults__
     auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
 
@@ -406,16 +562,166 @@ def auto_config(
             'supported container (list, tuple, dict) containing one.')
       return output
 
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-      return fn(*args, **kwargs)
-
-    wrapper.as_buildable = as_buildable
-
-    return wrapper
+    return AutoConfig(
+        fn, as_buildable, always_inline=experimental_always_inline)
 
   # Decorator with empty parenthesis.
   if fn is None:
     return make_auto_config
   else:
     return make_auto_config(fn)
+
+
+def auto_unconfig(
+    fn=None,
+    *,
+    experimental_always_inline: Optional[bool] = None
+) -> Any:  # TODO: More precise return type.
+  """Converts functions that create buildables directly into auto_config form.
+
+  While most of the time, the benefits of an auto_config representation of
+  object configuration and construction are valuable (e.g. static type
+  checking and tooling / refactoring support), sometimes it is more convenient
+  to manipulate buildable objects directly. `auto_unconfig` converts a function
+  that directly manipulates `fdl.Buildable`s (e.g. `fdl.Config`s) into one that
+  looks identically to an `auto_config`'d function, and is fully interoperable
+  with the rest of the `auto_config` ecosystem.
+
+  Example:
+
+  ```py
+  @auto_unconfig
+  def make_experiment_trainer(name: str) -> fdl.Config[MyTrainer]
+    model = make_model.as_buildable(name)
+    select(model, DropOut).set(rate=0.42)  # Full Fiddle API available!
+    dataset = make_dataset.as_buildable()
+    # Build fdl.Config's imperatively.
+    trainer_config = fdl.Config(MyTrainer)
+    trainer_config.model = model
+    trainer_config.train_dataset = dataset
+    trainer_config.skip_eval = True
+    return trainer_config  # Return a `fdl.Buildable`
+
+  # Sample usage within an auto_config'd function.
+  @auto_config
+  def make_driver():
+    return TrainerDriver(
+      trainer=make_experiment_trainer('my_experiment'),
+      checkpointer=CustomCheckpointer())
+
+  # Sample usage outside of auto_config contexts.
+  def main():
+    # Use instantiated objects:
+    trainer = make_experiment_trainer('my_experiment')
+    for example in trainer.train_dataset:
+      print_prediction(trainer.model.predict(example))
+
+    # Or manipulate the configuration before calling `fdl.build`:
+    trainer_config = make_experiment_trainer.as_buildable('my_experiment')
+    trainer_config.skip_eval = False  # Tweak configuration.
+    trainer2 = fdl.build(trainer_config)
+    run_trainer(trainer2)
+  ```
+
+  Args:
+    fn: The function to convert.
+    experimental_always_inline: Whether the output of `fn` should always be
+      inlined into the caller's config.
+
+  Returns:
+    An `AutoConfig` that corresponds to `fn`.
+  """
+
+  if experimental_always_inline is None:
+    experimental_always_inline = True
+
+  def make_unconfig(fn) -> AutoConfig:
+
+    @functools.wraps(fn)
+    def python_implementation(*args, **kwargs):
+      previous = building._state.in_build  # pytype: disable=module-attr # pylint: disable=protected-access
+      building._state.in_build = False  # pytype: disable=module-attr # pylint: disable=protected-access
+      try:
+        cfg = fn(*args, **kwargs)
+        return building.build(cfg)
+      finally:
+        building._state.in_build = previous  # pytype: disable=module-attr # pylint: disable=protected-access
+
+    return AutoConfig(
+        func=python_implementation,
+        buildable_func=fn,
+        always_inline=experimental_always_inline)
+
+  # We use this pattern to support using the decorator with and without
+  # parenthesis.
+  if fn is None:
+    return make_unconfig
+  return make_unconfig(fn)
+
+
+def is_auto_config(function_object: Any) -> bool:
+  return isinstance(function_object, (AutoConfig, _BoundAutoConfig))
+
+
+def inline(buildable: config.Config):
+  """Converts `buildable` of an `auto_config` function into a DAG of Buildables.
+
+  `inline` updates `buildable` in place to preserve aliasing within a larger
+  Fiddle configuration. If you would like to leave `buildable` unmodified, make
+  a shallow copy (`copy.copy`) before calling `inline`.
+
+  Example:
+
+  ```py
+  # shared/input_pipelines.py
+  @auto_config(experimental_api_boundary=True)
+  def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
+    file_path = '/base_path/'+name
+    augmentation = 'my_augmentation_routine'
+    # ...
+    return InputPipeline(file_path, augmentation, ...)
+
+  # config/main.py
+  @auto_config
+  def make_experiment():
+    data = make_input_pipeline('normal_dataset', batch_size)
+    model = ...
+    return Experiment(data, model)
+
+  # experiment_configuration.py
+  def make_experiment():
+    config = make_experiment.as_buildable()
+    config.data.name = 'advanced_dataset'
+    # config.data.augmentation = 'custom_augmentation'  # Not configurable!!!
+    # return fdl.build(config)                          # Works like normal.
+    auto_config.inline(config.data)
+    print(config.data.file_path)         # Prints: '/base_path/advanced_dataset'
+    config.data.augmentation = 'custom_augmentation'    # Now exposed.
+    experiment = fdl.build(config)                      # Works like normal.
+    return experiment
+  ```
+
+  Args:
+    buildable: The buildable of an `auto_config`'d function to replace with the
+      root of a Fiddle DAG that corresponds to it.
+
+  Raises:
+    ValueError: If `buildable` is not a `Config`, or if `buildable` doesn't
+      correspond to an auto_config'd function.
+  """
+  if not isinstance(buildable, config.Config):
+    raise ValueError('Cannot `inline` non-Config buildables; '
+                     f'{type(buildable)} is not compatible.')
+  if not is_auto_config(buildable.__fn_or_cls__):
+    raise ValueError('Cannot `inline` a non-auto_config function; '
+                     f'`{buildable.__fn_or_cls__}` is not compatible.')
+  # Evaluate the `as_buildable` interpretation.
+  auto_config_fn = cast(Union[AutoConfig, _BoundAutoConfig],
+                        buildable.__fn_or_cls__)
+  tmp_config = auto_config_fn.as_buildable(**buildable.__arguments__)
+  if not isinstance(tmp_config, config.Buildable):
+    raise ValueError('You cannot currently inline functions that do not return '
+                     '`fdl.Buildable`s.')
+
+  mutate_buildable.move_buildable_internals(
+      source=tmp_config, destination=buildable)

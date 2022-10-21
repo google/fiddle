@@ -16,7 +16,7 @@
 """Tests for materialize."""
 
 from absl.testing import absltest
-from fiddle import config
+import fiddle as fdl
 from fiddle import materialize
 
 
@@ -27,7 +27,7 @@ class MaterializeTest(absltest.TestCase):
     def test_defaulting_fn(x: int, y=3, z: str = 'abc'):
       del x, y, z  # Unused.
 
-    cfg = config.Config(test_defaulting_fn)
+    cfg = fdl.Config(test_defaulting_fn)
 
     self.assertEqual({}, cfg.__arguments__)
     materialize.materialize_defaults(cfg)
@@ -44,20 +44,15 @@ class MaterializeTest(absltest.TestCase):
     def test_defaulting_fn(x, y, z: str = 'abc'):
       del x, y, z  # Unused.
 
-    cfg = config.Config(test_defaulting_fn)
+    cfg = fdl.Config(test_defaulting_fn)
     cfg.y = [
-        config.Config(Inner, 'a'),
-        config.Config(Inner),
+        fdl.Config(Inner, 'a'),
+        fdl.Config(Inner),
     ]
     self.assertEqual({'a': 'a'}, cfg.y[0].__arguments__)
     self.assertEqual({}, cfg.y[1].__arguments__)
 
-    materialize.materialize_defaults(cfg, recurse=False)
-    self.assertEqual({'a': 'a'}, cfg.y[0].__arguments__)
-    self.assertEqual({}, cfg.y[1].__arguments__)
-    self.assertEqual('abc', cfg.__arguments__['z'])
-
-    materialize.materialize_defaults(cfg, recurse=True)
+    materialize.materialize_defaults(cfg)
     self.assertEqual({'a': 'a', 'b': 'b'}, cfg.y[0].__arguments__)
     self.assertEqual({'b': 'b'}, cfg.y[1].__arguments__)
     self.assertEqual('abc', cfg.__arguments__['z'])

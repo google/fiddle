@@ -17,13 +17,12 @@
 
 import collections
 import dataclasses
-from typing import Any, cast, List, NamedTuple
+from typing import Any, NamedTuple
 
 from absl.testing import absltest
-from absl.testing import parameterized
-
 import fiddle as fdl
-from fiddle.experimental import daglish
+from fiddle import daglish
+from fiddle.experimental import daglish_legacy
 
 
 @dataclasses.dataclass
@@ -41,92 +40,18 @@ class SampleTag(fdl.Tag):
   """`fdl.Tag` to use for testing."""
 
 
-class PathElementTest(absltest.TestCase):
-
-  def test_path_fragment(self):
-    path: List[daglish.PathElement] = [
-        daglish.Index(index=1),
-        daglish.Key(key="a"),
-        daglish.Attr(name="foo"),
-        daglish.Key(key=2),
-        daglish.Attr(name="bar"),
-        daglish.BuildableFnOrCls(),
-    ]
-    path_str = "".join(x.code for x in path)
-    self.assertEqual(path_str, "[1]['a'].foo[2].bar.__fn_or_cls__")
-
-  def test_follow(self):
-    x = [[], {}, ()]
-    self.assertIs(daglish.Index(1).follow(x), x[1])
-
-    y = {"a": [], "b": {}, "c": ()}
-    self.assertIs(daglish.Key("a").follow(y), y["a"])
-
-    z = Foo([], {})
-    self.assertIs(daglish.Attr("bar").follow(z), z.bar)
-
-    cfg = fdl.Config(Foo)
-    self.assertIs(daglish.BuildableFnOrCls().follow(cfg), Foo)
-
-  def test_follow_path(self):
-    root = [
-        1, {
-            "a": Foo("bar", "baz"),
-            "b": SampleNamedTuple("fizz", "buzz")
-        }, [3, 4, fdl.Config(Foo)]
-    ]
-    path1 = (daglish.Index(1), daglish.Key("a"), daglish.Attr("bar"))
-    self.assertEqual(daglish.follow_path(root, path1), "bar")
-
-    path2 = (daglish.Index(2), daglish.Index(0))
-    self.assertEqual(daglish.follow_path(root, path2), 3)
-
-    path3 = (daglish.Index(1), daglish.Key("b"), daglish.Attr("fizz"))
-    self.assertEqual(daglish.follow_path(root, path3), "fizz")
-
-    path4 = ()
-    self.assertIs(daglish.follow_path(root, path4), root)
-
-    path5 = (daglish.Index(2),)
-    self.assertIs(daglish.follow_path(root, path5), root[2])
-
-    path6 = (daglish.Index(1), daglish.Key("a"))
-    self.assertIs(daglish.follow_path(root, path6), root[1]["a"])
-
-    path7 = (daglish.Index(2), daglish.Index(2), daglish.BuildableFnOrCls())
-    self.assertIs(daglish.follow_path(root, path7), root[2][2].__fn_or_cls__)
-
-    bad_path_1 = (daglish.Key("a"), daglish.Key("b"))
-    with self.assertRaisesRegex(
-        ValueError, r"Key\(key='a'\) is not compatible "
-        r"with root=.*"):
-      daglish.follow_path(root, bad_path_1)
-
-    bad_path_2 = (daglish.Index(2), daglish.Key("b"))
-    with self.assertRaisesRegex(
-        ValueError, r"Key\(key='b'\) is not compatible "
-        r"with root\[2\]=\[3, 4, .*\]"):
-      daglish.follow_path(root, bad_path_2)
-
-    bad_path_3 = (daglish.Index(1), daglish.Key("a"), daglish.Attr("bam"))
-    with self.assertRaisesRegex(
-        ValueError, r"Attr\(name='bam'\) is not compatible "
-        r"with root\[1\]\['a'\]=.*"):
-      daglish.follow_path(root, bad_path_3)
-
-
 class TraverseWithPathTest(absltest.TestCase):
 
   def test_is_namedtuple(self):
     self.assertTrue(daglish.is_namedtuple_subclass(SampleNamedTuple))
     typing_namedtuple = SampleNamedTuple(1, 2)
-    self.assertTrue(daglish.is_namedtuple_instance(typing_namedtuple))
+    self.assertTrue(daglish_legacy.is_namedtuple_instance(typing_namedtuple))
     collections_namedtuple_type = collections.namedtuple(
         "CollectionsNamedTuple", ["arg1", "arg2"])
     self.assertTrue(daglish.is_namedtuple_subclass(collections_namedtuple_type))
     collections_namedtuple_instance = collections_namedtuple_type(1, 2)
     self.assertTrue(
-        daglish.is_namedtuple_instance(collections_namedtuple_instance))
+        daglish_legacy.is_namedtuple_instance(collections_namedtuple_instance))
 
   def test_pretraversal_return_none(self):
     config = fdl.Config(
@@ -143,7 +68,7 @@ class TraverseWithPathTest(absltest.TestCase):
       visited_values[daglish.path_str(path)] = value
       return (yield)  # Continue traversal.
 
-    output = daglish.traverse_with_path(traverse, config)
+    output = daglish_legacy.traverse_with_path(traverse, config)
 
     expected = {
         "": config,
@@ -174,7 +99,7 @@ class TraverseWithPathTest(absltest.TestCase):
         return "buzz!"
       return (yield)
 
-    output = daglish.traverse_with_path(traverse, config)
+    output = daglish_legacy.traverse_with_path(traverse, config)
     expected = SampleNamedTuple(fizz="fizz!", buzz="buzz!")
     self.assertEqual(expected, output)
 
@@ -197,7 +122,7 @@ class TraverseWithPathTest(absltest.TestCase):
           output.update(element)
       return output
 
-    output = daglish.traverse_with_path(traverse, config)
+    output = daglish_legacy.traverse_with_path(traverse, config)
 
     expected = {
         "": config,
@@ -223,7 +148,7 @@ class TraverseWithPathTest(absltest.TestCase):
 
     msg = r"The traversal function yielded a non-None value\."
     with self.assertRaisesRegex(RuntimeError, msg):
-      daglish.traverse_with_path(traverse, config)
+      daglish_legacy.traverse_with_path(traverse, config)
 
   def test_yield_twice_error(self):
 
@@ -233,7 +158,7 @@ class TraverseWithPathTest(absltest.TestCase):
 
     msg = "Does the traversal function have two yields?"
     with self.assertRaisesRegex(RuntimeError, msg):
-      daglish.traverse_with_path(traverse, [])
+      daglish_legacy.traverse_with_path(traverse, [])
 
   def test_doc_example(self):
     structure = {
@@ -256,7 +181,8 @@ class TraverseWithPathTest(absltest.TestCase):
       else:
         return new_value
 
-    output = daglish.traverse_with_path(replace_twos_and_tuples, structure)
+    output = daglish_legacy.traverse_with_path(replace_twos_and_tuples,
+                                               structure)
 
     assert output == {
         "a": [1, "used to be a two..."],
@@ -269,12 +195,12 @@ class TraverseWithPathTest(absltest.TestCase):
     defaultdict["b"].extend([1, 2])
 
     identity_traverse = lambda path, value: (yield)
-    output = daglish.traverse_with_path(identity_traverse, defaultdict)
+    output = daglish_legacy.traverse_with_path(identity_traverse, defaultdict)
     self.assertIsInstance(output, collections.defaultdict)
     self.assertIs(output.default_factory, list)
     self.assertEqual(defaultdict, output)
 
-    value_by_path = daglish.collect_value_by_path(
+    value_by_path = daglish_legacy.collect_value_by_path(
         defaultdict, memoizable_only=False)
     value_by_path_str = {
         daglish.path_str(path): value for path, value in value_by_path.items()
@@ -309,7 +235,7 @@ class TraverseWithAllPathsTest(absltest.TestCase):
       ]
       yield
 
-    output = daglish.traverse_with_all_paths(traverse, config)
+    output = daglish_legacy.traverse_with_all_paths(traverse, config)
 
     expected = {
         "": [""],
@@ -344,7 +270,7 @@ class TraverseWithAllPathsTest(absltest.TestCase):
       yield
       return value
 
-    output = daglish.traverse_with_all_paths(traverse, config)
+    output = daglish_legacy.traverse_with_all_paths(traverse, config)
     self.assertIs(config.bar[0], output.bar[0])
     self.assertIs(config.bar[1], output.bar[1])
     self.assertIs(config.baz[0], output.baz[0])
@@ -364,7 +290,7 @@ class TraverseWithAllPathsTest(absltest.TestCase):
     def traverse(unused_all_paths, unused_current_path, unused_value):
       return (yield)
 
-    output = daglish.traverse_with_all_paths(traverse, config)
+    output = daglish_legacy.traverse_with_all_paths(traverse, config)
     self.assertIsNot(config.bar[0], output.bar[0])
     self.assertIsNot(config.bar[1], output.bar[1])
     self.assertIsNot(config.baz[0], output.baz[0])
@@ -387,7 +313,7 @@ class MemoizedTraverseTest(absltest.TestCase):
     def traverse(unused_all_paths, unused_value):
       return (yield)
 
-    output = daglish.memoized_traverse(traverse, config)
+    output = daglish_legacy.memoized_traverse(traverse, config)
     self.assertIsNot(config.bar[0], output.bar[0])
     self.assertIsNot(config.bar[1], output.bar[1])
     self.assertIsNot(config.baz[0], output.baz[0])
@@ -401,16 +327,16 @@ class CollectPathsByIdTest(absltest.TestCase):
   def test_empty_structure(self):
     for root in [[], {}, fdl.Config(Foo)]:
       self.assertEqual(
-          daglish.collect_paths_by_id(root, True), {id(root): [()]})
+          daglish_legacy.collect_paths_by_id(root, True), {id(root): [()]})
     # Emtpy tuple is not memoizable:
-    self.assertEqual(daglish.collect_paths_by_id((), True), {})
+    self.assertEqual(daglish_legacy.collect_paths_by_id((), True), {})
 
   def test_tagged_value(self):
     tagged_value = SampleTag.new(1)
     expected = {
         id(tagged_value): [()],
     }
-    paths_by_id = daglish.collect_paths_by_id(tagged_value, True)
+    paths_by_id = daglish_legacy.collect_paths_by_id(tagged_value, True)
     self.assertEqual(paths_by_id, expected)
 
   def test_collect_paths_by_id(self):
@@ -422,7 +348,8 @@ class CollectPathsByIdTest(absltest.TestCase):
         baz=[shared_list, shared_config],
     )
 
-    paths_by_id = daglish.collect_paths_by_id(config, memoizable_only=True)
+    paths_by_id = daglish_legacy.collect_paths_by_id(
+        config, memoizable_only=True)
     expected = {
         id(config): [()],
         id(config.bar): [(daglish.Attr("bar"),)],
@@ -435,7 +362,8 @@ class CollectPathsByIdTest(absltest.TestCase):
     self.assertEqual(paths_by_id, expected)
 
     with self.assertRaises(ValueError):
-      paths_by_id = daglish.collect_paths_by_id(config, memoizable_only=False)
+      paths_by_id = daglish_legacy.collect_paths_by_id(
+          config, memoizable_only=False)
 
 
 class CollectValueByIdTest(absltest.TestCase):
@@ -443,17 +371,18 @@ class CollectValueByIdTest(absltest.TestCase):
   def test_empty_structure(self):
     for root in [[], {}, fdl.Config(Foo)]:
       self.assertEqual(
-          daglish.collect_value_by_id(root, False), {id(root): root})
+          daglish_legacy.collect_value_by_id(root, False), {id(root): root})
       self.assertEqual(
-          daglish.collect_value_by_id(root, True), {id(root): root})
+          daglish_legacy.collect_value_by_id(root, True), {id(root): root})
     # Empty tuple is not memoizable:
-    self.assertEqual(daglish.collect_value_by_id((), True), {})
-    self.assertEqual(daglish.collect_value_by_id((), False), {id(()): ()})
+    self.assertEqual(daglish_legacy.collect_value_by_id((), True), {})
+    self.assertEqual(
+        daglish_legacy.collect_value_by_id((), False), {id(()): ()})
 
   def test_tagged_value(self):
     tagged_value = SampleTag.new(1)
     expected = {id(tagged_value): tagged_value, id(tagged_value.value): 1}
-    value_by_id = daglish.collect_value_by_id(tagged_value, False)
+    value_by_id = daglish_legacy.collect_value_by_id(tagged_value, False)
     self.assertEqual(value_by_id, expected)
 
   def test_collect_value_by_id(self):
@@ -465,7 +394,7 @@ class CollectValueByIdTest(absltest.TestCase):
         baz=[shared_list, shared_config],
     )
 
-    id_to_value = daglish.collect_value_by_id(cfg, memoizable_only=True)
+    id_to_value = daglish_legacy.collect_value_by_id(cfg, memoizable_only=True)
     expected = [
         cfg,
         cfg.bar,
@@ -478,7 +407,7 @@ class CollectValueByIdTest(absltest.TestCase):
     for value in expected:
       self.assertIs(id_to_value[id(value)], value)
 
-    id_to_value = daglish.collect_value_by_id(cfg, memoizable_only=False)
+    id_to_value = daglish_legacy.collect_value_by_id(cfg, memoizable_only=False)
     expected.extend([
         shared_list[1],
         shared_config.bar,
@@ -493,16 +422,18 @@ class CollectValueByPathTest(absltest.TestCase):
 
   def test_empty_structure(self):
     for root in [[], {}, fdl.Config(Foo)]:
-      self.assertEqual(daglish.collect_value_by_path(root, False), {(): root})
-      self.assertEqual(daglish.collect_value_by_path(root, True), {(): root})
+      self.assertEqual(
+          daglish_legacy.collect_value_by_path(root, False), {(): root})
+      self.assertEqual(
+          daglish_legacy.collect_value_by_path(root, True), {(): root})
     # Empty tuple is not memoizable:
-    self.assertEqual(daglish.collect_value_by_path((), True), {})
-    self.assertEqual(daglish.collect_value_by_path((), False), {(): ()})
+    self.assertEqual(daglish_legacy.collect_value_by_path((), True), {})
+    self.assertEqual(daglish_legacy.collect_value_by_path((), False), {(): ()})
 
   def test_tagged_value(self):
     tagged_value = SampleTag.new(1)
     expected = {(): tagged_value, (daglish.Attr("value"),): 1}
-    value_by_path = daglish.collect_value_by_path(tagged_value, False)
+    value_by_path = daglish_legacy.collect_value_by_path(tagged_value, False)
     self.assertEqual(value_by_path, expected)
 
   def test_collect_value_by_path(self):
@@ -514,7 +445,8 @@ class CollectValueByPathTest(absltest.TestCase):
         baz=[shared_list, shared_config],
     )
 
-    value_by_path = daglish.collect_value_by_path(cfg, memoizable_only=True)
+    value_by_path = daglish_legacy.collect_value_by_path(
+        cfg, memoizable_only=True)
     expected = {
         ():
             cfg,
@@ -539,7 +471,8 @@ class CollectValueByPathTest(absltest.TestCase):
     for path in value_by_path:
       self.assertIs(value_by_path[path], expected[path])
 
-    value_by_path = daglish.collect_value_by_path(cfg, memoizable_only=False)
+    value_by_path = daglish_legacy.collect_value_by_path(
+        cfg, memoizable_only=False)
     expected.update({
         (daglish.Attr("bar"), daglish.Index(0), daglish.Index(1)):
             cfg.bar[0][1],
@@ -557,78 +490,6 @@ class CollectValueByPathTest(absltest.TestCase):
     self.assertEqual(value_by_path, expected)
     for path in value_by_path:
       self.assertIs(value_by_path[path], expected[path])
-
-
-class TraverserRegistryTest(parameterized.TestCase):
-
-  @parameterized.named_parameters([
-      ("config", fdl.Config(Foo, bar=1, baz=2)),
-      ("tagged_value", SampleTag.new()),
-      ("namedtuple", SampleNamedTuple("a", "b")),
-      ("list", [1, 2, 3]),
-      ("tuple", (1, 2, 3)),
-      ("dict", dict(a=1, b=2)),
-      ("defaultdict", collections.defaultdict(list, a=[1], b=[2])),
-  ])
-  def test_unflatten_flatten(self, value):
-    traverser = daglish.find_node_traverser(type(value))
-    self.assertIsNotNone(traverser)
-    traverser = cast(daglish.NodeTraverser, traverser)
-    values, metadata = traverser.flatten(value)
-    unflattened_value = traverser.unflatten(values, metadata)
-    self.assertIs(type(value), type(unflattened_value))
-    self.assertEqual(value, unflattened_value)
-
-  def test_unknown_node_type(self):
-    self.assertIsNone(daglish.find_node_traverser(Foo))
-
-  def test_find_node_traverser_non_type_error(self):
-    with self.assertRaises(TypeError):
-      daglish.find_node_traverser(cast(Any, 42))
-
-  def test_custom_traverser_registries(self):
-    registry = daglish.NodeTraverserRegistry()
-    self.assertIsNone(registry.find_node_traverser(Foo))
-    registry.register_node_traverser(
-        Foo,
-        flatten_fn=lambda x: ((x.bar, x.baz), None),
-        unflatten_fn=lambda values, _: Foo(*values),
-        path_elements_fn=lambda _: (daglish.Attr("bar"), daglish.Attr("baz")))
-    self.assertIsNone(daglish.find_node_traverser(Foo))
-    foo_traverser = registry.find_node_traverser(Foo)
-    self.assertIsNotNone(foo_traverser)
-    self.assertEqual(((1, 2), None), foo_traverser.flatten(Foo(1, 2)))
-
-  def test_namedtuple_special_casing(self):
-    namedtuple_traverser = daglish.find_node_traverser(daglish.NamedTupleType)
-    self.assertIsNotNone(namedtuple_traverser)
-    self.assertIs(namedtuple_traverser,
-                  daglish.find_node_traverser(SampleNamedTuple))
-
-  def test_register_node_traverser_non_type_error(self):
-    with self.assertRaises(TypeError):
-      daglish.register_node_traverser(
-          cast(Any, 42),
-          flatten_fn=lambda x: (tuple(x), None),
-          unflatten_fn=lambda x, _: list(x),
-          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
-
-  def test_register_node_traverser_existing_registration_error(self):
-    with self.assertRaises(ValueError):
-      daglish.register_node_traverser(
-          list,
-          flatten_fn=lambda x: (tuple(x), None),
-          unflatten_fn=lambda x, _: list(x),
-          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
-
-  def test_map_children(self):
-    value = {"a": 1, "b": 2}
-    result = daglish.map_children(lambda x: x - 1, value)
-    self.assertEqual({"a": 0, "b": 1}, result)
-
-  def test_map_children_non_traversable_error(self):
-    with self.assertRaises(ValueError):
-      daglish.map_children(lambda x: x, 42)
 
 
 if __name__ == "__main__":

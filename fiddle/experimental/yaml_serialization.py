@@ -25,9 +25,9 @@ import collections
 import inspect
 from typing import Any
 
-from fiddle import config
+from fiddle import config as config_lib
 from fiddle import tagging
-from fiddle.experimental import fixture
+from fiddle.experimental import fixture_node
 import yaml
 
 
@@ -51,8 +51,8 @@ def _config_representer(dumper, data, type_name="fdl.Config"):
                      "that have a __fn_or_cls__ parameter.")
 
   value["__fn_or_cls__"] = {
-      "module": inspect.getmodule(data.__fn_or_cls__).__name__,
-      "name": data.__fn_or_cls__.__qualname__,
+      "module": inspect.getmodule(config_lib.get_callable(data)).__name__,
+      "name": config_lib.get_callable(data).__qualname__,
   }
   return dumper.represent_mapping(f"!{type_name}", value)
 
@@ -73,9 +73,9 @@ def _taggedvalue_representer(dumper, data):
   })
 
 
-yaml.SafeDumper.add_representer(config.Config, _config_representer)
-yaml.SafeDumper.add_representer(config.Partial, _partial_representer)
-yaml.SafeDumper.add_representer(fixture.Fixture, _fixture_representer)
+yaml.SafeDumper.add_representer(config_lib.Config, _config_representer)
+yaml.SafeDumper.add_representer(config_lib.Partial, _partial_representer)
+yaml.SafeDumper.add_representer(fixture_node.FixtureNode, _fixture_representer)
 yaml.SafeDumper.add_representer(tagging.TaggedValueCls,
                                 _taggedvalue_representer)
 

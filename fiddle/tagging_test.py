@@ -21,9 +21,9 @@ from unittest import mock
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import selectors
 from fiddle import tagging
 from fiddle import tagging_test_module as tst
-from fiddle.experimental import selectors
 
 
 @dataclasses.dataclass
@@ -95,11 +95,18 @@ class TaggingTest(absltest.TestCase):
     with self.assertRaisesRegex(
         tagging.TaggedValueNotFilledError,
         "Expected.*TaggedValue.*replaced.*one was not set"):
-      tagging.tagged_value_identity_fn()
+      tagging.tagged_value_fn()
 
   def test_tagged_value_identity_fn_none_value(self):
     # Test that when the value is None, that's OK.
-    self.assertIsNone(tagging.tagged_value_identity_fn(value=None))
+    self.assertIsNone(tagging.tagged_value_fn(value=None))
+
+  def test_tagged_value_error_message(self):
+    cfg = tagging.TaggedValue(tags={tst.ParameterDType})
+    with self.assertRaisesRegex(
+        tagging.TaggedValueNotFilledError,
+        r"Unset tags: {fiddle.tagging_test_module.ParameterDType}"):
+      fdl.build(cfg)
 
   def test_taggedvalue_default_none(self):
     cfg = tagging.TaggedValue(tags={tst.ParameterDType}, default=None)
@@ -326,7 +333,7 @@ class TaggingTest(absltest.TestCase):
     foo_cfg.bar = RedTag.new()
     foo_cfg.qux = "abc"
 
-    selectors.select(foo_cfg, tag=RedTag).set(value=5)
+    selectors.select(foo_cfg, tag=RedTag).replace(value=5)
     foo_cfg = tagging.materialize_tags(foo_cfg)
     self.assertEqual(foo_cfg.bar, 5)
     self.assertIsInstance(foo_cfg.bar, int)
@@ -340,7 +347,7 @@ class TaggingTest(absltest.TestCase):
     self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
     self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
-  def test_materialize_tags_keeps_tag_in_tags_list(self):
+  def test_materialize_tags_materializes_tag_in_tags_list(self):
     foo_cfg = fdl.Config(Foo)
     foo_cfg.bar = RedTag.new(5)
     foo_cfg.qux = "abc"
@@ -368,7 +375,7 @@ class TestWithSelectorMock(TaggingTest):
     super().setUp()
 
     def new_set_impl(cfg, tag, value):
-      selectors.select(cfg, tag=tag).set(value=value)
+      selectors.select(cfg, tag=tag).replace(value=value)
 
     self.mock_set = mock.patch.object(tagging, "set_tagged", new_set_impl)
     self.mock_set.start()

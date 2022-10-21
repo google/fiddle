@@ -15,12 +15,16 @@
 
 """Utility functions for tests that use fiddle.experimental.daglish."""
 
+import contextlib
 import re
-from typing import Any, Set, Dict
-from absl.testing import absltest
+from typing import Any, Dict, Set
 
-from fiddle.experimental import daglish
-from fiddle.experimental import diff
+from absl.testing import absltest
+from fiddle import config
+from fiddle import daglish
+from fiddle import diffing
+from fiddle.experimental import daglish_legacy
+from fiddle.experimental import serialization
 
 
 def parse_path(path_str: str) -> daglish.Path:
@@ -63,9 +67,9 @@ def parse_path(path_str: str) -> daglish.Path:
 
 
 # Helper function to make expected References easier to write (and read).
-def parse_reference(root: str, path: str) -> diff.Reference:
-  """Build a diff.Reference from a string."""
-  return diff.Reference(root, parse_path(path))
+def parse_reference(root: str, path: str) -> diffing.Reference:
+  """Build a diffing.Reference from a string."""
+  return diffing.Reference(root, parse_path(path))
 
 
 def get_shared_paths(structure: Any) -> Set[Set[daglish.Path]]:
@@ -86,7 +90,7 @@ def get_shared_paths(structure: Any) -> Set[Set[daglish.Path]]:
       result.add(frozenset(paths))
     return (yield)
 
-  daglish.memoized_traverse(collect_value, structure)
+  daglish_legacy.memoized_traverse(collect_value, structure)
   return result
 
 
@@ -158,6 +162,11 @@ def describe_dag_diffs(x, y):
       x_path_elements = node_traverser.path_elements(x_val)
       y_path_elements = node_traverser.path_elements(y_val)
 
+      if isinstance(x_metadata, config.BuildableTraverserMetadata):
+        x_metadata = x_metadata.without_history()
+      if isinstance(y_metadata, config.BuildableTraverserMetadata):
+        y_metadata = y_metadata.without_history()
+
       if x_path_elements != y_path_elements:
         for path_elt in set(x_path_elements) - set(y_path_elements):
           child_path = daglish.path_str(path + (path_elt,))
@@ -212,3 +221,28 @@ class TestCase(absltest.TestCase):
     # test cases not have false positives.
     self.assertEqual(x, y)
     self.assertEqual(get_shared_paths(x), get_shared_paths(y))
+
+
+@contextlib.contextmanager
+def test_serialization_register_constant():
+  """Context manager used to test `serialization.register_constant`.
+
+  Saves the registered serialization constants when the context manager is
+  entered, and restores them when it is exited.  This makes it possible to
+  "temporarily" register a serialization constant (for the scope of a test).
+
+  Yields:
+    None
+  """
+  # pylint: disable=protected-access
+  old_serialization_constants_by_id = dict(
+      serialization._serialization_constants_by_id)
+  old_serialization_constants_by_value = dict(
+      serialization._serialization_constants_by_value)
+  try:
+    yield
+  finally:
+    serialization._serialization_constants_by_id = (
+        old_serialization_constants_by_id)
+    serialization._serialization_constants_by_value = (
+        old_serialization_constants_by_value)

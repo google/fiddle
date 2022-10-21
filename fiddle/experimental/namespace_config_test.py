@@ -75,6 +75,14 @@ class NamespaceConfigTest(absltest.TestCase):
       cfg2.y = 'def'
       self.assertNotEqual(cfg1, cfg2)
 
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
+  def test_key_named_self(self):
+    cfg = namespace_config.NamespaceConfig()
+    cfg.self = 2
+    expected = types.SimpleNamespace()
+    expected.self = 2
+    self.assertEqual(fdl.build(cfg), expected)
+
 
 if __name__ == '__main__':
   absltest.main()

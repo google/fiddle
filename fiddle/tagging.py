@@ -59,20 +59,19 @@ with the value.
 
 from __future__ import annotations
 
+import collections
 import inspect
+import typing
 from typing import Any, Collection, FrozenSet, Generic, Optional, Set, TypeVar, Union
 
 from fiddle import config
+from fiddle import daglish
 from fiddle import tag_type
-from fiddle.experimental import daglish
+from fiddle.experimental import auto_config
 from fiddle.experimental import serialization
-import tree
 
 TagType = tag_type.TagType
-
-
-class TaggedValueNotFilledError(ValueError):
-  """A TaggedValue was not filled when build() was called."""
+TaggedValueNotFilledError = tag_type.TaggedValueNotFilledError
 
 
 class _NoValue:
@@ -120,17 +119,34 @@ class Tag(metaclass=TagType):
     """
     return TaggedValue(tags=(cls,), default=default)
 
+  if not typing.TYPE_CHECKING:
+    new = classmethod(
+        auto_config.AutoConfig(
+            func=new.__func__, buildable_func=new.__func__, always_inline=True))
+
 
 T = TypeVar('T')
 
 
-def tagged_value_identity_fn(value: Union[T, _NoValue] = NO_VALUE) -> T:
+def tagged_value_fn(value: Union[T, _NoValue] = NO_VALUE,
+                    tags: Optional[Set[TagType]] = None) -> T:
+  """Identity function to return value if set, and raise an error if not.
+
+  Args:
+    value: The value to return.
+    tags: The tags associated with the value. (Used in generating error messages
+      if `value` is not set.)
+
+  Returns:
+    The value `value` passed to it.
+  """
   if value is NO_VALUE:
-    raise TaggedValueNotFilledError(
-        'Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
-        'calls, but one was not set.')
-  else:
-    return value
+    msg = ('Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
+           'calls, but one was not set.')
+    if tags:
+      msg += ' Unset tags: ' + str(tags)
+    raise TaggedValueNotFilledError(msg)
+  return value
 
 
 class TaggedValueCls(Generic[T], config.Config[T]):
@@ -139,6 +155,12 @@ class TaggedValueCls(Generic[T], config.Config[T]):
   @property
   def tags(self):
     return self.__argument_tags__['value']
+
+  def __build__(self, *args: Any, **kwargs: Any) -> T:
+    if self.__fn_or_cls__ is not tagged_value_fn:
+      raise RuntimeError('Unexpected __fn_or_cls__ in TaggedValueCls; found:'
+                         f'{self.__fn_or_cls__}')
+    return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
 
 
 def TaggedValue(  # pylint: disable=invalid-name
@@ -160,7 +182,7 @@ def TaggedValue(  # pylint: disable=invalid-name
   Raises:
     ValueError: If `tags` is empty.
   """
-  result = TaggedValueCls(tagged_value_identity_fn, value=default)
+  result = TaggedValueCls(tagged_value_fn, value=default)
   if not tags:
     raise ValueError('At least one tag must be provided.')
   for tag in tags:
@@ -177,17 +199,11 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     value: Value to set for all parameters tagged with `tag`.
   """
 
-  def map_fn(unused_all_paths, node_value):
-    # Recurses, but ignores returned value, because we are mutating the
-    # config instead of returning a modified copy.
-    yield
-    if isinstance(node_value, config.Buildable):
-      for key, tags in node_value.__argument_tags__.items():
+  for node, _ in daglish.iterate(root):
+    if isinstance(node, config.Buildable):
+      for key, tags in node.__argument_tags__.items():
         if any(issubclass(t, tag) for t in tags):
-          setattr(node_value, key, value)
-    return node_value
-
-  daglish.memoized_traverse(map_fn, root)
+          setattr(node, key, value)
 
 
 def list_tags(
@@ -206,19 +222,10 @@ def list_tags(
   """
   tags = set()
 
-  def _inner(node: config.Buildable):
-    for node_tags in node.__argument_tags__.values():
-      tags.update(node_tags)
-
-    def map_fn(leaf):
-      if isinstance(leaf, config.Buildable):
-        _inner(leaf)
-      return leaf
-
-    # TODO: Use something other than map for efficiency.
-    tree.map_structure(map_fn, node.__arguments__)
-
-  _inner(root)
+  for value, _ in daglish.iterate(root):
+    if isinstance(value, config.Buildable):
+      for node_tags in value.__argument_tags__.values():
+        tags.update(node_tags)
 
   # Add superclasses if desired.
   if add_superclasses:
@@ -230,9 +237,17 @@ def list_tags(
   return frozenset(tags)
 
 
-def materialize_tags(buildable: config.Buildable,
-                     tags: Optional[Set[TagType]] = None):
+# Any subclass of buildable.
+AnyBuildable = TypeVar('AnyBuildable', bound=config.Buildable)
+
+
+def materialize_tags(
+    buildable: AnyBuildable,
+    tags: Optional[collections.abc.Set[TagType]] = None) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
+
+  TODO: Consider supporting tags directly on Config objects, e.g.
+  by removing those tags.
 
   Converts:
   ```foo.bar.baz = MyCustomTag.new(4096)```
@@ -253,11 +268,12 @@ def materialize_tags(buildable: config.Buildable,
     A new `fdl.Buildable` with its tags replaced by their values.
   """
 
-  def traverse_fn(unused_all_paths: daglish.Paths, value):
-    value = yield
+  def transform(value, state: daglish.State):
+    value = state.map_children(value)
     if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):
-      value = value.value
-    return value
+      return value.value
+    else:
+      return value
 
-  return daglish.memoized_traverse(traverse_fn, buildable)
+  return daglish.MemoizedTraversal.run(transform, buildable)

@@ -23,10 +23,10 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 import fiddle as fdl
+from fiddle import daglish
+from fiddle import diffing
 from fiddle import tagging
 from fiddle import testing
-from fiddle.experimental import daglish
-from fiddle.experimental import diff
 from fiddle.testing import test_util
 
 
@@ -96,13 +96,13 @@ class ParsePathTest(parameterized.TestCase):
 class ParseReferenceTest(parameterized.TestCase):
 
   @parameterized.parameters([
-      ('old', '', diff.Reference('old', ())),
-      ('my_root', '.foo', diff.Reference('my_root', (daglish.Attr('foo'),))),
+      ('old', '', diffing.Reference('old', ())),
+      ('my_root', '.foo', diffing.Reference('my_root', (daglish.Attr('foo'),))),
       ('$', '.foo.bar',
-       diff.Reference('$', (daglish.Attr('foo'), daglish.Attr('bar')))),
+       diffing.Reference('$', (daglish.Attr('foo'), daglish.Attr('bar')))),
       # Long path:
       ('root', '.foo[8].bar.baz["x"].__fn_or_cls__',
-       diff.Reference(
+       diffing.Reference(
            'root',
            (daglish.Attr('foo'), daglish.Index(8), daglish.Attr('bar'),
             daglish.Attr('baz'), daglish.Key('x'), daglish.BuildableFnOrCls()))

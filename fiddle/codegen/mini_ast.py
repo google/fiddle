@@ -15,14 +15,15 @@
 
 """Very minimal AST library.
 
-These nodes are not super useful compared to something like libcst, since they
-often have opaque string values. Their purpose is primarily to help with the
-formatting of Python code.
+We are transitioning to LibCST, so please don't use this library. It is only for
+supporting older code.
 """
 
 import abc
 import dataclasses
 from typing import List, Union
+
+import libcst as cst
 
 
 class CodegenNode(metaclass=abc.ABCMeta):
@@ -47,83 +48,6 @@ class Noop(CodegenNode):
 
   def lines(self) -> List[str]:
     return []
-
-
-@dataclasses.dataclass(frozen=True)
-class ImportNode(CodegenNode):
-  name: str  # Name of the module; should precede any class names in code.
-
-  @abc.abstractmethod
-  def sortkey(self) -> str:
-    """Returns a string module key, which can be used for sorting imports."""
-    raise NotImplementedError()
-
-  @abc.abstractmethod
-  def change_alias(self, alias_name: str) -> "ImportNode":
-    """Creates a version of this import with an alias (`import ... as`)."""
-
-
-@dataclasses.dataclass(frozen=True)
-class DirectImport(ImportNode):
-  """Imports a module as a fully-qualified name."""
-
-  def lines(self) -> List[str]:
-    return [f"import {self.name}"]
-
-  def sortkey(self) -> str:
-    return self.name
-
-  def change_alias(self, alias_name: str) -> ImportNode:
-    return ImportAs(alias_name, module=self.name)
-
-
-@dataclasses.dataclass(frozen=True)
-class FromImport(ImportNode):
-  """Imports a module name from a base package."""
-
-  parent: str
-
-  def lines(self) -> List[str]:
-    return [f"from {self.parent} import {self.name}"]
-
-  def sortkey(self) -> str:
-    return f"{self.parent}.{self.name}"
-
-  def change_alias(self, alias_name: str) -> ImportNode:
-    return FromImportAs(alias_name, parent=self.parent, module=self.name)
-
-
-@dataclasses.dataclass(frozen=True)
-class ImportAs(ImportNode):
-  """Same as DirectImport but with an `as alias` suffix."""
-
-  module: str
-
-  def lines(self) -> List[str]:
-    return [f"import {self.module} as {self.name}"]
-
-  def sortkey(self) -> str:
-    return self.module
-
-  def change_alias(self, alias_name: str) -> ImportNode:
-    return ImportAs(alias_name, self.module)
-
-
-@dataclasses.dataclass(frozen=True)
-class FromImportAs(ImportNode):
-  """Same as FromImport but with an `as alias` suffix."""
-
-  parent: str
-  module: str
-
-  def lines(self) -> List[str]:
-    return [f"from {self.parent} import {self.module} as {self.name}"]
-
-  def sortkey(self) -> str:
-    return f"{self.parent}.{self.module}"
-
-  def change_alias(self, alias_name: str) -> ImportNode:
-    return FromImportAs(alias_name, self.parent, self.module)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -212,10 +136,11 @@ class ConfigBuilder(CodegenNode):
 
   By default, this generates a `build_config()` method.
   """
-  imports: List[CodegenNode]
+  imports: List[cst.SimpleStatementLine]
   builder_body: List[CodegenNode]
 
   def lines(self) -> List[str]:
+    import_lines = cst.Module(body=self.imports).code.splitlines()
     fn_body = ["  " + line for line in block(self.builder_body, [""])]
-    return block([block(self.imports, []), ["def build_config():"] + fn_body],
+    return block([block([import_lines], []), ["def build_config():"] + fn_body],
                  ["", ""])

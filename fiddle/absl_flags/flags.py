@@ -20,12 +20,10 @@ control system, there are some instances (e.g. hyperparameter sweeps) where it's
 most effective to set initialization parameters (hyperparameters) from command
 line flags. This library exposes functions you can call within your program.
 
-
 ## Quickstart
 
 > Note: although different bits of functionality are designed to be usable
 > piecemeal, this is the fastest way to get all flag-integrated features.
-
 
 First, some definitions:
 
@@ -45,7 +43,6 @@ The simplest way to use the fiddle support for absl flags is to pass
 module for base configurations and fiddlers.
 
 For example:
-
 
 ```py
 ## ---- config.py ----
@@ -117,34 +114,52 @@ import importlib
 import inspect
 import re
 import sys
+import textwrap
 import typing
-from typing import Any, List, Union, Sequence
+from typing import Any, List, Optional, Sequence, Union
 
 from absl import app
 from absl import flags
 from absl import logging
 
+from etils import epath
+
 from fiddle import config
 from fiddle import module_reflection
 from fiddle import printing
+from fiddle import selectors
 from fiddle import tagging
-from fiddle.experimental import selectors
+from fiddle.experimental import auto_config
+from fiddle.experimental import serialization
 
 _FDL_CONFIG = flags.DEFINE_string(
     'fdl_config',
     default=None,
-    help='The name of the no-arity function to construct a fdl.Buildable.')
+    help='The name of a function to construct a base Fiddle config.')
+_FDL_CONFIG_FILE = epath.DEFINE_path(
+    'fdl_config_file',
+    default=None,
+    help='The path to a file containing a serialized base Fiddle config in '
+    'JSON format.')
 _FIDDLER = flags.DEFINE_multi_string(
-    'fiddler', default=[], help='Fiddlers are functions that tweak a config.')
+    'fiddler',
+    default=[],
+    help='The name of a fiddler. Fiddlers are functions that modify a config.')
 _FDL_SET = flags.DEFINE_multi_string(
-    'fdl_set', default=[], help='Fiddle configuration settings.')
+    'fdl_set',
+    default=[],
+    help='Per-parameter configuration settings. '
+    'Typically accessed via the alias --fdl.foo.bar=123.')
 _FDL_TAGS_SET = flags.DEFINE_multi_string(
     'fdl_tags_set',
     default=[],
     help='Fiddle tags setting, by name. Typically accessed via the alias '
-    '--fdl_tag.foo.Bar=123')
+    '--fdl_tag.foo.bar=123')
 _FDL_HELP = flags.DEFINE_bool(
-    'fdl_help', False, help='Print out the flags-built config and exit.')
+    'fdl_help',
+    default=False,
+    help='Print out Fiddle-specific help (including '
+    'information on any loaded configuration) and exit.')
 
 
 @dataclasses.dataclass
@@ -182,6 +197,10 @@ class _AttributeKey:
 _PATH_COMPONENT_REGEX = re.compile(r'(?:\.([A-Za-z_][^\.\[]*))|\[([^]]+)\]')
 
 
+def _print_stderr(*args, **kwargs):
+  print(*args, **kwargs, file=sys.stderr)
+
+
 def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
   """Parses a path into a list of either attributes or index lookups."""
   path = f'.{path}'  # Add a leading `.` to make parsing work properly.
@@ -191,7 +210,7 @@ def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
     match = _PATH_COMPONENT_REGEX.match(path, curr_index)
     if match is None:
       raise ValueError(
-          f'Could not parse {path[1:]} (failed index: {curr_index - 1}).')
+          f'Could not parse {path[1:]!r} (failed index: {curr_index - 1}).')
     curr_index = match.end(0)  # Advance
     if match[1] is not None:
       result.append(_AttributeKey(match[1]))
@@ -245,12 +264,12 @@ def apply_overrides_to(cfg: config.Buildable):
     try:
       for parent in parents:
         walk = parent(walk)
-    except Exception:  # pylint: disable=broad-except
-      raise ValueError(f'Invalid path "{path}".')  # pylint: disable=raise-missing-from
+    except Exception as e:
+      raise ValueError(f'Invalid path "{path}".') from e
     try:
       last.update(walk, ast.literal_eval(value))
-    except:
-      raise ValueError(f'Could not set "{value}" path "{path}".')  # pylint: disable=raise-missing-from
+    except Exception as e:
+      raise ValueError(f'Could not set "{path}" to "{value}".') from e
 
 
 def _rewrite_fdl_args(args: Sequence[str]) -> List[str]:
@@ -326,7 +345,7 @@ def set_tags(cfg: config.Buildable):
           '`fdl.Tag` and using 2 instances with the same module and name '
           'in the configuration.')
     selectors.select(
-        cfg, tag=matching_tags[0]).set(value=ast.literal_eval(value))
+        cfg, tag=matching_tags[0]).replace(value=ast.literal_eval(value))
 
 
 def apply_fiddlers_to(cfg: config.Buildable,
@@ -350,71 +369,120 @@ def apply_fiddlers_to(cfg: config.Buildable,
     fiddler(cfg)
 
 
-def create_buildable_from_flags(module: Any,
-                                allow_imports=False) -> config.Buildable:
-  """Returns a fdl.Buildable based on standardized flags.
+def _print_help(module, allow_imports):
+  """Prints flag help, including available symbols in `module`."""
+  flags_help_text = flags.FLAGS.module_help(sys.modules[__name__])
+  flags_help_text = '\n'.join(flags_help_text.splitlines()[2:])
+  _print_stderr('Fiddle-specific command line flags:')
+  _print_stderr()
+  _print_stderr(flags_help_text)
 
-  Args:
-    module: A common namespace to use as the basis for finding configs and
-      fiddlers.
-    allow_imports: If true, then fully qualified dotted names may be used to
-      specify configs or fiddlers that should be automatically imported.
-  """
-  base_name = _FDL_CONFIG.value
-  if _FDL_HELP.value or base_name is None:
-    print(
-        'Available symbols (may be base configs or fiddlers):\n',
-        file=sys.stderr)
-    for key in dir(module):
+  if module is not None:
+    source = f' in {module.__name__}' if hasattr(module, '__name__') else ''
+    _print_stderr()
+    _print_stderr(f'Available symbols (base configs or fiddlers){source}:')
+    _print_stderr()
+    for name in dir(module):
+      obj = getattr(module, name)
       # Ignore private and module objects.
-      if key.startswith('_'):
+      if name.startswith('_') or inspect.ismodule(obj):
         continue
-      obj = getattr(module, key)
-      if inspect.ismodule(obj):
-        continue
-
       if hasattr(obj, '__doc__') and obj.__doc__:
         obj_doc = '\n'.join(obj.__doc__.strip().split('\n\n')[:2])
         obj_doc = re.sub(r'\s+', ' ', obj_doc)
         docstring = f' - {obj_doc}'
       else:
         docstring = ''
-      print(f'  {key}{docstring}', file=sys.stderr)
-    if allow_imports:
-      print(
-          'Base configs and fiddlers may also be specified using '
-          'fully-qualified dotted names.',
-          file=sys.stderr)
-  print(file=sys.stderr)
-  if base_name is None:
-    raise app.UsageError('--fdl_config is required.')
-  if hasattr(module, base_name):
-    base_fn = getattr(module, base_name)
-  elif allow_imports:
-    try:
-      base_fn = _import_dotted_name(base_name)
-    except (ValueError, ModuleNotFoundError, AttributeError) as e:
-      raise ValueError(
-          f'Could not init a buildable from {base_name!r}: {e}') from e
+      _print_stderr(f'  {name}{docstring}')
+
+  if allow_imports:
+    _print_stderr()
+    _print_stderr('Base configs and fiddlers may be specified using '
+                  'fully-qualified dotted names.')
+
+
+def create_buildable_from_flags(
+    module: Optional[Any],
+    allow_imports=False,
+    pyref_policy: Optional[serialization.PyrefPolicy] = None
+) -> config.Buildable:
+  """Returns a fdl.Buildable based on standardized flags.
+
+  Args:
+    module: A common namespace to use as the basis for finding configs and
+      fiddlers. May be `None`; if `None`, only fully qualified Fiddler imports
+      will be used (or alternatively a base configuration can be specified using
+      the `--fdl_config_file` flag.)
+    allow_imports: If true, then fully qualified dotted names may be used to
+      specify configs or fiddlers that should be automatically imported.
+    pyref_policy: An optional `serialization.PyrefPolicy` to use if parsing a
+      serialized Fiddle config (passed via `--fdl_config_file`).
+  """
+  missing_base_config = not _FDL_CONFIG.value and not _FDL_CONFIG_FILE.value
+  if not _FDL_HELP.value and missing_base_config:
+    raise app.UsageError(
+        'At least one of --fdl_config or --fdl_config_file is required.')
+  elif _FDL_CONFIG.value and _FDL_CONFIG_FILE.value:
+    raise app.UsageError(
+        '--fdl_config and --fdl_config_file are mutually exclusive.')
+
+  if _FDL_HELP.value:
+    _print_help(module, allow_imports)
+    if missing_base_config:
+      sys.exit()
+    _print_stderr()
+
+  if module is None and not allow_imports:
+    err_msg = (
+        'A module must be passed to `create_buildable_from_flags` to use the '
+        '`{flag}` flag unless `allow_imports` is `True`.')
+    if _FDL_CONFIG.value:
+      raise ValueError(err_msg.format(flag='--fdl_config'))
+    if _FIDDLER.value:
+      raise ValueError(err_msg.format(flag='--fiddler'))
+
+  if _FDL_CONFIG.value:
+    base_name = _FDL_CONFIG.value
+    if hasattr(module, base_name):
+      base_fn = getattr(module, base_name)
+    elif allow_imports:
+      try:
+        base_fn = _import_dotted_name(base_name)
+      except (ValueError, ModuleNotFoundError, AttributeError) as e:
+        raise ValueError(
+            f'Could not init a buildable from {base_name!r}: {e}') from e
+    else:
+      available_names = module_reflection.find_base_config_like_things(module)
+      raise ValueError(f'Could not init a buildable from {base_name!r}; '
+                       f'available names: {", ".join(available_names)}.')
+
+    if auto_config.is_auto_config(base_fn):
+      buildable = base_fn.as_buildable()
+    else:
+      buildable = base_fn()
+  elif _FDL_CONFIG_FILE.value:
+    with _FDL_CONFIG_FILE.value.open() as f:
+      buildable = serialization.load_json(f.read(), pyref_policy=pyref_policy)
   else:
-    available_names = module_reflection.find_base_config_like_things(module)
-    raise ValueError(f'Could not init a buildable from {base_name!r}; '
-                     f'available names: {", ".join(available_names)}.')
-  if hasattr(base_fn, 'as_buildable'):
-    buildable = base_fn.as_buildable()
-  else:
-    buildable = base_fn()
+    raise AssertionError('This should be unreachable.')
+
   apply_fiddlers_to(
       buildable, source_module=module, allow_imports=allow_imports)
   set_tags(buildable)
   apply_overrides_to(buildable)
+
   if _FDL_HELP.value:
-    print('Tags (override as --fdl_tag.<name>=<value>):\n\n', file=sys.stderr)
-    for tag in tagging.list_tags(buildable):
-      print(f' - {tag.name} ({tag.description})', file=sys.stderr)
-    print(
-        'Config values (override as --fdl.<name>=<value>):\n\n ',
-        printing.as_str_flattened(buildable).replace('\n', '\n  '),
-        file=sys.stderr)
+    _print_stderr('Tags (override as --fdl_tag.<name>=<value>):')
+    _print_stderr()
+    if tags := tagging.list_tags(buildable):
+      for tag in tags:
+        _print_stderr(f'  {tag.name} - {tag.description}')
+    else:
+      print('  No tags present in config.')
+    _print_stderr()
+    _print_stderr('Config values (override as --fdl.<name>=<value>): ')
+    _print_stderr()
+    _print_stderr(textwrap.indent(printing.as_str_flattened(buildable), '  '))
     sys.exit()
+
   return buildable

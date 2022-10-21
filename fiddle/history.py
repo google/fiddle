@@ -34,9 +34,12 @@ The history functionality has a few bits of non-trivial logic:
 
 import contextlib
 import dataclasses
+import enum
 import itertools
 import traceback
-from typing import Any, Callable, Iterator, Optional, Union
+from typing import Any, Callable, FrozenSet, Iterator, Optional, Set, Union
+
+from fiddle import tag_type
 
 # An incrementing counter to allow for time-travel debugging.
 _set_counter = itertools.count()
@@ -67,6 +70,7 @@ def _stacktrace_location_provider() -> Location:
   """
   for frame in reversed(traceback.extract_stack()):
     if (not frame.filename.endswith("fiddle/config.py") and
+        not frame.filename.endswith("fiddle/daglish.py") and
         not frame.filename.endswith("fiddle/history.py") and
         not frame.filename.endswith("fiddle/materialize.py")):
       return Location(
@@ -80,13 +84,25 @@ def _stacktrace_location_provider() -> Location:
 _location_provider: LocationProvider = _stacktrace_location_provider
 
 
-class _Sentinel:
-  """A unique marker class (and instance)."""
-  pass
+class _Deleted:
+  """A marker object to indicated deletion."""
+
+  def __repr__(self):
+    return "DELETED"
 
 
 # A marker object to record when a field was deleted.
-DELETED = _Sentinel()
+DELETED = _Deleted()
+
+
+class ChangeKind(enum.Enum):
+  """Indicates the kind of change that occurred to the parameter.
+
+  NEW_VALUE indicates the value of the parameter changed.
+  UPDATE_TAGS indicates the tag set was updated.
+  """
+  NEW_VALUE = 1
+  UPDATE_TAGS = 2
 
 
 @dataclasses.dataclass(frozen=True)
@@ -97,17 +113,20 @@ class HistoryEntry:
     sequence_id: The global sequence number, to allow ordering of history
       sequences across config objects.
     param_name: The parameter name for the history entry.
-    value: The new value of the field, or _unset_sentinal if the field was
-      `del`d.
+    kind: The kind of change that occurred, which influences the interpretation
+      of `value`.
+    new_value: The new value of the field, the updated set of tags, or DELETED
+      if the field was `del`d.
     location: The location in user code that made the modification.
   """
   sequence_id: int
   param_name: str
-  value: Union[Any, _Sentinel]
+  kind: ChangeKind
+  new_value: Union[Any, FrozenSet[tag_type.TagType], _Deleted]
   location: Location
 
 
-def entry(param_name: str, value: Union[_Sentinel, Any]) -> HistoryEntry:
+def new_value(param_name: str, value: Any) -> HistoryEntry:
   """Returns a newly constructed history entry.
 
   Args:
@@ -120,7 +139,44 @@ def entry(param_name: str, value: Union[_Sentinel, Any]) -> HistoryEntry:
   return HistoryEntry(
       sequence_id=next(_set_counter),
       param_name=param_name,
-      value=value,
+      kind=ChangeKind.NEW_VALUE,
+      new_value=value,
+      location=_location_provider())
+
+
+def deleted_value(param_name: str) -> HistoryEntry:
+  """Returns a newly constructed history entry.
+
+  Args:
+    param_name: The name of the config parameter the entry is associated with.
+
+  Returns:
+    The newly constructed HistoryEntry.
+  """
+  return HistoryEntry(
+      sequence_id=next(_set_counter),
+      param_name=param_name,
+      kind=ChangeKind.NEW_VALUE,
+      new_value=DELETED,
+      location=_location_provider())
+
+
+def update_tags(param_name: str,
+                updated_tags: Set[tag_type.TagType]) -> HistoryEntry:
+  """Returns a newly constructed history entry.
+
+  Args:
+    param_name: The name of the config parameter the entry is associated with.
+    updated_tags: The new set of tags associated with `param_name`.
+
+  Returns:
+    The newly constructed HistoryEntry.
+  """
+  return HistoryEntry(
+      sequence_id=next(_set_counter),
+      param_name=param_name,
+      kind=ChangeKind.UPDATE_TAGS,
+      new_value=frozenset(updated_tags),
       location=_location_provider())
 
 

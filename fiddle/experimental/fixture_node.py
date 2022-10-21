@@ -22,36 +22,38 @@ which are hard questions to answer well at the Fiddle library level.
 
 from typing import Any
 
-from fiddle import config as fdl_config
-from fiddle.experimental import daglish
+from fiddle import config as config_lib
+from fiddle.experimental import daglish_legacy
 
 
-class Fixture(fdl_config.Buildable):
+class FixtureNode(config_lib.Buildable):
 
   def __build__(self, *args: Any, **kwargs: Any):
     raise ValueError(
         "You must first materialize a Fiddle configuration that contains "
-        "Fixture nodes. Please call `config = fixture.materialize(config)`.")
+        "`FixtureNode`s. Please call "
+        "`config = fixture_node.materialize(config)`.")
 
 
 def materialize(config: Any):
-  """Invokes any Fixture nodes, resulting in low-level configuration.
+  """Invokes any `FixtureNode`s, resulting in low-level configuration.
 
   Args:
     config: fdl.Buildable object, or collection which may include Buildable
-      objects. Any Fixture nodes within this DAG will be invoked.
+      objects. Any `FixtureNode`s within this DAG will be invoked.
 
   Returns:
-    Lower-level configuration as a result of invoking `Fixture`s in `config`.
+    Lower-level configuration as a result of invoking `FixtureNode`s in
+    `config`.
   """
 
   def traverse_fn(unused_all_paths, unused_value):
     new_value = (yield)
-    if isinstance(new_value, Fixture):
+    if isinstance(new_value, FixtureNode):
       # TODO: If this proposal is taken forward, preserve
       # __argument_history__ as well.
-      return new_value.__fn_or_cls__(**new_value.__arguments__)
+      return config_lib.get_callable(new_value)(**new_value.__arguments__)
     else:
       return new_value
 
-  return daglish.memoized_traverse(traverse_fn, config)
+  return daglish_legacy.memoized_traverse(traverse_fn, config)

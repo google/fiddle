@@ -17,11 +17,14 @@
 import contextlib
 import threading
 
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, overload
 
-from fiddle import config
-from fiddle import tagging
-from fiddle.experimental import daglish
+from fiddle import config as config_lib
+from fiddle import daglish
+from fiddle import tag_type
+
+T = TypeVar('T')
+CallableProducingT = Callable[..., T]
 
 
 class _BuildGuardState(threading.local):
@@ -49,10 +52,15 @@ def _in_build():
 
 class BuildError(ValueError):
   """Error raised when building a Config fails."""
+  buildable: config_lib.Buildable
+  path_from_config_root: str
+  original_error: Exception
+  args: Tuple[Any, ...]
+  kwargs: Dict[str, Any]
 
   def __init__(
       self,
-      buildable: config.Buildable,
+      buildable: config_lib.Buildable,
       path_from_config_root: str,
       original_error: Exception,
       args: Tuple[Any, ...],
@@ -65,12 +73,67 @@ class BuildError(ValueError):
     self.args = args
     self.kwargs = kwargs
 
-  def __str__(self):
-    fn_or_cls_name = self.buildable.__fn_or_cls__.__qualname__
+  def __str__(self) -> str:
+    fn_or_cls_name = config_lib.get_callable(self.buildable).__qualname__
     return (f'Failed to construct or call {fn_or_cls_name} '
             f'(at {self.path_from_config_root}) with arguments\n'
             f'    args: {self.args}\n'
             f'    kwargs: {self.kwargs}')
+
+
+# Define typing overload for `build(Partial[T])`
+@overload
+def build(buildable: config_lib.Partial[T]) -> CallableProducingT:
+  ...
+
+
+# Define typing overload for `build(Partial)`
+@overload
+def build(buildable: config_lib.Partial) -> Callable[..., Any]:
+  ...
+
+
+# Define typing overload for `build(Config[T])`
+@overload
+def build(buildable: config_lib.Config[T]) -> T:
+  ...
+
+
+# Define typing overload for `build(Config)`
+@overload
+def build(buildable: config_lib.Config) -> Any:
+  ...
+
+
+# Define typing overload for `build(Buildable)`
+@overload
+def build(buildable: config_lib.Buildable) -> Any:
+  ...
+
+
+# Define typing overload for nested structures.
+@overload
+def build(buildable: Any) -> Any:
+  ...
+
+
+def _build(value: Any, state: Optional[daglish.State] = None) -> Any:
+  """Inner method / implementation of build()."""
+  state = state or daglish.MemoizedTraversal.begin(_build, value)
+
+  if isinstance(value, config_lib.Buildable):
+    sub_traversal = state.flattened_map_children(value)
+    metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
+    arguments = metadata.arguments(sub_traversal.values)
+    try:
+      return value.__build__(**arguments)
+    except tag_type.TaggedValueNotFilledError:
+      raise
+    except Exception as e:
+      path_str = '<root>' + daglish.path_str(state.current_path)
+      raise BuildError(value, path_str, e, (), arguments) from e
+  else:
+    return state.map_children(value)
 
 
 # This is a free function instead of a method on the `Buildable` object in order
@@ -102,29 +165,6 @@ def build(buildable):
   Returns:
     The built version of `buildable`.
   """
-  memo = {}
-
-  # The implementation here performs explicit recursion instead of using
-  # `daglish.memoized_traverse` in order to avoid unnecessary unflattening of
-  # `Buildable`s (which can cause errors for certain `Buildable` subclasses).
-  def traverse(value):
-    if id(value) not in memo:
-      if isinstance(value, config.Buildable):
-        arguments = daglish.map_children(traverse, value.__arguments__)
-        try:
-          memo[id(value)] = value.__build__(**arguments)
-        except tagging.TaggedValueNotFilledError:
-          raise
-        except Exception as e:
-          paths = daglish.collect_paths_by_id(buildable, memoizable_only=True)
-          path_str = '<root>' + daglish.path_str(paths[id(value)][0])
-          raise BuildError(value, path_str, e, (), arguments) from e
-      elif daglish.is_traversable_type(type(value)):
-        memo[id(value)] = daglish.map_children(traverse, value)
-      else:
-        memo[id(value)] = value
-
-    return memo[id(value)]
 
   with _in_build():
-    return traverse(buildable)
+    return _build(buildable)

@@ -17,19 +17,22 @@
 
 import abc
 import collections
+import copy
 import dataclasses
 import functools
 import html
 import itertools
 import types
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Type, NamedTuple, Set
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Type, Union
 
-from fiddle import config as fdl
+from fiddle import config as config_lib
+from fiddle import daglish
+from fiddle import diffing
+from fiddle import tag_type
 from fiddle import tagging
 from fiddle.codegen import formatting_utilities
-from fiddle.experimental import daglish
-from fiddle.experimental import diff as fdl_diff
+from fiddle.experimental import daglish_legacy
 import graphviz
 import typing_extensions
 
@@ -54,6 +57,8 @@ _BUILDABLE_INSTANCE_COLORS = [
 _DEFAULT_HEADER_COLOR = '#eeeeee'
 _DEFAULT_EDGE_COLOR = '#00000030'
 
+_TAG_COLOR = '#606060'
+
 # Colors for diffs.
 _DIFF_FILL_COLORS = {
     'del': '#ffc0c0:#ffa0a0',
@@ -61,6 +66,17 @@ _DIFF_FILL_COLORS = {
     None: '#dddddd:#bbbbbb'
 }
 _DIFF_EDGE_COLORS = {'del': '#ff000030', 'add': '#00a00030', None: '#00000030'}
+
+
+class _TrimmedSentinel:
+  """Sentinel object used to flag trimmed dictionaries when rendering diffs.
+
+  `d` was trimmed if `_TRIMMED_SENTINEL in d`, and `d[_TRIMMED_SENTINEL]` is the
+  number of items that were trimmed.
+  """
+
+
+_TRIMMED_SENTINEL = _TrimmedSentinel()
 
 
 class GraphvizRendererApi(typing_extensions.Protocol):
@@ -94,20 +110,26 @@ class _ChangedValue:
 
 
 @dataclasses.dataclass(frozen=True)
-class _BuildableWithModifiedCallable:
-  """Node to visualize a buildable whose __fn_or_cls__ was changed by a diff."""
-  buildable_type: Type[fdl.Buildable]
-  old_callable: Any
-  new_callable: Any
-  arguments: Dict[str, Any]
+class _AddedTag:
+  """Node to visualize tags added by a diff."""
+  tag: tag_type.TagType
 
 
 @dataclasses.dataclass(frozen=True)
-class _TaggedValueWithModifiedTags:
-  """Node to visualize TaggedValue whose tags were modified by a diff."""
-  old_tags: Set[Type[Any]]
-  new_tags: Set[Type[Any]]
-  value: Any
+class _RemovedTag:
+  """Node to visualize tags removed by a diff."""
+  tag: tag_type.TagType
+
+
+@dataclasses.dataclass
+class _ChangedBuildable:
+  """Node to visualize a buildable that was changed by a diff."""
+  buildable_type: Type[config_lib.Buildable]
+  old_callable: Any
+  new_callable: Any
+  arguments: Dict[str, Union[Any, _ChangedValue]]
+  tags: Dict[str, Set[Union[tag_type.TagType, _AddedTag, _RemovedTag]]]
+  trimmed: int = 0  # Number of trimmed arguments.
 
 
 # Function mapping value -> (header_color, edge_color).
@@ -235,6 +257,12 @@ class _GraphvizRenderer:
     header_td = self.tag('td', colspan=colspan, bgcolor=bgcolor, style=style)
     return tr(header_td(header))
 
+  def _config_header_style(self, config: config_lib.Buildable) -> str:
+    if isinstance(config, (config_lib.Partial, config_lib.ArgFactory)):
+      return 'dashed'
+    else:
+      return 'solid'
+
   def render(self, value: Any) -> graphviz.Graph:
     """Renders the given value, recursively rendering any nested values."""
     self._find_shared_value_ids(value)
@@ -256,14 +284,14 @@ class _GraphvizRenderer:
         self._shared_value_ids.add(id(value))
         return value
       elif isinstance(value, _ChangedValue):
-        daglish.traverse_with_path(visit, value.old_value)
-        daglish.traverse_with_path(visit, value.new_value)
-      elif isinstance(value, _BuildableWithModifiedCallable):
-        daglish.traverse_with_path(visit, value.arguments)
+        daglish_legacy.traverse_with_path(visit, value.old_value)
+        daglish_legacy.traverse_with_path(visit, value.new_value)
+      elif isinstance(value, _ChangedBuildable):
+        daglish_legacy.traverse_with_path(visit, value.arguments)
       visited_ids.add(id(value))
       return (yield)
 
-    daglish.traverse_with_path(visit, root)
+    daglish_legacy.traverse_with_path(visit, root)
 
   def _add_node_for_value(self, value: Any):
     """Adds a node for `value` to the graphviz graph `self._dot`.
@@ -280,10 +308,10 @@ class _GraphvizRenderer:
     self._current_id = next(self._config_counter)
     self._node_id_by_value_id[id(value)] = self._current_id
     html_label = self._render_value(value, self._color(value))
-    already_tabular_types = (fdl.Buildable, dict, list, tuple,
-                             _BuildableWithModifiedCallable)
+    already_tabular_types = (config_lib.Buildable, dict, list, tuple,
+                             _ChangedBuildable)
     if not (isinstance(value, already_tabular_types) or
-            daglish.is_namedtuple_instance(value)):
+            daglish_legacy.is_namedtuple_instance(value)):
       table = self.tag('table')
       tr = self.tag('tr')
       td = self.tag('td')
@@ -296,7 +324,7 @@ class _GraphvizRenderer:
 
     self._current_id = last_id
 
-  def _render_tagged_value(self, tagged_value: fdl.Buildable,
+  def _render_tagged_value(self, tagged_value: config_lib.Buildable,
                            bgcolor: str) -> str:
     """Returns an HTML string rendering `tagged_value`."""
     type_font = self.tag('font', point_size=8)
@@ -311,13 +339,17 @@ class _GraphvizRenderer:
     rendered_value = self._render_nested_value(tagged_value.value)
     return table([header, tr([value_td(rendered_value)])])
 
-  def _render_config(self, config: fdl.Buildable, bgcolor: str) -> str:
+  def _render_config(self, config: config_lib.Buildable, bgcolor: str) -> str:
     """Returns an HTML string rendering the Buildable `config`."""
     # Generate the header row.
-    style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
+    style = self._config_header_style(config)
     type_font = self.tag('font', point_size=8)
     type_name = config.__class__.__name__
-    fn_or_cls_name = config.__fn_or_cls__.__name__
+    fn_or_cls_name = getattr(
+        config_lib.get_callable(config), '__qualname__',
+        getattr(
+            config_lib.get_callable(config), '__name__',
+            repr(config_lib.get_callable(config))))
     title = (
         type_font(html.escape(f'{type_name}:')) + '&nbsp;' +
         html.escape(fn_or_cls_name))
@@ -326,18 +358,21 @@ class _GraphvizRenderer:
     # Generate the arguments table.
     if config.__arguments__:
       label = self._render_dict(
-          config.__arguments__, header=header, key_format_fn=str)
+          config.__arguments__,
+          header=header,
+          key_format_fn=str,
+          tags=config.__argument_tags__)
     else:
       table = self.tag('table')
       italics = self.tag('i')
       label = table([header, self._header_row(italics('no arguments'))])
     return label
 
-  def _render_buildable_with_modified_callable(self, config: fdl.Buildable,
-                                               bgcolor: str) -> str:
+  def _render_changed_buildable(self, config: config_lib.Buildable,
+                                bgcolor: str) -> str:
     """Returns an HTML string rendering the Buildable `config`."""
     # Generate the header row.
-    style = 'dashed' if isinstance(config, fdl.Partial) else 'solid'
+    style = self._config_header_style(config)
     type_font = self.tag('font', point_size=8)
     type_name = config.buildable_type.__name__
     table = self.tag('table', cellborder='0')
@@ -345,24 +380,34 @@ class _GraphvizRenderer:
     td = self.tag('td')
     td_old = self.tag('td', bgcolor=_DIFF_FILL_COLORS['del'])
     td_new = self.tag('td', bgcolor=_DIFF_FILL_COLORS['add'])
-    title = table(
-        tr([
-            td(type_font(html.escape(f'{type_name}:'))),
-            td_old(html.escape(config.old_callable.__name__)),
-            td('&rarr;'),
-            td_new(html.escape(config.new_callable.__name__))
-        ]))
+    if config.old_callable is config.new_callable:
+      title = (
+          type_font(html.escape(f'{type_name}:')) + '&nbsp;' +
+          html.escape(config.old_callable.__name__))
+    else:
+      title = table(
+          tr([
+              td(type_font(html.escape(f'{type_name}:'))),
+              td_old(html.escape(config.old_callable.__name__)),
+              td('&rarr;'),
+              td_new(html.escape(config.new_callable.__name__))
+          ]))
     header = self._header_row(title, bgcolor=bgcolor, style=style)
+    if config.trimmed:
+      footer = self._header_row(
+          self.tag('i')(f'(trimmed {config.trimmed} args)'))
+    elif not config.arguments:
+      footer = self._header_row(self.tag('i')('no arguments'))
+    else:
+      footer = None
 
     # Generate the arguments table.
-    if config.arguments:
-      label = self._render_dict(
-          config.arguments, header=header, key_format_fn=str)
-    else:
-      table = self.tag('table')
-      italics = self.tag('i')
-      label = table([header, self._header_row(italics('no arguments'))])
-    return label
+    return self._render_dict(
+        config.arguments,
+        header=header,
+        footer=footer,
+        key_format_fn=str,
+        tags=config.tags)
 
   def _render_value(self, value: Any, color=_DEFAULT_HEADER_COLOR) -> str:
     """Returns an HTML string rendering `value`."""
@@ -372,16 +417,16 @@ class _GraphvizRenderer:
       return value.__render_value__(self)
     elif isinstance(value, tagging.TaggedValueCls):
       return self._render_tagged_value(value, color)
-    elif isinstance(value, fdl.Buildable):
+    elif isinstance(value, config_lib.Buildable):
       return self._render_config(value, color)
     elif isinstance(value, _ChangedValue):
       return self._render_changed_value(value)
-    elif isinstance(value, _BuildableWithModifiedCallable):
-      return self._render_buildable_with_modified_callable(value, color)
+    elif isinstance(value, _ChangedBuildable):
+      return self._render_changed_buildable(value, color)
     elif isinstance(value, dict):
       return self._render_dict(
           value, header=self._header_row(type(value).__name__, bgcolor=color))
-    elif daglish.is_namedtuple_instance(value):
+    elif daglish_legacy.is_namedtuple_instance(value):
       return self._render_dict(
           value._asdict(),
           header=self._header_row(type(value).__name__, bgcolor=color),
@@ -411,7 +456,7 @@ class _GraphvizRenderer:
     """
     # If this is not a Buildable or shared value, then render it using
     # _render_value.
-    buildable_types = (fdl.Buildable, _BuildableWithModifiedCallable)
+    buildable_types = (config_lib.Buildable, _ChangedBuildable)
     if not (id(value) in self._shared_value_ids or
             (isinstance(value, buildable_types) and
              not isinstance(value, CustomGraphvizBuildable))):
@@ -437,7 +482,7 @@ class _GraphvizRenderer:
     self._dot.edge(f'{self._current_id}:{port}:c', f'{node_id}:c', **edge_attrs)
 
     # Return a table with a single colored cell, using the port name from above.
-    style = 'dashed' if isinstance(value, fdl.Partial) else 'solid'
+    style = self._config_header_style(value)
     table = self.tag('table', style=style)
     tr = self.tag('tr')
     td = self.tag('td', port=port, bgcolor=self._color(value), style=style)
@@ -451,36 +496,46 @@ class _GraphvizRenderer:
     td = self.tag('td')
     index_td = self.tag('td', cellpadding=0, bgcolor=_DEFAULT_HEADER_COLOR)
     index_font = self.tag('font', point_size=6)
+    ellipsis_td = self.tag('td', rowspan=2)
 
-    if not sequence:
-      return '[]' if isinstance(sequence, list) else '()'
+    type_name = type(sequence).__name__
+    if isinstance(sequence, diffing.ListPrefix):
+      type_name = 'Sequence'
+
+    if not sequence and not isinstance(sequence, diffing.ListPrefix):
+      return '[]'
 
     cells, indices = [], []
     for i, value in enumerate(sequence):
       cells.append(td(self._render_nested_value(value)))
       indices.append(index_td(index_font(i)))
+    if isinstance(sequence, diffing.ListPrefix):
+      sequence = list(sequence) + ['...']
+      cells.append(ellipsis_td('...'))
     row_stride = self._max_sequence_elements_per_row
     colspan = min(len(sequence), row_stride)
-    rows = [
-        self._header_row(
-            type(sequence).__name__, colspan=colspan, bgcolor=color)
-    ]
+    rows = [self._header_row(type_name, colspan=colspan, bgcolor=color)]
     for i in range(0, len(sequence), row_stride):
       rows.extend([tr(cells[i:i + row_stride]), tr(indices[i:i + row_stride])])
     return table(rows)
 
-  def _render_dict(self,
-                   dict_: Dict[str, Any],
-                   header: Optional[str] = None,
-                   key_format_fn: Callable[[Any], str] = repr) -> str:
+  def _render_dict(
+      self,
+      dict_: Dict[Union[str, _TrimmedSentinel], Any],
+      header: Optional[str] = None,
+      footer: Optional[str] = None,
+      key_format_fn: Callable[[Any], str] = repr,
+      tags: Optional[Dict[str, Set[tag_type.TagType]]] = None) -> str:
     """Renders the given `dict_` as an HTML table.
 
     Args:
       dict_: The `dict` to render.
       header: A table row containing a header row to include. The table row's
         table cell should have colspan="2" to render properly in the table.
+      footer: A table row containing a footer row to include.
       key_format_fn: A function to apply to dictionary keys to conver them into
         a string representation. Defaults to `repr`.
+      tags: Optional tags for dictionary entries.
 
     Returns:
       The HTML markup for the resulting table representing `dict_`.
@@ -490,11 +545,45 @@ class _GraphvizRenderer:
     key_td = self.tag('td', align='right', bgcolor=_DEFAULT_HEADER_COLOR)
     value_td = self.tag('td', align='left')
 
+    if tags is None:
+      tags = {}
+
     rows = [header] if header is not None else []
     for key, value in dict_.items():
-      key = key_format_fn(key)
-      rows.append(tr([key_td(key), value_td(self._render_nested_value(value))]))
+      if key is _TRIMMED_SENTINEL:
+        continue
+      key_str = html.escape(key_format_fn(key))
+      value_str = self._render_nested_value(value)
+      key_tags = tags.get(key, ())
+      if key_tags:
+        key_str = self._render_tags(key_str, key_tags)
+      rows.append(tr([key_td(key_str), value_td(value_str)]))
+    if _TRIMMED_SENTINEL in dict_:
+      rows.append(
+          self._header_row(
+              self.tag('i')(f'(trimmed {dict_[_TRIMMED_SENTINEL]} items)')))
+    if footer is not None:
+      rows.append(footer)
     return table(rows)
+
+  def _render_tags(self, arg_name, tags) -> str:
+    """Renders the name and tags for a Buildable argument to HTML markup."""
+    tag_table = self.tag('table', border='0', cellborder='0')
+    tag_font = self.tag('font', face='arial', color=_TAG_COLOR)
+    tr = self.tag('tr')
+    td = self.tag('td', align='right')
+    add_td = self.tag('td', align='right', bgcolor=_DIFF_FILL_COLORS['add'])
+    del_td = self.tag('td', align='right', bgcolor=_DIFF_FILL_COLORS['del'])
+    italic = self.tag('i')
+    rows = [tr(td(arg_name))]
+    for tag in sorted(tags, key=repr):
+      if isinstance(tag, _AddedTag):
+        rows.append(tr(add_td(tag_font(italic(['Tag: ', repr(tag.tag)])))))
+      elif isinstance(tag, _RemovedTag):
+        rows.append(tr(del_td(tag_font(italic(['Tag: ', repr(tag.tag)])))))
+      else:
+        rows.append(tr(td(tag_font(italic(['Tag: ', repr(tag)])))))
+    return tag_table(rows)
 
   def _render_leaf(self, value: Any) -> str:
     """Renders `value` as its `__repr__` string."""
@@ -539,23 +628,47 @@ def render(config: Any) -> graphviz.Graph:
   return _GraphvizRenderer().render(config)
 
 
-def render_diff(diff: fdl_diff.Diff, config: Any) -> graphviz.Graph:
-  """Renders the given `diff` as a `graphviz.Graph`.
+def render_diff(diff: Optional[diffing.Diff] = None,
+                *,
+                old: Optional[Any] = None,
+                new: Optional[Any] = None,
+                trim: bool = False) -> graphviz.Graph:
+  """Renders the given diff as a `graphviz.Graph`.
+
+  Should be called using one of the following signatures:
+    * `render_diff(diff=...)`
+    * `render_diff(diff=..., old=...)`
+    * `render_diff(old=..., new=...)`
 
   Args:
-    diff: The diff to render.
-    config: The structure modified by the diff.
+    diff: The diff to render.  If not specified, then the diff between `old` and
+      `new` will be computed and rendered.
+    old: The structure modified by the diff.  If not specified, then use a
+      minimal config that can be used as the source for the diff.
+    new: The result of the diff.  May not be specified if `diff` is specified.
+    trim: If true, then trim any unchanged `Config` nodes in the rendered result
+      (i.e., do not display their arguments).
 
   Returns:
-    A `graphviz.Graph` object containing the resulting rendering of `diff`.
+    A `graphviz.Graph` object containing the resulting rendering of the diff.
     Standard `graphviz` methods can then be used to export this to a file.
   """
-  # TODO: Make the `config` argument optional.  If not specified,
-  # then construct a skeleton based on all paths in `diff`, and use that
-  # as the `old` configuration for the diff.
-  config = _record_changed_values_from_diff(diff, config)
+  if ((diff is None and (old is None or new is None)) or
+      (diff is not None and new is not None)):
+    raise TypeError(
+        'render_diff must be called with one of the following signatures:\n'
+        '  * render_diff(diff=...)\n'
+        '  * render_diff(diff=..., old=...)\n'
+        '  * render_diff(old=..., new=...)')
+  if diff is None:
+    diff = diffing.build_diff(old, new)
+  if old is None:
+    old = diffing.skeleton_from_diff(diff)
+  config = _record_changed_values_from_diff(diff, old)
   old_value_ids = _find_old_value_ids(config)
   new_value_ids = _find_new_value_ids(config)
+  if trim:
+    _trim_diff(config, old_value_ids)
   fill_color = functools.partial(
       _diff_color,
       added_value_ids=new_value_ids - old_value_ids,
@@ -576,7 +689,7 @@ class _OldAndNewSharedValues(NamedTuple):
   new_shared_values: List[Any]
 
 
-def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
+def _record_changed_values_from_diff(diff: diffing.Diff, old: Any) -> Any:
   """Returns a copy of `old`, with `_ChangedValue` nodes used to show changes.
 
   Args:
@@ -590,20 +703,12 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
     if you traverse through `_ChangedValue` objects.
   """
   # Update `diff` to replace any references with the objects they point to.
-  diff = fdl_diff.resolve_diff_references(diff, old)
+  diff = diffing.resolve_diff_references(diff, old)
 
   # Index changes by their parent node.
   changes_by_parent = collections.defaultdict(list)
-  for target, change in diff.changes.items():
-    changes_by_parent[target[:-1]].append((target[-1], change))
-
-  # Find Buildables whose __fn_or_cls__ was modified.
-  buildables_with_modified_callable = {}
-  for target, change in diff.changes.items():
-    if (isinstance(change, fdl_diff.ModifyValue) and target and
-        target[-1] == daglish.BuildableFnOrCls()):
-      assert target[:-1] not in buildables_with_modified_callable
-      buildables_with_modified_callable[target[:-1]] = change.new_value
+  for change in diff.changes:
+    changes_by_parent[change.target[:-1]].append(change)
 
   # Traverse `old`, replacing any target of a `diff.change` with a
   # `_ChangedValue` object.  We do not fill in the `_ChangedValue.new_value`
@@ -620,31 +725,46 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
     # Changes only apply to `old`, not to `new_shared_values`:
     paths = [p[1:] for p in paths if p and p[0].name == 'old']
 
-    # If this value had its __fn_or_cls__ modified, then record that fact.
-    for path in paths:
-      new_callable = buildables_with_modified_callable.get(path)
-      if new_callable is not None:
-        transformed_value = _BuildableWithModifiedCallable(
-            type(transformed_value), transformed_value.__fn_or_cls__,
-            new_callable, transformed_value.__arguments__)
+    # If the value is a Buildable, then convert it to a _ChangedBuildable.
+    if isinstance(original_value, config_lib.Buildable):
+      transformed_value = _ChangedBuildable(
+          buildable_type=type(transformed_value),
+          old_callable=config_lib.get_callable(transformed_value),
+          new_callable=config_lib.get_callable(transformed_value),
+          arguments=transformed_value.__arguments__,
+          tags=copy.deepcopy(transformed_value.__argument_tags__))
 
     # If the value is a tuple, then temporarily convert it to a list so we
     # can modify it. If it's a namedtuple, then convert it to a SimpleNamespace.
-    if daglish.is_namedtuple_instance(original_value):
+    if daglish_legacy.is_namedtuple_instance(original_value):
       transformed_value = types.SimpleNamespace(**transformed_value._asdict())
     elif isinstance(original_value, tuple):
       transformed_value = list(transformed_value)
 
     # Record any changes to the children of this object.
     for path in paths:
-      for path_elt, change in changes_by_parent.get(path, ()):
-        if (isinstance(change, fdl_diff.ModifyValue) and
+      for change in changes_by_parent.get(path, ()):
+        path_elt = change.target[-1]
+        if (isinstance(change, diffing.ModifyValue) and
             isinstance(path_elt, daglish.BuildableFnOrCls)):
-          continue  # Handled elsewhere.
-        if isinstance(change, fdl_diff.SetValue):
+          transformed_value.new_callable = change.new_value
+          continue
+
+        if isinstance(change, diffing.AddTag):
+          tags = transformed_value.tags.setdefault(path_elt.name, set())
+          tags.add(_AddedTag(change.tag))
+          continue
+
+        elif isinstance(change, diffing.RemoveTag) and change.target:
+          tags = transformed_value.tags.setdefault(path_elt.name, set())
+          tags.difference_update([change.tag])
+          tags.add(_RemovedTag(change.tag))
+          continue
+
+        if isinstance(change, diffing.SetValue):
           old_child = _NoValue()
         else:
-          if isinstance(transformed_value, _BuildableWithModifiedCallable):
+          if isinstance(transformed_value, _ChangedBuildable):
             old_child = transformed_value.arguments[path_elt.name]
           else:
             old_child = path_elt.follow(transformed_value)
@@ -656,7 +776,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
         elif isinstance(path_elt, daglish.Key):
           transformed_value[path_elt.key] = child
         elif isinstance(path_elt, daglish.Attr):
-          if isinstance(transformed_value, _BuildableWithModifiedCallable):
+          if isinstance(transformed_value, _ChangedBuildable):
             transformed_value.arguments[path_elt.name] = child
           else:
             setattr(transformed_value, path_elt.name, child)
@@ -664,7 +784,7 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
           raise ValueError(f'Unexpected PathElement {path_elt}')
 
     # Convert transformed_value back to a tuple or NamedTuple, if necessary.
-    if daglish.is_namedtuple_instance(original_value):
+    if daglish_legacy.is_namedtuple_instance(original_value):
       transformed_value = type(original_value)(**transformed_value.__dict__)
     elif isinstance(original_value, tuple):
       transformed_value = type(original_value)(transformed_value)
@@ -675,21 +795,89 @@ def _record_changed_values_from_diff(diff: fdl_diff.Diff, old: Any) -> Any:
 
     return transformed_value
 
-  new_values = [
-      getattr(change, 'new_value', None) for change in diff.changes.values()
-  ]
+  new_values = [getattr(change, 'new_value', None) for change in diff.changes]
   old_and_new = _OldAndNewSharedValues(old, new_values)
-  result = daglish.memoized_traverse(record_change, old_and_new).old
+  result = daglish_legacy.memoized_traverse(record_change, old_and_new).old
 
   # Set the `_ChangedValue.new_value` values.  We need to do this in a second
   # pass, because the graph can contain cycles, and we need to make sure that
   # we use the transformed version of each new_value.
   for changed_value, change in changed_values:
-    if isinstance(change, (fdl_diff.SetValue, fdl_diff.ModifyValue)):
+    if isinstance(change, (diffing.SetValue, diffing.ModifyValue)):
       if daglish.is_memoizable(changed_value.new_value):
         changed_value.new_value = original_to_transformed[id(change.new_value)]
 
   return result
+
+
+def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
+  """Trims unchanged values from `structure_with_changed_values`.
+
+  Trims unchanged arguments w/ unmemoizable type (int, str, etc.).
+  Trims all arguments from `_ChangedBuildable`s with no changes.
+  A `_ChangedBuildable` is considered to have no changes if:
+
+  * It exists in old_value_ids (i.e., it was not added).
+  * Its tags and callable have not changed.
+  * None of its arguments contain a `_ChangedValue` or a `ChangedBuildable`
+    with changes.
+
+  Args:
+    structure_with_changed_values: The structure to trim.  Mutated in place.
+    old_value_ids: ids of all objects reachable via _ChangedValue.old_value.
+  """
+
+  def visit(value, state: daglish.State):
+    """Returns true if any child has changed."""
+    # Trim unchanged unmemoizable entries (int, str, etc.) from dicts.
+    if isinstance(value, dict) and id(value) in old_value_ids and value:
+      keep = {
+          name: val
+          for (name, val) in value.items()
+          if daglish.is_memoizable(val)
+      }
+      num_trimmed = len(value) - len(keep)
+      if num_trimmed > 1:
+        value.clear()
+        value.update(keep)
+        value[_TRIMMED_SENTINEL] = num_trimmed
+
+    if state.is_traversable(value):
+      subtraversal = state.flattened_map_children(value)
+      any_changed = any(subtraversal.values)
+      return any_changed
+    elif isinstance(value, _ChangedValue):
+      state.call(value.old_value, daglish.Attr('old_value'))
+      state.call(value.new_value, daglish.Attr('new_value'))
+      return True
+    elif isinstance(value, _ChangedBuildable):
+      args_changed = state.call(value.arguments, daglish.Attr('args'))
+      callable_changed = value.old_callable != value.new_callable
+      tags_changed = any(
+          isinstance(tag, (_AddedTag, _RemovedTag)) for tag in value.tags)
+      changed = args_changed or callable_changed or tags_changed
+      if id(value) in old_value_ids and value.arguments:
+        if not changed:
+          # This value is unchanged by the diff; trim all arguments.
+          value.trimmed = len(value.arguments)
+          value.arguments.clear()
+        else:
+          # Trim out any unchanged args w/ unmemoizable type (int, str, etc.)
+          # if it will save space.
+          remaining_args = {
+              name: val
+              for (name, val) in value.arguments.items()
+              if daglish.is_memoizable(val)
+          }
+          num_trimmed = len(value.arguments) - len(remaining_args)
+          if num_trimmed > 1:
+            value.trimmed = num_trimmed
+            value.arguments = remaining_args
+      return changed
+    else:
+      return False
+
+  daglish.MemoizedTraversal.run(visit, structure_with_changed_values)
 
 
 def _find_new_value_ids(structure_with_changed_values: Any) -> Set[int]:
@@ -701,14 +889,14 @@ def _find_new_value_ids(structure_with_changed_values: Any) -> Set[int]:
     if id(value) in new_value_ids:
       return
     if isinstance(value, _ChangedValue):
-      daglish.traverse_with_path(visit, value.new_value)
-    elif isinstance(value, _BuildableWithModifiedCallable):
-      daglish.traverse_with_path(visit, value.arguments)
-    elif daglish.is_memoizable(value):
+      daglish_legacy.traverse_with_path(visit, value.new_value)
+    elif isinstance(value, _ChangedBuildable):
+      daglish_legacy.traverse_with_path(visit, value.arguments)
+    if daglish.is_memoizable(value):
       new_value_ids.add(id(value))
     return (yield)
 
-  daglish.traverse_with_path(visit, structure_with_changed_values)
+  daglish_legacy.traverse_with_path(visit, structure_with_changed_values)
   return new_value_ids
 
 
@@ -721,14 +909,14 @@ def _find_old_value_ids(structure_with_changed_values: Any) -> Set[int]:
     if id(value) in old_value_ids:
       return
     if isinstance(value, _ChangedValue):
-      daglish.traverse_with_path(visit, value.old_value)
-    elif isinstance(value, _BuildableWithModifiedCallable):
-      daglish.traverse_with_path(visit, value.arguments)
-    elif daglish.is_memoizable(value):
+      daglish_legacy.traverse_with_path(visit, value.old_value)
+    elif isinstance(value, _ChangedBuildable):
+      daglish_legacy.traverse_with_path(visit, value.arguments)
+    if daglish.is_memoizable(value):
       old_value_ids.add(id(value))
     return (yield)
 
-  daglish.traverse_with_path(visit, structure_with_changed_values)
+  daglish_legacy.traverse_with_path(visit, structure_with_changed_values)
   return old_value_ids
 
 

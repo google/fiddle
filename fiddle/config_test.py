@@ -16,27 +16,28 @@
 """Tests for the `fiddle.config` module."""
 
 import copy
+import dataclasses
 import functools
 import pickle
 import threading
 from typing import Any, Callable, Dict
 
 from absl.testing import absltest
-from fiddle import building
-from fiddle import config
+import fiddle as fdl
+from fiddle import arg_factory
+from fiddle import config as config_lib
+from fiddle import daglish
 from fiddle import history
-from fiddle import tagging
-from fiddle.experimental import daglish
+from fiddle.experimental import daglish_legacy
 
 import pytype_extensions
-import tree
 
 
-class Tag1(tagging.Tag):
+class Tag1(fdl.Tag):
   """One tag."""
 
 
-class Tag2(tagging.Tag):
+class Tag2(fdl.Tag):
   """Another tag."""
 
 
@@ -126,7 +127,7 @@ class FiddleInitIncompatibleChild(FiddleInitClassMethod):
   def __fiddle_init__(cls, cfg):
     # Since FiddleInitClassMethod has different init arguments, we cannot call
     # super().__fiddle_init__(cfg).
-    super_cfg = config.Config(FiddleInitClassMethod)
+    super_cfg = fdl.Config(FiddleInitClassMethod)
     cfg.b = super_cfg.y + 3  # Demonstrate copying over.
 
 
@@ -136,24 +137,24 @@ class FiddleInitIncompatibleChildBroken(FiddleInitClassMethod):
     pass
 
 
-def make_typed_config() -> config.Config[SampleClass]:
-  """Helper function which returns a config.Config whose type is known."""
-  return config.Config(SampleClass, arg1=1, arg2=2)
+def make_typed_config() -> fdl.Config[SampleClass]:
+  """Helper function which returns a fdl.Config whose type is known."""
+  return fdl.Config(SampleClass, arg1=1, arg2=2)
 
 
-def make_untyped_config(arg_to_configure, **kwargs) -> config.Config:
-  """Helper function which returns an untyped config.Config."""
-  return config.Config(arg_to_configure, **kwargs)
+def make_untyped_config(arg_to_configure, **kwargs) -> fdl.Config:
+  """Helper function which returns an untyped fdl.Config."""
+  return fdl.Config(arg_to_configure, **kwargs)
 
 
-def make_typed_partial() -> config.Partial[SampleClass]:
+def make_typed_partial() -> fdl.Partial[SampleClass]:
   """Helper function to create a typed Partial instance."""
-  return config.Partial(SampleClass, arg1=1)
+  return fdl.Partial(SampleClass, arg1=1)
 
 
-def make_untyped_partial(arg_to_configure, **kwargs) -> config.Partial:
-  """Helper function which returns an untyped config.Config."""
-  return config.Partial(arg_to_configure, **kwargs)
+def make_untyped_partial(arg_to_configure, **kwargs) -> fdl.Partial:
+  """Helper function which returns an untyped fdl.Config."""
+  return fdl.Partial(arg_to_configure, **kwargs)
 
 
 class Unserializable:
@@ -166,11 +167,21 @@ def _test_fn_unserializable_default(x=Unserializable()):
   return x
 
 
+@dataclasses.dataclass
+class DataclassChild:
+  x: int = 0
+
+
+@dataclasses.dataclass
+class DataclassParent:
+  child: DataclassChild = dataclasses.field(default_factory=DataclassChild)
+
+
 class ConfigTest(absltest.TestCase):
 
   def test_config_for_classes(self):
-    class_config = config.Config(SampleClass, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(class_config, config.Config[SampleClass])
+    class_config = fdl.Config(SampleClass, 1, kwarg2='kwarg2')
+    pytype_extensions.assert_type(class_config, fdl.Config[SampleClass])
     self.assertEqual(class_config.arg1, 1)
     self.assertEqual(class_config.kwarg2, 'kwarg2')
     class_config.arg1 = 'arg1'
@@ -178,7 +189,7 @@ class ConfigTest(absltest.TestCase):
     class_config.arg2 = 'arg2'
     class_config.kwarg1 = 'kwarg1'
 
-    instance = building.build(class_config)
+    instance = fdl.build(class_config)
     pytype_extensions.assert_type(instance, SampleClass)
     self.assertEqual(instance.arg1, 'arg1')
     self.assertEqual(instance.arg2, 'arg2')
@@ -186,8 +197,8 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(instance.kwarg2, 'kwarg2')
 
   def test_config_for_functions(self):
-    fn_config = config.Config(basic_fn, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(fn_config, config.Config[Dict[str, Any]])
+    fn_config = fdl.Config(basic_fn, 1, kwarg2='kwarg2')
+    pytype_extensions.assert_type(fn_config, fdl.Config[Dict[str, Any]])
     self.assertEqual(fn_config.arg1, 1)
     self.assertEqual(fn_config.kwarg2, 'kwarg2')
     fn_config.arg1 = 'arg1'
@@ -195,7 +206,7 @@ class ConfigTest(absltest.TestCase):
     fn_config.arg2 = 'arg2'
     fn_config.kwarg1 = 'kwarg1'
 
-    result = building.build(fn_config)
+    result = fdl.build(fn_config)
     pytype_extensions.assert_type(result, Dict[str, Any])
     self.assertEqual(result, {
         'arg1': 'arg1',
@@ -205,27 +216,27 @@ class ConfigTest(absltest.TestCase):
     })
 
   def test_config_for_functions_with_var_args(self):
-    fn_config = config.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')
-    pytype_extensions.assert_type(fn_config, config.Config)
-    fn_args = building.build(fn_config)
+    fn_config = fdl.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')
+    pytype_extensions.assert_type(fn_config, fdl.Config)
+    fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
 
     fn_config.arg1 = 'new_arg1'
     fn_config.kwarg1 = 'new_kwarg1'
-    fn_args = building.build(fn_config)
+    fn_args = fdl.build(fn_config)
     pytype_extensions.assert_type(fn_args, Any)
     self.assertEqual(fn_args['arg1'], 'new_arg1')
     self.assertEqual(fn_args['kwarg1'], 'new_kwarg1')
 
   def test_config_for_functions_with_var_kwargs(self):
-    fn_config = config.Config(
+    fn_config = fdl.Config(
         fn_with_var_kwargs,
         'arg1',
         kwarg1='kwarg1',
         kwarg2='kwarg2',
         kwarg3='kwarg3')
-    fn_args = building.build(fn_config)
+    fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
     self.assertEqual(fn_args['kwargs'], {
@@ -235,7 +246,7 @@ class ConfigTest(absltest.TestCase):
 
     fn_config.kwarg1 = 'new_kwarg1'
     fn_config.kwarg3 = 'new_kwarg3'
-    fn_args = building.build(fn_config)
+    fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['kwarg1'], 'new_kwarg1')
     self.assertEqual(fn_args['kwargs'], {
         'kwarg2': 'kwarg2',
@@ -243,32 +254,32 @@ class ConfigTest(absltest.TestCase):
     })
 
   def test_config_for_functions_with_var_args_and_kwargs(self):
-    fn_config = config.Config(fn_with_var_args_and_kwargs, arg1='arg1')
-    fn_args = building.build(fn_config)
+    fn_config = fdl.Config(fn_with_var_args_and_kwargs, arg1='arg1')
+    fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
 
     fn_config.args = 'kwarg_called_arg'
     fn_config.kwargs = 'kwarg_called_kwarg'
-    fn_args = building.build(fn_config)
+    fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['kwargs'], {
         'args': 'kwarg_called_arg',
         'kwargs': 'kwarg_called_kwarg'
     })
 
   def test_fiddle_init_config_static(self):
-    cfg = config.Config(FiddleInitStaticMethod)
+    cfg = fdl.Config(FiddleInitStaticMethod)
     self.assertEqual(5, cfg.z)
     cfg.x = 1
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertIsInstance(obj, FiddleInitStaticMethod)
     self.assertEqual(1, obj.x)
     self.assertEqual(3, obj.y)
     self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
 
   def test_fiddle_init_partial_static(self):
-    cfg = config.Partial(FiddleInitStaticMethod)
+    cfg = fdl.Partial(FiddleInitStaticMethod)
     self.assertEqual(5, cfg.z)
-    partial = building.build(cfg)
+    partial = fdl.build(cfg)
     obj = partial(x=1)
     self.assertIsInstance(obj, FiddleInitStaticMethod)
     self.assertEqual(1, obj.x)
@@ -276,12 +287,12 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
 
   def test_fiddle_init_config_static_subclass(self):
-    cfg = config.Config(FiddleInitStaticMethodChild)
+    cfg = fdl.Config(FiddleInitStaticMethodChild)
     self.assertEqual(3, cfg.y)
     self.assertEqual(5, cfg.z)
     self.assertEqual(42, cfg.w)
     cfg.x = 1
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertIsInstance(obj, FiddleInitStaticMethodChild)
     self.assertEqual(42, obj.w)  # pytype: disable=attribute-error
     self.assertEqual(1, obj.x)
@@ -289,18 +300,18 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(5, cfg.z)  # pytype: disable=attribute-error
 
   def test_fiddle_init_config_class(self):
-    cfg = config.Config(FiddleInitClassMethod, 1)
+    cfg = fdl.Config(FiddleInitClassMethod, 1)
     self.assertEqual(5, cfg.z)
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertIsInstance(obj, FiddleInitClassMethod)
     self.assertEqual(1, obj.x)
     self.assertEqual(3, obj.y)
     self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
 
   def test_fiddle_init_partial_class(self):
-    cfg = config.Partial(FiddleInitClassMethod, 1)
+    cfg = fdl.Partial(FiddleInitClassMethod, 1)
     self.assertEqual(5, cfg.z)
-    partial = building.build(cfg)
+    partial = fdl.build(cfg)
     obj = partial(x=1)
     self.assertIsInstance(obj, FiddleInitClassMethod)
     self.assertEqual(1, obj.x)
@@ -308,10 +319,10 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(5, obj.z)  # pytype: disable=attribute-error
 
   def test_fiddle_init_config_subclass(self):
-    cfg = config.Config(FiddleInitClassMethodChild, 0)
+    cfg = fdl.Config(FiddleInitClassMethodChild, 0)
     self.assertEqual(5, cfg.z)
     self.assertEqual(10, cfg.w)
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertIsInstance(obj, FiddleInitClassMethodChild)
     self.assertEqual(0, obj.x)
     self.assertEqual(3, obj.y)
@@ -319,10 +330,10 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(10, obj.w)  # pytype: disable=attribute-error
 
   def test_fiddle_init_incompatible_subclass(self):
-    cfg = config.Config(FiddleInitIncompatibleChild)
+    cfg = fdl.Config(FiddleInitIncompatibleChild)
     self.assertEqual(6, cfg.b)
     cfg.a = 8
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertIsInstance(obj, FiddleInitIncompatibleChild)
     self.assertEqual(8, obj.a)
     self.assertEqual(9, obj.x)
@@ -333,23 +344,23 @@ class ConfigTest(absltest.TestCase):
   def test_fiddle_init_incompatible_broken(self):
     with self.assertRaisesRegex(
         TypeError, 'No parameter named.*; valid parameter names: a, b'):
-      _ = config.Config(FiddleInitIncompatibleChildBroken)
+      _ = fdl.Config(FiddleInitIncompatibleChildBroken)
 
   def test_config_with_default_args(self):
 
     def my_func(x: int = 2, y: str = 'abc'):  # pylint: disable=unused-argument
       return locals()
 
-    cfg = config.Config(my_func)
+    cfg = fdl.Config(my_func)
     self.assertEqual(2, cfg.x)
     self.assertEqual('abc', cfg.y)
 
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertEqual(2, obj['x'])
     self.assertEqual('abc', obj['y'])
 
     cfg.y = 'xyz'
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     self.assertEqual(2, obj['x'])
     self.assertEqual('xyz', obj['y'])
 
@@ -358,13 +369,13 @@ class ConfigTest(absltest.TestCase):
     def my_func(x: int, y: str = 'abc', z: float = 2.0):  # pylint: disable=unused-argument
       return locals()
 
-    cfg = config.Config(my_func)
+    cfg = fdl.Config(my_func)
 
     self.assertEqual('abc', cfg.y)  # Should return the default.
     self.assertEqual({}, cfg.__arguments__)  # but not materialized.
 
     cfg.x = 42
-    output = building.build(cfg)
+    output = fdl.build(cfg)
 
     self.assertEqual({'x': 42, 'y': 'abc', 'z': 2.0}, output)
 
@@ -375,14 +386,14 @@ class ConfigTest(absltest.TestCase):
         'kwarg1': 'kw1',
         'kwarg2': 'kw2'
     }
-    fn_config1 = config.Config(basic_fn, *fn_config1_args.values())
+    fn_config1 = fdl.Config(basic_fn, *fn_config1_args.values())
 
-    class_config = config.Config(
-        SampleClass, arg1=config.Partial(fn_config1), arg2=fn_config1)
-    fn_config2 = config.Config(
-        basic_fn, arg1=config.Partial(class_config), arg2=class_config)
+    class_config = fdl.Config(
+        SampleClass, arg1=fdl.cast(fdl.Partial, fn_config1), arg2=fn_config1)
+    fn_config2 = fdl.Config(
+        basic_fn, arg1=fdl.cast(fdl.Partial, class_config), arg2=class_config)
 
-    fn_config2_args = building.build(fn_config2)
+    fn_config2_args = fdl.build(fn_config2)
 
     test_class_partial = fn_config2_args['arg1']
     test_class_instance = test_class_partial()
@@ -396,40 +407,38 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(test_class_instance.arg2, fn_config1_args)
 
   def test_instance_sharing(self):
-    class_config = config.Config(
+    class_config = fdl.Config(
         SampleClass, 'arg1', 'arg2', kwarg1='kwarg1', kwarg2='kwarg2')
     class_config_copy = copy.copy(class_config)
     class_config_copy.arg1 = 'separate_arg1'
 
-    # Changing copied config parameters doesn't change the original config.
+    # Changing copied config parameters doesn't change the original fdl.
     self.assertEqual(class_config.arg1, 'arg1')
 
-    fn_config = config.Config(basic_fn, class_config_copy, {
+    fn_config = fdl.Config(basic_fn, class_config_copy, {
         'key1': [class_config, class_config],
         'key2': (class_config,)
     })
 
-    fn_args = building.build(fn_config)
+    fn_args = fdl.build(fn_config)
     separate_instance = fn_args['arg1']
     shared_instance = fn_args['arg2']['key1'][0]
     structure = fn_args['arg2']
 
     self.assertIsNot(shared_instance, separate_instance)
-    for leaf in tree.flatten(structure):
-      self.assertIs(leaf, shared_instance)
+    self.assertIs(structure['key1'][0], shared_instance)
+    self.assertIs(structure['key1'][1], shared_instance)
+    self.assertIs(structure['key2'][0], shared_instance)
 
     self.assertEqual(shared_instance.arg1, 'arg1')
     self.assertEqual(separate_instance.arg1, 'separate_arg1')
 
   def test_instance_sharing_collections(self):
-    child_configs = [
-        config.Config(basic_fn, 1, 'a'),
-        config.Config(basic_fn, 2, 'b')
-    ]
-    cfg = config.Config(SampleClass)
+    child_configs = [fdl.Config(basic_fn, 1, 'a'), fdl.Config(basic_fn, 2, 'b')]
+    cfg = fdl.Config(SampleClass)
     cfg.arg1 = child_configs
     cfg.arg2 = child_configs
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
 
     self.assertIsInstance(obj, SampleClass)
     self.assertIs(obj.arg1, obj.arg2)
@@ -437,8 +446,8 @@ class ConfigTest(absltest.TestCase):
     self.assertIs(obj.arg1[1], obj.arg2[1])
 
   def test_shallow_copy(self):
-    class_config = config.Config(SampleClass, 'arg1', 'arg2')
-    fn_config = config.Config(basic_fn, class_config, 'fn_arg2')
+    class_config = fdl.Config(SampleClass, 'arg1', 'arg2')
+    fn_config = fdl.Config(basic_fn, class_config, 'fn_arg2')
     fn_config_copy = copy.copy(fn_config)
     # Changing the copy doesn't change the original.
     fn_config_copy.arg2 = 'fn_arg2_copy'
@@ -449,7 +458,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_buildable_subclass(self):
 
-    class SampleClassConfig(config.Config):
+    class SampleClassConfig(fdl.Config):
 
       def __init__(self, *args, **kwargs):
         super().__init__(SampleClass, *args, **kwargs)
@@ -476,7 +485,8 @@ class ConfigTest(absltest.TestCase):
       self.assertNotEqual(cfg, cfg_deepcopy)
 
     with self.subTest('traverse'):
-      values_by_path = daglish.collect_value_by_path(cfg, memoizable_only=False)
+      values_by_path = daglish_legacy.collect_value_by_path(
+          cfg, memoizable_only=False)
       values_by_path_str = {
           daglish.path_str(path): value
           for path, value in values_by_path.items()
@@ -491,8 +501,8 @@ class ConfigTest(absltest.TestCase):
       self.assertEqual(expected, values_by_path_str)
 
   def test_deep_copy(self):
-    class_config = config.Config(SampleClass, 'arg1', 'arg2')
-    fn_config = config.Config(basic_fn, class_config, 'fn_arg2')
+    class_config = fdl.Config(SampleClass, 'arg1', 'arg2')
+    fn_config = fdl.Config(basic_fn, class_config, 'fn_arg2')
     fn_config_copy = copy.deepcopy(fn_config)
     # Changing the copy doesn't change the original.
     fn_config_copy.arg2 = 'fn_arg2_copy'
@@ -502,25 +512,27 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(fn_config.arg1.arg2, 'arg2')
 
   def test_deep_copy_preserves_instance_sharing(self):
-    class_config = config.Config(SampleClass, 'arg1', 'arg2')
-    fn_config = config.Config(basic_fn, arg1=class_config, arg2=class_config)
+    class_config = fdl.Config(SampleClass, 'arg1', 'arg2')
+    fn_config = fdl.Config(basic_fn, arg1=class_config, arg2=class_config)
     self.assertIs(fn_config.arg1, fn_config.arg2)
     fn_config_copy = copy.deepcopy(fn_config)
     self.assertIsNot(fn_config.arg1, fn_config_copy.arg1)
     self.assertIs(fn_config_copy.arg1, fn_config_copy.arg2)
 
   def test_deep_copy_partials(self):
-    class_partial = config.Partial(SampleClass, 'arg1', 'arg2')
-    fn_config = config.Config(
-        basic_fn, arg1=class_partial(), arg2=class_partial())
+    class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
+    fn_config = fdl.Config(
+        basic_fn,
+        arg1=fdl.cast(fdl.Config, class_partial),
+        arg2=fdl.cast(fdl.Config, class_partial))
     self.assertIsNot(fn_config.arg1, fn_config.arg2)
     fn_config_copy = copy.deepcopy(fn_config)
     self.assertIsNot(fn_config_copy.arg1, fn_config_copy.arg2)
     self.assertIsNot(fn_config.arg1, fn_config_copy.arg1)
 
   def test_equality_arguments(self):
-    cfg1 = config.Config(SampleClass, 'arg1')
-    cfg2 = config.Config(SampleClass, 'arg1')
+    cfg1 = fdl.Config(SampleClass, 'arg1')
+    cfg2 = fdl.Config(SampleClass, 'arg1')
     self.assertEqual(cfg1, cfg2)
     cfg2.arg1 = 'arg2'
     self.assertNotEqual(cfg1, cfg2)
@@ -528,16 +540,16 @@ class ConfigTest(absltest.TestCase):
   def test_equality_arguments_nested(self):
 
     def make_nested_config():
-      fn_config1 = config.Config(
+      fn_config1 = fdl.Config(
           basic_fn,
           arg1='innermost1',
           arg2='innermost2',
           kwarg1='kw1',
           kwarg2='kw2')
-      class_config = config.Config(
-          SampleClass, arg1=config.Partial(fn_config1), arg2=fn_config1)
-      fn_config2 = config.Config(
-          basic_fn, arg1=config.Partial(class_config), arg2=class_config)
+      class_config = fdl.Config(
+          SampleClass, arg1=fdl.cast(fdl.Partial, fn_config1), arg2=fn_config1)
+      fn_config2 = fdl.Config(
+          basic_fn, arg1=fdl.cast(fdl.Partial, class_config), arg2=class_config)
       return fn_config2
 
     cfg1 = make_nested_config()
@@ -549,25 +561,25 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(cfg1, cfg2)
 
   def test_equality_fn_or_cls_mismatch(self):
-    cls_cfg = config.Config(SampleClass, 'arg1')
-    fn_cfg = config.Config(basic_fn, 'arg1')
+    cls_cfg = fdl.Config(SampleClass, 'arg1')
+    fn_cfg = fdl.Config(basic_fn, 'arg1')
     self.assertNotEqual(cls_cfg, fn_cfg)
 
   def test_equality_buildable_type_mismatch(self):
-    cfg = config.Config(SampleClass, 'arg1')
+    cfg = fdl.Config(SampleClass, 'arg1')
 
     # Compare to something that isn't a `Buildable`.
     self.assertNotEqual(cfg, 5)
 
     # Compare to a `Partial`.
-    partial = config.Partial(cfg)
+    partial = fdl.cast(fdl.Partial, cfg)
     self.assertNotEqual(cfg, partial)
 
     # Compare to a `Config` subclass.
-    class ConfigSubClass(config.Config):
+    class ConfigSubClass(fdl.Config):
       pass
 
-    cfg_subclass = ConfigSubClass(cfg)
+    cfg_subclass = fdl.cast(ConfigSubClass, cfg)
     self.assertNotEqual(cfg, cfg_subclass)
     # The logic governing how __eq__ is actually invoked from an == comparison
     # actually takes subclassing relationships into account and always calls
@@ -576,21 +588,21 @@ class ConfigTest(absltest.TestCase):
     self.assertFalse(cfg_subclass.__eq__(cfg))
 
   def test_equality_classmethods(self):
-    cfg_a = config.Config(SampleClass.a_classmethod)
-    cfg_b = config.Config(SampleClass.a_classmethod)
+    cfg_a = fdl.Config(SampleClass.a_classmethod)
+    cfg_b = fdl.Config(SampleClass.a_classmethod)
     self.assertEqual(cfg_a, cfg_b)
 
   def test_default_value_equality(self):
-    cfg1 = config.Config(SampleClass, 1, 2)
-    cfg2 = config.Config(SampleClass, 1, 2, None, kwarg2=None)
+    cfg1 = fdl.Config(SampleClass, 1, 2)
+    cfg2 = fdl.Config(SampleClass, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
-    cfg1 = config.Config(basic_fn, 1, 2)
-    cfg2 = config.Config(basic_fn, 1, 2, None, kwarg2=None)
+    cfg1 = fdl.Config(basic_fn, 1, 2)
+    cfg2 = fdl.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
   def test_unsetting_argument(self):
-    fn_config = config.Config(basic_fn)
+    fn_config = fdl.Config(basic_fn)
     fn_config.arg1 = 3
     fn_config.arg2 = 4
 
@@ -609,61 +621,75 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(4, fn_config.arg2)
 
   def test_tagging(self):
-    cfg = config.Config(SampleClass)
-    config.add_tag(cfg, 'arg1', Tag1)
+    cfg = fdl.Config(SampleClass)
+    fdl.add_tag(cfg, 'arg1', Tag1)
 
-    self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
-    self.assertEqual(frozenset([]), config.get_tags(cfg, 'arg2'))
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
+    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'arg2'))
 
-    config.add_tag(cfg, 'arg1', Tag2)
-    self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(cfg, 'arg1'))
+    fdl.add_tag(cfg, 'arg1', Tag2)
+    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'arg1'))
 
-    config.remove_tag(cfg, 'arg1', Tag2)
-    self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
+    fdl.remove_tag(cfg, 'arg1', Tag2)
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
 
     with self.assertRaisesRegex(ValueError, '.*not set.*'):
-      config.remove_tag(cfg, 'arg1', Tag2)
+      fdl.remove_tag(cfg, 'arg1', Tag2)
 
   def test_clear_tags(self):
-    cfg = config.Config(SampleClass)
-    config.add_tag(cfg, 'arg1', Tag1)
-    config.add_tag(cfg, 'arg1', Tag2)
-    config.clear_tags(cfg, 'arg1')
-    self.assertEqual(frozenset([]), config.get_tags(cfg, 'arg1'))
+    cfg = fdl.Config(SampleClass)
+    fdl.add_tag(cfg, 'arg1', Tag1)
+    fdl.add_tag(cfg, 'arg1', Tag2)
+    fdl.clear_tags(cfg, 'arg1')
+    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'arg1'))
 
   def test_set_tags(self):
-    cfg = config.Config(SampleClass)
-    config.add_tag(cfg, 'arg1', Tag1)
-    config.add_tag(cfg, 'arg1', Tag2)
-    config.set_tags(cfg, 'arg1', {Tag2})
-    self.assertEqual(frozenset([Tag2]), config.get_tags(cfg, 'arg1'))
+    cfg = fdl.Config(SampleClass)
+    fdl.add_tag(cfg, 'arg1', Tag1)
+    fdl.add_tag(cfg, 'arg1', Tag2)
+    fdl.set_tags(cfg, 'arg1', {Tag2})
+    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg, 'arg1'))
 
   def test_flatten_unflatten_tags(self):
-    cfg = config.Config(SampleClass)
-    config.add_tag(cfg, 'arg1', Tag1)
+    cfg = fdl.Config(SampleClass)
+    fdl.add_tag(cfg, 'arg1', Tag1)
     values, metadata = cfg.__flatten__()
-    copied = config.Config.__unflatten__(values, metadata)
-    config.add_tag(copied, 'arg1', Tag2)
-    self.assertEqual(frozenset([Tag1]), config.get_tags(cfg, 'arg1'))
-    self.assertEqual(frozenset([Tag1, Tag2]), config.get_tags(copied, 'arg1'))
+    copied = fdl.Config.__unflatten__(values, metadata)
+    fdl.add_tag(copied, 'arg1', Tag2)
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
+    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(copied, 'arg1'))
+
+  def test_flatten_unflatten_histories(self):
+    cfg = fdl.Config(SampleClass)
+    cfg.arg1 = 4
+    cfg.arg1 = 5
+    values, metadata = cfg.__flatten__()
+    copied = fdl.Config.__unflatten__(values, metadata)
+    self.assertEqual(
+        copied.__argument_history__['arg1'][-1].location.line_number,
+        cfg.__argument_history__['arg1'][-1].location.line_number)
+    self.assertEqual(copied.__argument_history__['arg1'][0].new_value, 4)
+    self.assertEqual(copied.__argument_history__['arg1'][1].new_value, 5)
+    self.assertEqual(copied.__argument_history__['arg1'][-1].kind,
+                     history.ChangeKind.NEW_VALUE)
 
   def test_dir_simple(self):
-    fn_config = config.Config(basic_fn)
+    fn_config = fdl.Config(basic_fn)
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(fn_config))
 
   def test_dir_cls(self):
-    cfg = config.Config(SampleClass)
+    cfg = fdl.Config(SampleClass)
     self.assertEqual(['arg1', 'arg2', 'kwarg1', 'kwarg2'], dir(cfg))
 
   def test_dir_var_args_and_kwargs(self):
-    varargs_config = config.Config(fn_with_var_args_and_kwargs)
+    varargs_config = fdl.Config(fn_with_var_args_and_kwargs)
     varargs_config.abc = '123'
     self.assertEqual(['abc', 'arg1', 'kwarg1'], dir(varargs_config))
 
   def test_partial_for_classes(self):
-    class_partial = config.Partial(SampleClass, 'arg1', 'arg2')
-    pytype_extensions.assert_type(class_partial, config.Partial[SampleClass])
-    partial = building.build(class_partial)
+    class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
+    pytype_extensions.assert_type(class_partial, fdl.Partial[SampleClass])
+    partial = fdl.build(class_partial)
     pytype_extensions.assert_type(partial, Callable[..., SampleClass])
     instance = partial()
     pytype_extensions.assert_type(instance, SampleClass)
@@ -679,8 +705,8 @@ class ConfigTest(absltest.TestCase):
     self.assertEqual(instance.kwarg1, 'new_kwarg1')
 
   def test_partial_for_functions(self):
-    fn_partial = config.Partial(basic_fn, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(fn_partial, config.Partial[Dict[str, Any]])
+    fn_partial = fdl.Partial(basic_fn, 1, kwarg2='kwarg2')
+    pytype_extensions.assert_type(fn_partial, fdl.Partial[Dict[str, Any]])
     self.assertEqual(fn_partial.arg1, 1)
     self.assertEqual(fn_partial.kwarg2, 'kwarg2')
     fn_partial.arg1 = 'arg1'
@@ -688,7 +714,7 @@ class ConfigTest(absltest.TestCase):
     fn_partial.arg2 = 'arg2'
     fn_partial.kwarg1 = 'kwarg1'
 
-    partial = building.build(fn_partial)
+    partial = fdl.build(fn_partial)
     pytype_extensions.assert_type(partial, Callable[..., Dict[str, Any]])
     value = partial()
     pytype_extensions.assert_type(value, Dict[str, Any])
@@ -701,24 +727,24 @@ class ConfigTest(absltest.TestCase):
 
   def test_typed_config(self):
     class_config = make_typed_config()
-    pytype_extensions.assert_type(class_config, config.Config[SampleClass])
-    instance = building.build(class_config)
+    pytype_extensions.assert_type(class_config, fdl.Config[SampleClass])
+    instance = fdl.build(class_config)
     pytype_extensions.assert_type(instance, SampleClass)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 2)
 
   def test_untyped_config(self):
     class_config = make_untyped_config(SampleClass, arg1=2, arg2=3)
-    pytype_extensions.assert_type(class_config, config.Config)
-    instance = building.build(class_config)
+    pytype_extensions.assert_type(class_config, fdl.Config)
+    instance = fdl.build(class_config)
     pytype_extensions.assert_type(instance, Any)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 3)
 
   def test_typed_partial(self):
     class_partial = make_typed_partial()
-    pytype_extensions.assert_type(class_partial, config.Partial[SampleClass])
-    partial = building.build(class_partial)
+    pytype_extensions.assert_type(class_partial, fdl.Partial[SampleClass])
+    partial = fdl.build(class_partial)
     pytype_extensions.assert_type(partial, Callable[..., SampleClass])
     instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 1)
@@ -726,27 +752,30 @@ class ConfigTest(absltest.TestCase):
 
   def test_untyped_partial(self):
     class_partial = make_untyped_partial(SampleClass, arg1=2)
-    pytype_extensions.assert_type(class_partial, config.Partial)
-    partial = building.build(class_partial)
+    pytype_extensions.assert_type(class_partial, fdl.Partial)
+    partial = fdl.build(class_partial)
     pytype_extensions.assert_type(partial, Callable[..., Any])
     instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 4)
 
-  def test_call_partial(self):
-    class_partial = config.Partial(SampleClass, 'arg1', 'arg2')
-    class_config = class_partial('new_arg1', kwarg1='new_kwarg1')
+  def test_convert_partial(self):
+    class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
+    class_config = fdl.cast(fdl.Config, class_partial)
+    class_config.arg1 = 'new_arg1'
     class_config.arg2 = 'new_arg2'
+    class_config.kwarg1 = 'new_kwarg1'
     self.assertEqual(class_partial.arg2, 'arg2')
-    instance = building.build(class_config)
+    instance = fdl.build(class_config)
     self.assertEqual(instance.arg1, 'new_arg1')
     self.assertEqual(instance.arg2, 'new_arg2')
     self.assertEqual(instance.kwarg1, 'new_kwarg1')
 
-  def test_call_partial_nested(self):
-    class_partial = config.Partial(SampleClass, 'arg1', 'arg2')
-    class_config = config.Config(SampleClass, class_partial(), class_partial())
-    instance = building.build(class_config)
+  def test_convert_partial_nested(self):
+    class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
+    class_config = fdl.Config(SampleClass, fdl.cast(fdl.Config, class_partial),
+                              fdl.cast(fdl.Config, class_partial))
+    instance = fdl.build(class_config)
     self.assertEqual(instance.arg1.arg1, 'arg1')
     self.assertEqual(instance.arg1.arg2, 'arg2')
     self.assertEqual(instance.arg2.arg1, 'arg1')
@@ -754,34 +783,61 @@ class ConfigTest(absltest.TestCase):
     self.assertIsNot(instance.arg1, instance.arg2)
 
   def test_repr_class_config(self):
-    class_config = config.Config(SampleClass, 1, 2, kwarg1='kwarg1')
+    class_config = fdl.Config(SampleClass, 1, 2, kwarg1='kwarg1')
     expected_repr = "<Config[SampleClass(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(class_config), expected_repr)
 
   def test_repr_fn_config(self):
-    fn_config = config.Config(basic_fn, 1, 2, kwarg1='kwarg1')
+    fn_config = fdl.Config(basic_fn, 1, 2, kwarg1='kwarg1')
     expected_repr = "<Config[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_config), expected_repr)
 
   def test_repr_class_partial(self):
-    class_partial = config.Partial(SampleClass, 1, 2, kwarg1='kwarg1')
+    class_partial = fdl.Partial(SampleClass, 1, 2, kwarg1='kwarg1')
     expected_repr = "<Partial[SampleClass(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(class_partial), expected_repr)
 
   def test_repr_fn_partial(self):
-    fn_partial = config.Partial(basic_fn, 1, 2, kwarg1='kwarg1')
+    fn_partial = fdl.Partial(basic_fn, 1, 2, kwarg1='kwarg1')
     expected_repr = "<Partial[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(fn_partial), expected_repr)
 
+  def test_repr_varkwargs(self):
+    # Note: in the repr, kwarg1 comes before x and y and z because kwarg1 is an
+    # explicit keyword parameter, while x, y, and z are **kwargs parameters.
+    cfg = fdl.Config(fn_with_var_kwargs, 1, x=2, z=3, y=4, kwarg1=5)
+    expected_repr = (
+        '<Config[fn_with_var_kwargs(arg1=1, kwarg1=5, x=2, z=3, y=4)]>')
+    self.assertEqual(repr(cfg), expected_repr)
+
+  def test_repr_class_tags(self):
+    config = fdl.Config(
+        SampleClass,
+        1,
+        kwarg1='kwarg1',
+        kwarg2=fdl.Config(
+            SampleClass, 'nested value might be large so ' +
+            'put tag next to param, not after value.'))
+    fdl.add_tag(config, 'arg1', Tag1)
+    fdl.add_tag(config, 'arg2', Tag2)
+    fdl.add_tag(config, 'kwarg2', Tag1)
+    fdl.add_tag(config, 'kwarg2', Tag2)
+    expected_repr = (
+        '<Config[SampleClass(arg1[#{module}.Tag1]=1, arg2[#{module}.Tag2], ' +
+        "kwarg1='kwarg1', kwarg2[#{module}.Tag1, #{module}.Tag2]=" +
+        "<Config[SampleClass(arg1='nested value might be large so put tag " +
+        "next to param, not after value.')]>)]>")
+    self.assertEqual(repr(config), expected_repr.format(module=__name__))
+
   def test_nonexistent_attribute_error(self):
-    class_config = config.Config(SampleClass, 1)
+    class_config = fdl.Config(SampleClass, 1)
     expected_msg = (r"No parameter 'nonexistent_arg' has been set on "
                     r'<Config\[SampleClass\(arg1=1\)\]>\.')
     with self.assertRaisesRegex(AttributeError, expected_msg):
       getattr(class_config, 'nonexistent_arg')
 
   def test_nonexistent_parameter_error(self):
-    class_config = config.Config(SampleClass)
+    class_config = fdl.Config(SampleClass)
     expected_msg = (r"No parameter named 'nonexistent_arg' exists for "
                     r"<class '.*\.SampleClass'>; valid parameter names: "
                     r'arg1, arg2, kwarg1, kwarg2\.')
@@ -789,7 +845,7 @@ class ConfigTest(absltest.TestCase):
       class_config.nonexistent_arg = 'error!'
 
   def test_nonexistent_var_args_parameter_error(self):
-    fn_config = config.Config(fn_with_var_args)
+    fn_config = fdl.Config(fn_with_var_args)
     expected_msg = (r'Variadic arguments \(e.g. \*args\) are not supported\.')
     with self.assertRaisesRegex(TypeError, expected_msg):
       fn_config.args = (1, 2, 3)
@@ -798,7 +854,7 @@ class ConfigTest(absltest.TestCase):
     expected_msg = (r'Variable positional arguments \(aka `\*args`\) not '
                     r'supported\.')
     with self.assertRaisesRegex(NotImplementedError, expected_msg):
-      config.Config(fn_with_var_args, 1, 2, 3)
+      fdl.Config(fn_with_var_args, 1, 2, 3)
 
   def test_build_inside_build(self):
 
@@ -806,18 +862,18 @@ class ConfigTest(absltest.TestCase):
       return str(x)
 
     def nest_call(x: int) -> str:
-      cfg = config.Config(inner_build, x)
-      return building.build(cfg)
+      cfg = fdl.Config(inner_build, x)
+      return fdl.build(cfg)
 
-    outer = config.Config(nest_call, 3)
+    outer = fdl.Config(nest_call, 3)
     expected_msg = r'test_build_inside_build.<locals>.nest_call \(at <root>\)'
-    with self.assertRaisesRegex(building.BuildError, expected_msg) as e:
-      building.build(outer)
+    with self.assertRaisesRegex(fdl.BuildError, expected_msg) as e:
+      fdl.build(outer)
     expected_msg = r'forbidden to call `fdl.build` inside another `fdl.build`'
     self.assertRegex(str(e.exception.__cause__), expected_msg)
 
   def test_history_tracking(self):
-    cfg = config.Config(SampleClass, 'arg1_value')
+    cfg = fdl.Config(SampleClass, 'arg1_value')
     cfg.arg2 = 'arg2_value'
     del cfg.arg1
 
@@ -827,17 +883,20 @@ class ConfigTest(absltest.TestCase):
     self.assertLen(cfg.__argument_history__['arg1'], 2)
     self.assertLen(cfg.__argument_history__['arg2'], 1)
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][0].param_name)
-    self.assertEqual('arg1_value', cfg.__argument_history__['arg1'][0].value)
+    self.assertEqual('arg1_value',
+                     cfg.__argument_history__['arg1'][0].new_value)
     self.assertRegex(
         str(cfg.__argument_history__['arg1'][0].location),
         r'config_test.py:\d+:test_history_tracking')
     self.assertEqual('arg2', cfg.__argument_history__['arg2'][0].param_name)
-    self.assertEqual('arg2_value', cfg.__argument_history__['arg2'][0].value)
+    self.assertEqual('arg2_value',
+                     cfg.__argument_history__['arg2'][0].new_value)
     self.assertRegex(
         str(cfg.__argument_history__['arg2'][0].location),
         r'config_test.py:\d+:test_history_tracking')
     self.assertEqual('arg1', cfg.__argument_history__['arg1'][1].param_name)
-    self.assertEqual(history.DELETED, cfg.__argument_history__['arg1'][1].value)
+    self.assertEqual(history.DELETED,
+                     cfg.__argument_history__['arg1'][1].new_value)
     self.assertRegex(
         str(cfg.__argument_history__['arg1'][1].location),
         r'config_test.py:\d+:test_history_tracking')
@@ -849,7 +908,7 @@ class ConfigTest(absltest.TestCase):
 
   def test_custom_location_history_tracking(self):
     with history.custom_location(lambda: 'abc:123'):
-      cfg = config.Config(SampleClass, 'arg1')
+      cfg = fdl.Config(SampleClass, 'arg1')
     cfg.arg2 = 'arg2'
     self.assertEqual(
         set(['arg1', 'arg2', '__fn_or_cls__']),
@@ -873,7 +932,7 @@ class ConfigTest(absltest.TestCase):
     to use them as if they were the actual built (underlying) objects.
     """
 
-    cfg = config.Config(SampleClass)
+    cfg = fdl.Config(SampleClass)
     expected_msg = 'a_method.*Note: .*SampleClass has an attribute/method with '
     with self.assertRaisesRegex(AttributeError, expected_msg):
       cfg.a_method()
@@ -883,44 +942,44 @@ class ConfigTest(absltest.TestCase):
   def test_unhashable(self):
     """All Buildable's should be unhashable: mutability and custom __eq__."""
     with self.assertRaisesRegex(TypeError, 'unhashable'):
-      _ = config.Config(SampleClass) in {}
+      _ = fdl.Config(SampleClass) in {}
     with self.assertRaisesRegex(TypeError, 'unhashable'):
-      _ = config.Partial(SampleClass) in {}
+      _ = fdl.Partial(SampleClass) in {}
 
   def test_pickling_config(self):
     """Bulidable types should be pickle-able."""
-    cfg = config.Config(SampleClass, 1, 'abc')
+    cfg = fdl.Config(SampleClass, 1, 'abc')
     self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
     reloaded = pickle.loads(pickle.dumps(cfg))
     reloaded.kwarg1 = 3  # mutate after unpickling.
     self.assertNotEqual(cfg, reloaded)
 
   def test_pickling_partial(self):
-    cfg = config.Partial(SampleClass)
+    cfg = fdl.Partial(SampleClass)
     cfg.arg1 = 'something'
     self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
 
   def test_pickling_composition(self):
-    cfg = config.Config(SampleClass, 1, 'abc')
-    cfg.kwarg2 = config.Partial(SampleClass)
+    cfg = fdl.Config(SampleClass, 1, 'abc')
+    cfg.kwarg2 = fdl.Partial(SampleClass)
     cfg.kwarg2.arg1 = 'something'
     self.assertEqual(cfg, pickle.loads(pickle.dumps(cfg)))
 
   def test_pickling_non_serializable_default(self):
-    pickle.dumps(config.Config(_test_fn_unserializable_default))
+    pickle.dumps(fdl.Config(_test_fn_unserializable_default))
 
   def test_build_nested_structure(self):
-    class_config = config.Config(SampleClass, 'arg1', 'arg2')
-    built = building.build([class_config, {'child': class_config}])
+    class_config = fdl.Config(SampleClass, 'arg1', 'arg2')
+    built = fdl.build([class_config, {'child': class_config}])
     self.assertIsInstance(built[0], SampleClass)
     self.assertEqual(built[0].arg1, 'arg1')
     self.assertEqual(built[0].arg2, 'arg2')
     self.assertIs(built[0], built[1]['child'])
 
   def test_build_raises_nice_error_too_few_args(self):
-    cfg = config.Config(basic_fn, config.Config(SampleClass, 1), 2)
-    with self.assertRaisesRegex(building.BuildError, '.*SampleClass.*') as e:
-      building.build(cfg)
+    cfg = fdl.Config(basic_fn, fdl.Config(SampleClass, 1), 2)
+    with self.assertRaisesRegex(fdl.BuildError, '.*SampleClass.*') as e:
+      fdl.build(cfg)
     self.assertIs(e.exception.buildable, cfg.arg1)
     self.assertEqual(e.exception.path_from_config_root, '<root>.arg1')
     self.assertIsInstance(e.exception.original_error, TypeError)
@@ -932,21 +991,21 @@ class ConfigTest(absltest.TestCase):
     def raise_error():
       raise ValueError('My fancy exception')
 
-    cfg = config.Config(raise_error)
+    cfg = fdl.Config(raise_error)
     with self.assertRaisesWithLiteralMatch(
-        building.BuildError, 'Failed to construct or call ConfigTest.'
+        fdl.BuildError, 'Failed to construct or call ConfigTest.'
         'test_build_raises_exception_on_call.<locals>.raise_error '
         '(at <root>) with arguments\n    args: ()\n    kwargs: {}'):
-      building.build(cfg)
+      fdl.build(cfg)
 
   def test_build_error_path(self):
     # This will raise an error, because it doesn't have one arg populated.
-    sub_cfg = config.Config(basic_fn, 1)
+    sub_cfg = fdl.Config(basic_fn, 1)
     sub_dict = {'a': 0, 'b': 2, 'c': sub_cfg, 'd': 10}
-    cfg = config.Config(fn_with_var_kwargs, [1, sub_dict])
+    cfg = fdl.Config(fn_with_var_kwargs, [1, sub_dict])
 
-    with self.assertRaises(building.BuildError) as e:
-      building.build(cfg)
+    with self.assertRaises(fdl.BuildError) as e:
+      fdl.build(cfg)
 
     self.assertEqual(e.exception.path_from_config_root, "<root>.arg1[1]['c']")
 
@@ -964,61 +1023,25 @@ class ConfigTest(absltest.TestCase):
         foreground_entered_build.wait()
         return x
 
-      cfg = config.Config(blocking_function, 3)
-      output = building.build(cfg)
+      cfg = fdl.Config(blocking_function, 3)
+      output = fdl.build(cfg)
 
     def blocking_function(x):
       foreground_entered_build.set()
       background_entered_build.wait()
       return x
 
-    cfg = config.Config(blocking_function, 1)
+    cfg = fdl.Config(blocking_function, 1)
     thread = threading.Thread(target=other_thread)
     thread.start()
-    obj = building.build(cfg)
+    obj = fdl.build(cfg)
     thread.join()
     self.assertEqual(1, obj)
     self.assertEqual(3, output)
 
-  def test_update_callable(self):
-    cfg = config.Config(basic_fn, 1, 'xyz', kwarg1='abc')
-    config.update_callable(cfg, SampleClass)
-    cfg.kwarg2 = '123'
-    obj = building.build(cfg)
-    self.assertIsInstance(obj, SampleClass)
-    self.assertEqual(1, obj.arg1)
-    self.assertEqual('xyz', obj.arg2)
-    self.assertEqual('abc', obj.kwarg1)
-    self.assertEqual('123', obj.kwarg2)
-
-  def test_update_callable_invalid_arg(self):
-    cfg = config.Config(fn_with_var_kwargs, abc='123', xyz='321')
-    with self.assertRaisesRegex(TypeError,
-                                r"have invalid arguments \['abc', 'xyz'\]"):
-      config.update_callable(cfg, SampleClass)
-
-  def test_update_callable_new_kwargs(self):
-    cfg = config.Config(SampleClass)
-    cfg.arg1 = 1
-    config.update_callable(cfg, fn_with_var_kwargs)
-    cfg.abc = '123'  # A **kwargs value should now be allowed.
-    self.assertEqual({
-        'arg1': 1,
-        'kwarg1': None,
-        'kwargs': {
-            'abc': '123'
-        }
-    }, building.build(cfg))
-
-  def test_update_callable_varargs(self):
-    cfg = config.Config(fn_with_var_kwargs, 1, 2)
-    with self.assertRaisesRegex(NotImplementedError,
-                                'Variable positional arguments'):
-      config.update_callable(cfg, fn_with_var_args_and_kwargs)
-
   def test_assign(self):
-    cfg = config.Config(fn_with_var_kwargs, 1, 2)
-    config.assign(cfg, a='a', b='b')
+    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
+    fdl.assign(cfg, a='a', b='b')
     self.assertEqual({
         'arg1': 1,
         'kwarg1': 2,
@@ -1026,12 +1049,344 @@ class ConfigTest(absltest.TestCase):
             'a': 'a',
             'b': 'b'
         }
-    }, building.build(cfg))
+    }, fdl.build(cfg))
 
   def test_assign_wrong_argument(self):
-    cfg = config.Config(basic_fn)
+    cfg = fdl.Config(basic_fn)
     with self.assertRaisesRegex(TypeError, 'not_there'):
-      config.assign(cfg, arg1=1, not_there=2)
+      fdl.assign(cfg, arg1=1, not_there=2)
+
+  def test_cast(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+    cfg2 = fdl.cast(fdl.Partial, cfg1)
+    self.assertIsInstance(cfg2, fdl.Partial)
+    self.assertEqual(fdl.get_callable(cfg1), fdl.get_callable(cfg2))
+    self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
+    self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
+
+  def test_copy_with(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+
+    expected_cfg1 = dict(arg1=1, kwarg1=2, kwargs=dict(c=[]))
+    expected_cfg2 = dict(arg1=5, kwarg1=2, kwargs=dict(a='a', b='b', c=[]))
+
+    with self.subTest('cfg1_value'):
+      self.assertEqual(expected_cfg1, fdl.build(cfg1))
+
+    with self.subTest('shallow_copy'):
+      cfg2 = fdl.copy_with(cfg1, arg1=5, a='a', b='b')
+      self.assertIsNot(cfg1, cfg2)
+      self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
+      self.assertIsNot(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertIs(cfg1.c, cfg2.c)  # Shallow copy.
+      self.assertEqual(expected_cfg2, fdl.build(cfg2))
+
+    with self.subTest('deep_copy'):
+      cfg2 = fdl.deepcopy_with(cfg1, arg1=5, a='a', b='b')
+      self.assertIsNot(cfg1, cfg2)
+      self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
+      self.assertIsNot(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
+      self.assertIsNot(cfg1.c, cfg2.c)  # Deep copy.
+      self.assertEqual(expected_cfg2, fdl.build(cfg2))
+
+  def test_copy_constructor_errors(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+    with self.assertRaises(ValueError):
+      fdl.Partial(cfg1)
+
+  def test_copy_constructor_with_updates_errors(self):
+    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])
+    fdl.add_tag(cfg1, 'arg1', Tag1)
+    with self.assertRaises(ValueError):
+      fdl.Partial(cfg1, 5, a='a', b='b')
+
+  def test_dataclass_default_factory(self):
+
+    cfg = fdl.Config(DataclassParent)
+
+    with self.subTest('read_default_is_error'):
+      expected_error = (
+          r"Can't get default value for dataclass field DataclassParent\.child "
+          r'since it uses a default_factory\.')
+      with self.assertRaisesRegex(ValueError, expected_error):
+        cfg.child.x = 5
+
+    with self.subTest('read_ok_after_override'):
+      cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
+      cfg.child.x = 5  # now it's ok to configure child.
+      self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
+
+  @absltest.skip('Enable this after dropping pyhon 3.7 support')
+  def test_config_for_fn_with_special_arg_names(self):
+    # The reason that these tests pass is that we use positional-only
+    # parameters for self, etc. in functions such as Config.__build__.
+    # If we used keyword-or-positional parameters instead, then these
+    # tests would fail with a "multiple values for argument" TypeError.
+
+    def f(self, fn_or_cls, buildable=0):
+      return self + fn_or_cls + buildable
+
+    cfg = fdl.Config(f)
+    cfg.self = 100
+    cfg.fn_or_cls = 200
+    self.assertEqual(fdl.build(cfg), 300)
+
+    fdl.assign(cfg, buildable=10)  # pytype: disable=duplicate-keyword-argument
+    self.assertEqual(fdl.build(cfg), 310)
+
+    cfg2 = fdl.Config(f, self=5, fn_or_cls=1)  # pytype: disable=duplicate-keyword-argument
+    self.assertEqual(fdl.build(cfg2), 6)
+
+
+class CallableApisTest(absltest.TestCase):
+
+  def test_update_callable(self):
+    cfg = fdl.Config(basic_fn, 1, 'xyz', kwarg1='abc')
+    fdl.update_callable(cfg, SampleClass)
+    cfg.kwarg2 = '123'
+    obj = fdl.build(cfg)
+    self.assertIsInstance(obj, SampleClass)
+    self.assertEqual(1, obj.arg1)
+    self.assertEqual('xyz', obj.arg2)
+    self.assertEqual('abc', obj.kwarg1)
+    self.assertEqual('123', obj.kwarg2)
+
+  def test_update_callable_invalid_arg(self):
+    cfg = fdl.Config(fn_with_var_kwargs, abc='123', xyz='321')
+    with self.assertRaisesRegex(TypeError,
+                                r"have invalid arguments \['abc', 'xyz'\]"):
+      fdl.update_callable(cfg, SampleClass)
+
+  def test_update_callable_new_kwargs(self):
+    cfg = fdl.Config(SampleClass)
+    cfg.arg1 = 1
+    fdl.update_callable(cfg, fn_with_var_kwargs)
+    cfg.abc = '123'  # A **kwargs value should now be allowed.
+    self.assertEqual({
+        'arg1': 1,
+        'kwarg1': None,
+        'kwargs': {
+            'abc': '123'
+        }
+    }, fdl.build(cfg))
+
+  def test_update_callable_varargs(self):
+    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
+    with self.assertRaisesRegex(NotImplementedError,
+                                'Variable positional arguments'):
+      fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
+
+  def test_get_callable(self):
+    cfg = fdl.Config(basic_fn)
+    self.assertIs(fdl.get_callable(cfg), basic_fn)
+
+
+class OrderedArgumentsTest(absltest.TestCase):
+
+  def test_ordered_arguments(self):
+    cfg = fdl.Config(fn_with_var_kwargs)
+    cfg.var_kwarg1 = 3
+    cfg.kwarg1 = 'hi'
+    cfg.arg1 = 4
+    cfg.var_kwarg2 = 0
+    self.assertEqual(
+        list(cfg.__arguments__.items()), [
+            ('var_kwarg1', 3),
+            ('kwarg1', 'hi'),
+            ('arg1', 4),
+            ('var_kwarg2', 0),
+        ])
+    self.assertEqual(
+        list(config_lib.ordered_arguments(cfg).items()), [
+            ('arg1', 4),
+            ('kwarg1', 'hi'),
+            ('var_kwarg1', 3),
+            ('var_kwarg2', 0),
+        ])
+
+    with self.subTest('path element and keys match up'):
+      _, metadata = cfg.__flatten__()
+      path_elements = cfg.__path_elements__()
+      self.assertEqual(
+          metadata.argument_names,
+          tuple(path_element.name for path_element in path_elements))
+
+
+class ArgFactoryTest(absltest.TestCase):
+
+  def test_build_argfactory(self):
+    """Build an ArgFactory(...)."""
+    cfg = fdl.ArgFactory(SampleClass, arg1=5)
+    value = fdl.build(cfg)
+    self.assertIsInstance(value.factory, functools.partial)
+    self.assertIs(value.factory.func, SampleClass)
+    self.assertEqual(value.factory.keywords, dict(arg1=5))
+    self.assertEqual(value.factory.args, ())
+
+  def test_build_partial_argfactory(self):
+    """Build a Partial(..., ArgFactory(...))."""
+    cfg = fdl.Partial(basic_fn, fdl.ArgFactory(DataclassChild))
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertPartialsEqual(partial_fn,
+                             arg_factory.partial(basic_fn, arg1=DataclassChild))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn(arg2=3)
+    v2 = partial_fn(arg2=3)
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1, dict(arg1=DataclassChild(), arg2=3, kwarg1=None, kwarg2=None))
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+
+  def test_build_partial_argfactory_argfactory(self):
+    """Build a Partial(..., ArgFactory(..., ArgFactory(...)))."""
+    cfg = fdl.Partial(basic_fn,
+                      fdl.ArgFactory(basic_fn, fdl.ArgFactory(DataclassChild)))
+    cfg.arg1.arg2 = 2
+    cfg.arg2 = 3
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertPartialsEqual(
+        partial_fn,
+        functools.partial(
+            arg_factory.partial(
+                basic_fn,
+                arg1=functools.partial(
+                    arg_factory.partial(basic_fn, arg1=DataclassChild),
+                    arg2=2)),
+            arg2=3))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1=dict(arg1=DataclassChild(), arg2=2, kwarg1=None, kwarg2=None),
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    self.assertIsInstance(v1['arg1'], dict)
+    self.assertIsInstance(v1['arg1']['arg1'], DataclassChild)
+
+    # Neither the dict nor the DataclassChild is shared.
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIsNot(v1['arg1']['arg1'], v2['arg1']['arg1'])
+
+  def test_build_partial_argfactory_config(self):
+    """Build a Partial(..., ArgFactory(..., Config(...)))."""
+    cfg = fdl.Partial(basic_fn,
+                      fdl.ArgFactory(basic_fn, fdl.Config(DataclassChild)))
+    cfg.arg1.arg2 = 2
+    cfg.arg2 = 3
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+    self.assertPartialsEqual(
+        partial_fn,
+        functools.partial(
+            arg_factory.partial(
+                basic_fn,
+                arg1=functools.partial(basic_fn, arg1=DataclassChild(),
+                                       arg2=2)),
+            arg2=3))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, v2)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1=dict(arg1=DataclassChild(), arg2=2, kwarg1=None, kwarg2=None),
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    self.assertIsInstance(v1['arg1'], dict)
+    self.assertIsInstance(v1['arg1']['arg1'], DataclassChild)
+
+    # The dict is not shared, but the DataclassChild *is* shared.
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIs(v1['arg1']['arg1'], v2['arg1']['arg1'])
+
+  def test_build_partial_tree_argfactory(self):
+    """Build a Partial(..., Tree(..., ArgFactory(...)))."""
+    cfg = fdl.Partial(basic_fn, {
+        'x': [[fdl.Config(object)],
+              fdl.ArgFactory(DataclassChild)],
+        'y': [1, 2, 3]
+    })
+    partial_fn = fdl.build(cfg)
+    self.assertTrue(arg_factory.is_arg_factory_partial(partial_fn))
+
+    # Run the partial twice, and check for shared values.
+    v1 = partial_fn(arg2=3)
+    v2 = partial_fn(arg2=3)
+    self.assertEqual(v1, v2)
+    obj = v1['arg1']['x'][0][0]  # created from fdl.Config(object)
+    self.assertEqual(
+        v1,
+        dict(
+            arg1={
+                'x': [[obj], DataclassChild()],
+                'y': [1, 2, 3]
+            },
+            arg2=3,
+            kwarg1=None,
+            kwarg2=None))
+    # The DataclassChild and its ancestors are not shared:
+    self.assertIsNot(v1['arg1'], v2['arg1'])
+    self.assertIsNot(v1['arg1']['x'], v2['arg1']['x'])
+    self.assertIsNot(v1['arg1']['x'][1], v2['arg1']['x'][1])
+    # But other parts of the tree (including the object created
+    # by fdl.Config) are shared:
+    self.assertIs(v1['arg1']['x'][0], v2['arg1']['x'][0])
+    self.assertIs(v1['arg1']['x'][0][0], obj)
+    self.assertIs(v2['arg1']['x'][0][0], obj)
+    self.assertIs(v1['arg1']['y'], v2['arg1']['y'])
+
+  def test_build_varargs(self):
+    config = fdl.Partial(fn_with_var_args)
+    list_factory = fdl.build(fdl.ArgFactory(list))
+
+    # Call __build__ with positional args.  (Note: fdl.build only calls
+    # __build__ with keyword args; so we need to use __call__ directly to
+    # test this.)
+    partial_fn = config.__build__(list_factory, 2, [], list_factory, 5)
+
+    # Since we called __build__ with positional arguments that alternate back
+    # and forth between values and factories, it will need to
+    # construct a nested partial object with the following structure.  (Note:
+    # functools.partial automatically merges when its `func` is a partial, so
+    # this ends up being 2 partial objects, not 4.)
+    expected = functools.partial(
+        arg_factory.partial(
+            functools.partial(
+                arg_factory.partial(fn_with_var_args, list), 2, []), list), 5)
+    self.assertPartialsEqual(expected, partial_fn)
+
+    v1 = partial_fn()
+    v2 = partial_fn()
+    self.assertEqual(v1, {'arg1': [], 'args': (2, [], [], 5), 'kwarg1': None})
+    self.assertEqual(v2, {'arg1': [], 'args': (2, [], [], 5), 'kwarg1': None})
+    self.assertIsNot(v1['arg1'], v2['arg1'])  # from list_factory
+    self.assertIs(v1['args'][1], v2['args'][1])  # literal list
+    self.assertIsNot(v1['args'][2], v2['args'][2])  # from list_factory
+
+    v3 = partial_fn(10, kwarg1=20)
+    self.assertEqual(v3, {'arg1': [], 'args': (2, [], [], 5, 10), 'kwarg1': 20})
+
+  def assertPartialsEqual(self, x, y):
+    # Compare using reprs, since `==` will consider different instances of
+    # functools.partial to be different even if they have the same function
+    # and args.
+    self.assertEqual(repr(x), repr(y))
 
 
 if __name__ == '__main__':

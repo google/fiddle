@@ -17,11 +17,13 @@
 
 import dataclasses
 import re
+import sys
 import textwrap
 from typing import Union
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import daglish
 from fiddle import printing
 from fiddle import tagging
 
@@ -71,19 +73,32 @@ def annotated_kwargs_helper(**kwargs: int):  # pylint: disable=unused-argument
 _local_module_regex = r'(__main__|fiddle\.printing_test)'
 
 
+class PathStrTest(absltest.TestCase):
+
+  def test_empty(self):
+    self.assertEqual(printing._path_str(()), '')
+
+  def test_nested_attr(self):
+    path = (daglish.Attr('foo'), daglish.Attr('bar'))
+    self.assertEqual(printing._path_str(path), 'foo.bar')
+
+  def test_list(self):
+    path = (daglish.Index(0),)
+    self.assertEqual(printing._path_str(path), '[0]')
+
+
+class GetTypeAnnotationTest(absltest.TestCase):
+
+  def test_get_type_annotation_root(self):
+    config = fdl.Config(fn_with_type_annotations)
+    self.assertIsNone(printing._get_annotation(config, ()))
+
+
 class AsStrFlattenedTests(absltest.TestCase):
 
   def check_result(self, actual, expected):
-    expected = re.escape(textwrap.dedent(expected)).replace(
-        '__main__', _local_module_regex)
+    expected = re.escape(textwrap.dedent(expected))
     self.assertRegex(actual, expected)
-
-  def test_path_to_str(self):
-    self.assertEqual(printing._path_to_str(()), '')
-    self.assertEqual(
-        printing._path_to_str((printing._ParamName('x'), 0)), 'x[0]')
-    self.assertEqual(
-        printing._path_to_str((printing._ParamName('a'), 2, 'x')), "a[2]['x']")
 
   def test_simple_printing(self):
     cfg = fdl.Config(fn_x_y, 1, 'abc')
@@ -170,9 +185,7 @@ class AsStrFlattenedTests(absltest.TestCase):
         x['a'].x = <[unset]>
         x['a'].y = <[unset]>
         x['a'].abc = [1, 2, 3]
-        x['b'][0] = 3
-        x['b'][1] = 2
-        x['b'][2] = 1
+        x['b'] = [3, 2, 1]
         y[0].x[0].x = 1
         y[0].x[0].y = 2
         y[0].y = <[unset]>""")
@@ -198,17 +211,17 @@ class AsStrFlattenedTests(absltest.TestCase):
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = <[unset]> #__main__.SampleTag
-        y = 'abc' #__main__.SampleTag""")
+        output, f"""\
+        x = <[unset]> {SampleTag}
+        y = 'abc' {SampleTag}""")
 
     tagging.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = 'cba' #__main__.SampleTag
-        y = 'cba' #__main__.SampleTag""")
+        output, f"""\
+        x = 'cba' {SampleTag}
+        y = 'cba' {SampleTag}""")
 
   def test_tagged_values_multiple_tags(self):
     cfg = fdl.Config(
@@ -218,17 +231,75 @@ class AsStrFlattenedTests(absltest.TestCase):
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = <[unset]> #__main__.SampleTag #__main__.SampleTag2
-        y = 'abc' #__main__.SampleTag #__main__.SampleTag2""")
+        output, f"""\
+        x = <[unset]> {SampleTag} {SampleTag2}
+        y = 'abc' {SampleTag} {SampleTag2}""")
 
     tagging.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
-        output, """\
-        x = 'cba' #__main__.SampleTag #__main__.SampleTag2
-        y = 'cba' #__main__.SampleTag #__main__.SampleTag2""")
+        output, f"""\
+        x = 'cba' {SampleTag} {SampleTag2}
+        y = 'cba' {SampleTag} {SampleTag2}""")
+
+  def test_tagged_config(self):
+    cfg = fdl.Config(
+        fn_x_y,
+        x=tagging.TaggedValue(
+            tags=(SampleTag,), default=fdl.Config(SampleClass)))
+    output = printing.as_str_flattened(cfg)
+    self.check_result(
+        output, f"""\
+        x = <Config[SampleClass()]> {SampleTag}
+        y = <[unset]>""")
+
+  def test_argument_tags(self):
+    cfg = fdl.Config(fn_x_y, y='abc')
+    fdl.add_tag(cfg, 'x', SampleTag)
+    fdl.add_tag(cfg, 'y', SampleTag)
+    output = printing.as_str_flattened(cfg)
+
+    self.check_result(
+        output, f"""\
+        x = <[unset]> {SampleTag}
+        y = 'abc' {SampleTag}""")
+
+    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
+    output = printing.as_str_flattened(cfg)
+
+    self.check_result(
+        output, f"""\
+        x = 'cba' {SampleTag}
+        y = 'cba' {SampleTag}""")
+
+  def test_argument_tags_multiple_tags(self):
+    cfg = fdl.Config(fn_x_y, y='abc')
+    fdl.set_tags(cfg, 'x', (SampleTag, SampleTag2))
+    fdl.set_tags(cfg, 'y', (SampleTag, SampleTag2))
+    output = printing.as_str_flattened(cfg)
+
+    self.check_result(
+        output, f"""\
+        x = <[unset]> {SampleTag} {SampleTag2}
+        y = 'abc' {SampleTag} {SampleTag2}""")
+
+    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
+    output = printing.as_str_flattened(cfg)
+
+    self.check_result(
+        output, f"""\
+        x = 'cba' {SampleTag} {SampleTag2}
+        y = 'cba' {SampleTag} {SampleTag2}""")
+
+  def test_argument_tags_tagged_config(self):
+    cfg = fdl.Config(fn_x_y, x=fdl.Config(SampleClass))
+    fdl.add_tag(cfg, 'x', SampleTag)
+    output = printing.as_str_flattened(cfg)
+    self.check_result(
+        output, f"""\
+        x = <Config[SampleClass()]> {SampleTag}
+        y = <[unset]>""")
 
   def test_partial(self):
     partial = fdl.Partial(fn_x_y)
@@ -290,8 +361,20 @@ class AsStrFlattenedTests(absltest.TestCase):
     cfg = fdl.Config(to_integer, 1)
     output = printing.as_str_flattened(cfg, include_types=True)
 
-    expected = textwrap.dedent("""\
-        x: typing.Union[int, str] = 1""")
+    expected = 'x: typing.Union[int, str] = 1'
+    self.assertEqual(output, expected)
+
+  def test_can_print_parameterized_generic(self):
+    if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
+      self.skipTest('types.GenericAlias is 3.9+ only.')
+
+    def takes_list(x: list[int]):
+      return x
+
+    cfg = fdl.Config(takes_list, [1, 2, 3])
+    output = printing.as_str_flattened(cfg)
+
+    expected = 'x: list[int] = [1, 2, 3]'
     self.assertEqual(output, expected)
 
   def test_materialized_default_values(self):
@@ -331,6 +414,7 @@ class HistoryPerLeafParamTests(absltest.TestCase):
     cfg.x[0].y = 'abc'
     cfg.x[0].x = 4
     output = printing.history_per_leaf_parameter(cfg)
+    self.assertTrue(printing._has_nested_builder(cfg.x))
     expected = textwrap.dedent(rf"""
         __fn_or_cls__ = .*fn_x_y .+/printing_test.py:\d+:test_nested_in_collections
         x\[0\].__fn_or_cls__ = .*fn_x_y .+/printing_test.py:\d+:test_nested_in_collections
@@ -377,6 +461,26 @@ class HistoryPerLeafParamTests(absltest.TestCase):
           - previously: 5 .*
         z = 2 @ .*/printing_test.py:\d+:test_materialize_defaults_history
         x = <\[unset\]>""".strip('\n'))
+
+    self.assertRegex(output, expected)
+
+  def test_collection_of_two_buildables_history(self):
+    config_a = fdl.Config(fn_x_y, x=1)
+    config_a.x = 2
+    config_b = fdl.Config(fn_x_y, y=3)
+    config_b.x = 10
+    config_b.y = 4
+    output = printing.history_per_leaf_parameter([config_a, config_b])
+    name = r'.*printing_test.py:\d+:test_collection_of_two_buildables_history'
+    expected = textwrap.dedent(rf"""
+        \[0\].__fn_or_cls__ = <function fn_x_y at .*> @ {name}
+        \[0\].x = 2 @ {name}
+          - previously: 1 @ {name}
+        \[0\].y = <\[unset\]>
+        \[1\].__fn_or_cls__ = <function fn_x_y at .*> @ {name}
+        \[1\].y = 4 @ {name}
+          - previously: 3 @ {name}
+        \[1\].x = 10 @ {name}""".strip('\n'))
     self.assertRegex(output, expected)
 
 

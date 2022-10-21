@@ -18,10 +18,11 @@
 See https://github.com/google/fiddle for documentation.
 """
 
+import sys
 from setuptools import find_packages
 from setuptools import setup
 
-_VERSION = '0.2.0'
+_VERSION = '0.2.2'
 
 long_description = """
 # Fiddle
@@ -34,6 +35,7 @@ Python code.
 **Authors**: Dan Holtmann-Rice, Brennan Saeta, Sergio Guadarrama
 """
 
+# pylint: disable=g-long-ternary
 setup(
     name='fiddle',
     version=_VERSION,
@@ -41,16 +43,21 @@ setup(
     packages=find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},
     install_requires=[
-        'dm-tree',
+        'libcst',
         'typing-extensions',
     ],
     extras_require={
+        'flags': [
+            'absl-py',
+            'etils[epath]',
+        ],
         'testing': [
-            'absl-py>=1.1.0',
-            'pytest<7.1.2',
-            'pytype<2022.6.30',
-            'seqio-nightly<=0.0.7.dev20220701',
-        ]
+            'absl-py',
+            'fiddle[flags]',
+            'graphviz',
+            'pytest',
+            'pytype',
+        ] + ['seqio-nightly'] if sys.platform != 'darwin' else []
     },
     description='Fiddle: A Python-first configuration library',
     long_description=long_description,
@@ -72,8 +79,6 @@ setup(
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
 

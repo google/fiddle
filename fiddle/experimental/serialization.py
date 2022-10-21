@@ -32,38 +32,39 @@ import json
 import re
 import sys
 import types
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Type
 
-from fiddle import config
-from fiddle.experimental import daglish
+from fiddle import config as config_lib
+from fiddle import daglish
+from fiddle.experimental import daglish_legacy
 
 _VERSION = '0.0.1'
 
 
-def clear_argument_history(buildable: config.Buildable, deepcopy: bool = True):
-  """Creates a copy of a config, clearing its history.
+def clear_argument_history(buildable: config_lib.Buildable):
+  """Creates a copy of a buildable, clearing its history.
 
   This can be useful when a Config's history contains a non-picklable value.
 
   Args:
     buildable: A Fiddle configuration DAG whose history will be removed.
-    deepcopy: Whether to deepcopy the configuration before clearing its history.
 
   Returns:
-     If `deepcopy` is `True`, returns a deep copy of `buildable` with
-     `__argument_history__` set to empty. Otherwise, returns `buildable` (with
-     history clearing happening inplace).
+    A copy of `buildable` with `__argument_history__` set to empty.
   """
 
-  def _clear_history(unused_path: daglish.Path, value: ...):
-    if isinstance(value, config.Buildable):
-      value.__argument_history__.clear()
-    return (yield)
+  def traverse(value: Any, state: daglish.State) -> Any:
+    if state.is_traversable(value):
+      if isinstance(value, config_lib.Buildable):
+        sub_results = state.flattened_map_children(value)
+        metadata = sub_results.metadata.without_history()
+        return sub_results.node_traverser.unflatten(sub_results.values,
+                                                    metadata)
+      return state.map_children(value)
+    else:
+      return copy.deepcopy(value)
 
-  if deepcopy:
-    buildable = copy.deepcopy(buildable)
-  daglish.traverse_with_path(_clear_history, buildable)
-  return buildable
+  return daglish.MemoizedTraversal.run(traverse, buildable)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -114,6 +115,39 @@ class IdentityElement(daglish.PathElement):
 _traverser_registry = daglish.NodeTraverserRegistry()
 register_node_traverser = _traverser_registry.register_node_traverser
 
+
+def _flatten_standard_object(instance):
+  keys = tuple(instance.__dict__.keys())
+  return instance.__dict__.values(), (type(instance), keys)
+
+
+def _unflatten_standard_object(values, metadata):
+  object_type, dict_keys = metadata
+  instance = object.__new__(object_type)
+  instance.__dict__.update(zip(dict_keys, values))
+  return instance
+
+
+def register_dict_based_object(object_type: Type[Any]):
+  """Registers serialization support for the given (dict-based) `object_type`.
+
+  This adds serialization support for "dict-based" Python objects, where here
+  dict-based means that we can simply serialize the `object_type.__dict__`
+  attribute, and on deserialization create a new empty instance of `object_type`
+  and restore its `__dict__` contents. If this behavior is insufficient or
+  incorrect for a given type, more explicit handling using
+  `register_node_traverser` will be required to support serialization.
+
+  Args:
+    object_type: The type to register serialization support for.
+  """
+  register_node_traverser(
+      object_type,
+      flatten_fn=_flatten_standard_object,
+      unflatten_fn=_unflatten_standard_object,
+      path_elements_fn=lambda x: tuple(daglish.Attr(k) for k in x.__dict__))
+
+
 for set_type in (set, frozenset):
   register_node_traverser(
       set_type,
@@ -129,7 +163,7 @@ register_node_traverser(
 )
 
 
-def find_node_traverser(node_type):
+def find_node_traverser(node_type: Type[Any]):
   """Returns a node traverser for `node_type`.
 
   This first looks in the serialization-specific registry. If no traverser is
@@ -230,7 +264,8 @@ class DefaultPyrefPolicy(PyrefPolicy):
   def allows_value(self, value) -> bool:
     is_serializable_type = (
         isinstance(value, type) and find_node_traverser(value) is not None)
-    is_builtin = inspect.getmodule(value).__name__ in sys.builtin_module_names
+    module_name = getattr(inspect.getmodule(value), '__name__', None)
+    is_builtin = module_name in sys.builtin_module_names
     return is_serializable_type or not is_builtin
 
 
@@ -273,6 +308,70 @@ def import_symbol(policy: PyrefPolicy, module: str, symbol: str):
 def _to_snake_case(name: str) -> str:
   """Converts a camel or studly-caps name to a snake_case name."""
   return re.sub(r'(?<=[^_A-Z])(?=[A-Z])', '_', name).lower()
+
+
+@dataclasses.dataclass
+class SerializationConstant:
+  module: str
+  symbol: str
+
+  def to_pyref(self):
+    return {
+        _TYPE_KEY: _PYREF_TYPE,
+        _MODULE_KEY: self.module,
+        _NAME_KEY: self.symbol
+    }
+
+
+_serialization_constants_by_id: Dict[int, SerializationConstant] = {}
+_serialization_constants_by_value: Dict[Any, SerializationConstant] = {}
+
+
+def register_constant(module: str, symbol: str, compare_by_identity: bool):
+  """Registers a module-level constant value for serialization.
+
+  The specified value will be serialized as a pyref (python reference), meaning
+  that its value will be deserialized by reading the specified symbol from the
+  specified module.
+
+  Args:
+    module: The name of the module containing the constant symbol.
+    symbol: The symbol in `module` that contains a constant value.
+    compare_by_identity: If True, then only use a pyref to serialize a value `x`
+      if `x is <module>.<symbol>`.  If False, then use a pyref to serialize any
+      value `x` where `x == <module>.<symbol>`.  If `compare_by_identity` is
+      False, then the value must be hashable.
+
+  Raises:
+    PyrefError: If `module` can't be found, or 'symbol' can't be accessed on
+      `module`, or if a `PyrefPolicyError` is raised (since `PyrefPolicyError`
+      is a subclass of `PyrefError`).
+    ValueError: If registration is unnecessary for `<module>.<symbol>` (e.g.,
+      because it is a `type` or `function`).
+  """
+  value = import_symbol(DefaultPyrefPolicy(), module, symbol)
+
+  # Perform some sanity checks.
+  if isinstance(value, (type, types.FunctionType)):
+    raise ValueError(
+        f'Can not register {module}.{symbol} as a serialization constant '
+        f'because it is a type or function (so registration is unnecessary).')
+  if _is_leaf_type(type(value)):
+    raise ValueError(
+        f'Can not register {module}.{symbol} as a serialization constant '
+        f'because it is a JSON-representable primitive type (so registration '
+        'is unnecessary).')
+  if find_node_traverser(type(value)) is not None:
+    raise ValueError(
+        f'Can not register {module}.{symbol} as a serialization constant '
+        f'because it is a daglish-traversable type (so registration '
+        'is unnecessary).')
+
+  serialization_constant = SerializationConstant(module, symbol)
+  if compare_by_identity:
+    _serialization_constants_by_id[id(value)] = serialization_constant
+  else:
+    _serialization_constants_by_value[value] = serialization_constant
 
 
 # The following constants define the keys (and some values) in the
@@ -378,14 +477,18 @@ class Serialization:
     """
     # Maps object ids to their key in the _objects map.
     self._memo: Dict[int, str] = {}
-    # Maps object key to the object's representation.
+    # Maps object key to the object's serialized representation.
     self._objects: Dict[str, Any] = {}
+    # Maintains references to (unserialized) referenced values. These are only
+    # retained to avoid id reuse when creating temporary metadata objects.
+    self._ref_values: List[Any] = []
     # Counts the number of times each object in _objects is referenced.
     self._refcounts = collections.defaultdict(int)
     # The root value being serialized.
     self._root = value
     # Maps (memoizable) object ids to all paths from `value` that reach them.
-    self._paths_by_id = daglish.collect_paths_by_id(value, memoizable_only=True)
+    self._paths_by_id = daglish_legacy.collect_paths_by_id(
+        value, memoizable_only=True)
     # The active PyrefPolicy.
     self._pyref_policy = pyref_policy or DefaultPyrefPolicy()
     # The result of the serialization.
@@ -405,8 +508,8 @@ class Serialization:
     """Creates a unique and informative name for `value`."""
     try:
       hint_type = type(value)
-      if isinstance(value, config.Buildable):
-        hint_type = value.__fn_or_cls__
+      if isinstance(value, config_lib.Buildable):
+        hint_type = config_lib.get_callable(value)
       hint = hint_type.__name__
     except AttributeError:
       hint = re.sub(r"[<>()\[\] '\"]", '', str(type(value)))
@@ -488,6 +591,11 @@ class Serialization:
         output = self._leaf(value)
       elif isinstance(value, (type, types.FunctionType)):
         output = self._pyref(value)
+      elif id(value) in _serialization_constants_by_id:
+        output = _serialization_constants_by_id[id(value)].to_pyref()
+      elif (isinstance(value, collections.Hashable) and
+            value in _serialization_constants_by_value):
+        output = _serialization_constants_by_value[value].to_pyref()
       else:
         raise UnserializableValueError(value, current_path)
     else:  # We have a traverser; serialize value's flattened elements.
@@ -507,6 +615,8 @@ class Serialization:
         serialized_item = (f'{path_element!r}', serialized_value)
         serialized_items.append(serialized_item)
 
+      if isinstance(metadata, config_lib.BuildableTraverserMetadata):
+        metadata = metadata.without_history()
       serialized_metadata = self._serialize(
           metadata, current_path + (MetadataElement(),), all_paths=None)
 
@@ -521,8 +631,10 @@ class Serialization:
 
     if daglish.is_memoizable(value) and output[_TYPE_KEY] != _PYREF_TYPE:
       name = self._unique_name(value)
+      assert name not in self._objects
       self._memo[id(value)] = name
       self._objects[name] = output
+      self._ref_values.append(value)
       return self._ref(name)
     else:
       return output

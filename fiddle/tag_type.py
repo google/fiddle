@@ -61,3 +61,7 @@ class TagType(type):
 
   def __repr__(cls) -> str:  # pylint: disable=invalid-repr-returned
     return cls.name
+
+
+class TaggedValueNotFilledError(ValueError):
+  """A TaggedValue was not filled when build() was called."""

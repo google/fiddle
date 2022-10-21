@@ -1,0 +1,9 @@
+# Files created by `python -m setup install`
+__pycache__
+build
+dist
+fiddle.egg-info
+
+
+# Typical editor spam.
+*~

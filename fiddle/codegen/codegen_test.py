@@ -112,33 +112,6 @@ else:
 
 class CodegenTest(absltest.TestCase):
 
-  def test_map_buildables_plain_tree_preorder(self):
-    cfg = simple_tree()
-    foos = []
-
-    def pre_traverse_map_fn(buildable: fdl.Buildable):
-      foos.append(buildable.a)
-      return buildable
-
-    result = codegen.map_buildables(
-        buildable=cfg, pre_traverse_fn=pre_traverse_map_fn)
-    self.assertEqual(foos, [1, 2, 3])
-    self.assertIs(result, cfg)
-
-  def test_map_buildables_plain_tree_postorder(self):
-    cfg = simple_tree()
-    foos = []
-
-    def post_traverse_map_fn(buildable: fdl.Buildable, new_args):
-      del new_args  # unused
-      foos.append(buildable.a)
-      return buildable
-
-    result = codegen.map_buildables(
-        buildable=cfg, post_traverse_fn=post_traverse_map_fn)
-    self.assertEqual(foos, [2, 3, 1])
-    self.assertIs(result, cfg)
-
   def test_codegen_dot_syntax_shared(self):
     cfg = shared_config()
     result = codegen.codegen_dot_syntax(cfg)
