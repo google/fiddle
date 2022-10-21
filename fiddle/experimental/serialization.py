@@ -593,7 +593,7 @@ class Serialization:
         output = self._pyref(value)
       elif id(value) in _serialization_constants_by_id:
         output = _serialization_constants_by_id[id(value)].to_pyref()
-      elif (isinstance(value, collections.Hashable) and
+      elif (isinstance(value, collections.abc.Hashable) and
             value in _serialization_constants_by_value):
         output = _serialization_constants_by_value[value].to_pyref()
       else:
