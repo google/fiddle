@@ -69,13 +69,20 @@ class TfTest(parameterized.TestCase):
   def test_codegen(self):
     config = fdl.Config(foo, dtype=tf.bfloat16)
     code = "\n".join(codegen.codegen_dot_syntax(config).lines())
-    expected = """
+    if __name__ == "__main__":
+      tf_test_import = ""
+      foo_name = "foo"
+    else:
+      # Running via PyTest; tf_test is importable.
+      tf_test_import = "from fiddle.extensions import tf_test\n"
+      foo_name = "tf_test.foo"
+    expected = f"""
 import fiddle as fdl
-import tensorflow as tf
+{tf_test_import}import tensorflow as tf
 
 
 def build_config():
-  root = fdl.Config(foo)
+  root = fdl.Config({foo_name})
   root.dtype = tf.bfloat16
 
   return root
