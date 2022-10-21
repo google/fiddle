@@ -129,7 +129,6 @@ class _ChangedBuildable:
   new_callable: Any
   arguments: Dict[str, Union[Any, _ChangedValue]]
   tags: Dict[str, Set[Union[tag_type.TagType, _AddedTag, _RemovedTag]]]
-  trimmed: int = 0  # Number of trimmed arguments.
 
 
 # Function mapping value -> (header_color, edge_color).
@@ -393,10 +392,7 @@ class _GraphvizRenderer:
               td_new(html.escape(config.new_callable.__name__))
           ]))
     header = self._header_row(title, bgcolor=bgcolor, style=style)
-    if config.trimmed:
-      footer = self._header_row(
-          self.tag('i')(f'(trimmed {config.trimmed} args)'))
-    elif not config.arguments:
+    if not config.arguments:
       footer = self._header_row(self.tag('i')('no arguments'))
     else:
       footer = None
@@ -561,7 +557,7 @@ class _GraphvizRenderer:
     if _TRIMMED_SENTINEL in dict_:
       rows.append(
           self._header_row(
-              self.tag('i')(f'(trimmed {dict_[_TRIMMED_SENTINEL]} items)')))
+              self.tag('i')(f'(trimmed {dict_[_TRIMMED_SENTINEL]} item(s))')))
     if footer is not None:
       rows.append(footer)
     return table(rows)
@@ -829,55 +825,50 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
 
   def visit(value, state: daglish.State):
     """Returns true if any child has changed."""
-    # Trim unchanged unmemoizable entries (int, str, etc.) from dicts.
-    if isinstance(value, dict) and id(value) in old_value_ids and value:
-      keep = {
-          name: val
-          for (name, val) in value.items()
-          if daglish.is_memoizable(val)
-      }
-      num_trimmed = len(value) - len(keep)
-      if num_trimmed > 1:
-        value.clear()
-        value.update(keep)
-        value[_TRIMMED_SENTINEL] = num_trimmed
-
     if state.is_traversable(value):
       subtraversal = state.flattened_map_children(value)
       any_changed = any(subtraversal.values)
+      if isinstance(value, dict) and id(value) in old_value_ids:
+        _trim_dict(value, subtraversal.values)
       return any_changed
     elif isinstance(value, _ChangedValue):
       state.call(value.old_value, daglish.Attr('old_value'))
       state.call(value.new_value, daglish.Attr('new_value'))
       return True
     elif isinstance(value, _ChangedBuildable):
-      args_changed = state.call(value.arguments, daglish.Attr('args'))
+      args_changed = [
+          state.call(arg, daglish.Attr('args'))
+          for arg in value.arguments.values()
+      ]
       callable_changed = value.old_callable != value.new_callable
       tags_changed = any(
           isinstance(tag, (_AddedTag, _RemovedTag)) for tag in value.tags)
-      changed = args_changed or callable_changed or tags_changed
-      if id(value) in old_value_ids and value.arguments:
-        if not changed:
-          # This value is unchanged by the diff; trim all arguments.
-          value.trimmed = len(value.arguments)
-          value.arguments.clear()
-        else:
-          # Trim out any unchanged args w/ unmemoizable type (int, str, etc.)
-          # if it will save space.
-          remaining_args = {
-              name: val
-              for (name, val) in value.arguments.items()
-              if daglish.is_memoizable(val)
-          }
-          num_trimmed = len(value.arguments) - len(remaining_args)
-          if num_trimmed > 1:
-            value.trimmed = num_trimmed
-            value.arguments = remaining_args
+      changed = any(args_changed) or callable_changed or tags_changed
+      if id(value) in old_value_ids:
+        _trim_dict(value.arguments, args_changed)
       return changed
     else:
       return False
 
   daglish.MemoizedTraversal.run(visit, structure_with_changed_values)
+
+
+def _trim_dict(value, val_changed):
+  """Trims unchanged items from a dictionary, for diff rendering.
+
+  Args:
+    value: The dictionary to trim.  Modified in-place.  If any items are
+      trimmed, then `value[_TRIMMED_SENTINEL]` is set to the number trimmed.
+    val_changed: A list of booleans, corresponding 1:1 with the entries in
+      `value` (in the order they are returned by `value.items()`), indicating
+      which items were changed.  Any unchanged items are trimmed.
+  """
+  keep = [item for item, changed in zip(value.items(), val_changed) if changed]
+  num_trimmed = len(value) - len(keep)
+  if num_trimmed > 0:
+    value.clear()
+    value.update(keep)
+    value[_TRIMMED_SENTINEL] = num_trimmed
 
 
 def _find_new_value_ids(structure_with_changed_values: Any) -> Set[int]:
