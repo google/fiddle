@@ -474,7 +474,8 @@ def create_buildable_from_flags(
   if _FDL_HELP.value:
     _print_stderr('Tags (override as --fdl_tag.<name>=<value>):')
     _print_stderr()
-    if tags := tagging.list_tags(buildable):
+    tags = tagging.list_tags(buildable)
+    if tags:
       for tag in tags:
         _print_stderr(f'  {tag.name} - {tag.description}')
     else:
