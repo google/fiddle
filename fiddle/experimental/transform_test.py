@@ -16,7 +16,7 @@
 """Tests for transform."""
 
 import dataclasses
-from typing import Tuple
+from typing import Callable, Optional, Tuple
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -27,6 +27,7 @@ from fiddle.experimental import transform
 class Foo:
   a_tuple: Tuple[int]
   another_tuple: Tuple[int]
+  a_callable: Optional[Callable[[], None]] = None
 
 
 class TransformTest(absltest.TestCase):
@@ -81,6 +82,22 @@ class TransformTest(absltest.TestCase):
         "a_tuple and another_tuple have different id indicating they're the "
         "different instances, expected them to be the same instance after "
         "uninterning as the these are not tuples of literals.")
+
+  def test_replace_no_arg_partial_with_fn_or_cls(self):
+
+    def bar():
+      pass
+
+    with self.subTest("replace top level"):
+      self.assertEqual(
+          bar,
+          transform.replace_no_arg_partial_with_fn_or_cls(fdl.Partial(bar)))
+
+    with self.subTest("replace nested"):
+      cfg = fdl.Config(Foo, a_callable=fdl.Partial(bar))
+      expected_cfg = fdl.Config(Foo, a_callable=bar)
+      self.assertEqual(expected_cfg,
+                       transform.replace_no_arg_partial_with_fn_or_cls(cfg))
 
 
 if __name__ == "__main__":
