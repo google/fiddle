@@ -35,6 +35,22 @@ from fiddle._src import field_metadata
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
 
+
+class NoValue:
+  """Sentinel class for arguments with no value."""
+
+  def __repr__(self):
+    return 'fdl.NO_VALUE'
+
+  def __deepcopy__(self, memo):
+    """Override for deepcopy that does not copy this sentinel object."""
+    del memo
+    return self
+
+
+NO_VALUE = NoValue()
+
+
 # Unique object instance that should never be used by end-users, and can thus
 # be used to differentiate between unset values and user-set values that are
 # None or other commonly-used sentinel.
@@ -1014,14 +1030,51 @@ def get_callable(buildable: Buildable[T]) -> Union[Callable[..., T], Type[T]]:
   return buildable.__fn_or_cls__
 
 
-def ordered_arguments(buildable: Buildable) -> Dict[str, Any]:
-  """Returns arguments of a Buildable, ordered by the signature."""
+def ordered_arguments(buildable: Buildable,
+                      *,
+                      include_var_keyword: bool = True,
+                      include_defaults: bool = False,
+                      include_unset: bool = False,
+                      exclude_equal_to_default: bool = False) -> Dict[str, Any]:
+  """Returns arguments of a Buildable, ordered by the signature.
+
+  Args:
+    buildable: The buildable whose arguments should be returned.
+    include_var_keyword: If True, then include arguments that will be consumed
+      by the buildable's callable's `VAR_KEYWORD` parameter (e.g. `**kwargs`).
+    include_defaults: If True, then include arguments that have not been
+      explicitly set, but that have a default value.  Can not be combined with
+      `exclude_equal_to_default=True`.
+    include_unset: If True, then include arguments that have not been explicitly
+      set, that don't have a default value.  The value for these parameters will
+      be `fdl.NO_VALUE`.
+    exclude_equal_to_default: If True, then exclude arguments that are equal to
+      their default value (using `==`).  Can not be combined with
+      `include_defaults=True`.
+
+  Returns:
+    A dictionary mapping argument names to values or `fdl.NO_VALUE`.
+  """
+  if exclude_equal_to_default and include_defaults:
+    raise ValueError(
+        'exclude_equal_to_default and include_defaults are mutually exclusive.')
   result = {}
   for name, param in buildable.__signature__.parameters.items():
-    if param.kind != param.VAR_KEYWORD and name in buildable.__arguments__:
-      result[name] = buildable.__arguments__[name]
-  for name, value in buildable.__arguments__.items():
-    result.setdefault(name, value)
+    if param.kind != param.VAR_KEYWORD:
+      if name in buildable.__arguments__:
+        value = buildable.__arguments__[name]
+        if (not exclude_equal_to_default) or (value != param.default):
+          result[name] = value
+      elif param.default != param.empty:
+        if include_defaults:
+          result[name] = param.default
+      elif include_unset:
+        result[name] = NO_VALUE
+  if include_var_keyword:
+    for name, value in buildable.__arguments__.items():
+      param = buildable.__signature__.parameters.get(name)
+      if param is None or param.kind == param.VAR_KEYWORD:
+        result[name] = value
   return result
 
 
