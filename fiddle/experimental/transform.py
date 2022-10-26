@@ -15,7 +15,7 @@
 
 """Transformation functions for Fiddle buildables."""
 
-from typing import Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar, Union
 
 from fiddle import config
 from fiddle import daglish
@@ -49,6 +49,30 @@ def unintern_tuples_of_literals(buildable: AnyBuildable) -> AnyBuildable:
     # interned by Python.
     if type(tuple) is tuple and daglish.is_internable(value):
       value = tuple(list(value))
+    return state.map_children(value)
+
+  return transform(buildable)
+
+
+def replace_no_arg_partial_with_fn_or_cls(
+    buildable: AnyBuildable) -> Union[AnyBuildable, Callable[..., Any]]:
+  """Replaces any `fdl.Partial` with no arguments with the function or class.
+
+  Args:
+    buildable: Any Fiddle buildable
+
+  Returns:
+    A new `fdl.Buildable` with any `fdl.Partial` that does not have any new
+    arguments passed in replaced with just the function or class wrapped by the
+    `fdl.Partial`. This function will return a `Callable` if a `fdl.Partial`
+    was passed in that does not have any new arguments.
+  """
+
+  def transform(value, state: Optional[daglish.State] = None):
+    state = state or daglish.MemoizedTraversal.begin(
+        transform, value, memoize_internables=True)
+    if isinstance(value, config.Partial) and not value.__arguments__:
+      value = value.__fn_or_cls__
     return state.map_children(value)
 
   return transform(buildable)
