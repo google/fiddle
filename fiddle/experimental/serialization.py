@@ -192,7 +192,7 @@ class UnserializableValueError(Exception):
   def __init__(self, value: Any, path: daglish.Path):
     self.value = value
     self.path = path
-    msg = f'Unserializable value {value} at <root>{daglish.path_str(self.path)}'
+    msg = f'Unserializable value {value} of type {type(value)} at <root>{daglish.path_str(self.path)}'
     super().__init__(msg)
 
 
