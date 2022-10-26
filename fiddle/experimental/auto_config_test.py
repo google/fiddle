@@ -727,6 +727,21 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         SampleClass.autoconfig_method.as_buildable(self=x),
         fdl.Config(basic_fn, x))
 
+  def test_experimental_config_cls(self):
+
+    class CustomConfig(fdl.Config):
+      pass
+
+    @auto_config.auto_config(experimental_config_cls=CustomConfig)
+    def fn():
+      return SampleClass(arg1=basic_fn(3), arg2=4)
+
+    expected = CustomConfig(SampleClass, arg1=CustomConfig(basic_fn, 3), arg2=4)
+    cfg = fn.as_buildable()
+    self.assertDagEqual(cfg, expected)
+    self.assertIsInstance(cfg, CustomConfig)
+    self.assertIsInstance(cfg.arg1, CustomConfig)
+
 
 class AutoUnconfigTest(absltest.TestCase):
 

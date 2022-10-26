@@ -29,7 +29,7 @@ import functools
 import inspect
 import textwrap
 import types
-from typing import Any, Callable, cast, Optional, Union
+from typing import Any, Callable, cast, Optional, Union, Type
 
 from fiddle import building
 from fiddle import config
@@ -371,6 +371,7 @@ def auto_config(
     experimental_allow_control_flow=False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,  # pylint: disable=line-too-long
+    experimental_config_cls: Optional[Type[config.Buildable]] = None,
 ) -> Any:  # TODO: More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
@@ -445,6 +446,8 @@ def auto_config(
       which ones should simply be executed normally during the `as_buildable`
       interpretation of `fn`. This predicate should return `True` if the given
       callable should be exempted from auto-configuration.
+    experimental_config_cls: If specified, then replace calls with
+      `experimental_config_cls` objects rather than `fdl.Config` objects.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
@@ -485,6 +488,9 @@ def auto_config(
 
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
+
+    if experimental_config_cls is not None:
+      return experimental_config_cls(fn_or_cls, *args, **kwargs)
 
     return config.Config(fn_or_cls, *args, **kwargs)
 
