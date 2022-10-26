@@ -1025,6 +1025,31 @@ def ordered_arguments(buildable: Buildable) -> Dict[str, Any]:
   return result
 
 
+def get_arguments(buildable: Buildable, overrides_only=False) -> Dict[str, Any]:
+  """Returns arguments of a Buildable, with an option to return only overrides.
+
+  Args:
+    buildable: A `fdl.Buildable` (e.g. a `fdl.Config`) to get the arguments of.
+    overrides_only: True if only the arguments that are overrides (i.e. not
+      default values) should be returned.
+
+  Returns:
+    A dictionary mapping argument name to argument value.
+  """
+  if not overrides_only:
+    return buildable.__arguments__
+
+  override_args = {}
+  for name, value in buildable.__arguments__.items():
+    if name in buildable.__signature__.parameters:
+      # pylint: disable-next=protected-access
+      default = buildable.__signature__.parameters[name]._default
+      if value != default:
+        override_args[name] = value
+
+  return override_args
+
+
 def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
   """Tags `name` with `tag` in `buildable`."""
   buildable.__validate_param_name__(argument)

@@ -1217,6 +1217,28 @@ class OrderedArgumentsTest(absltest.TestCase):
           tuple(path_element.name for path_element in path_elements))
 
 
+class GetArgumentsTest(absltest.TestCase):
+
+  def test_get_arguments(self):
+
+    def foo(arg1, arg2=123):
+      del arg1, arg2
+
+    foo_cfg = fdl.Config(foo, arg1='bar', arg2=123)
+
+    with self.subTest('all set arguments'):
+      self.assertEqual({
+          'arg1': 'bar',
+          'arg2': 123
+      }, config_lib.get_arguments(foo_cfg))
+
+    with self.subTest('overrides only'):
+      # Make sure only the value for arg1 is returned as arg2 was set to the
+      # same value as the default value
+      self.assertEqual({'arg1': 'bar'},
+                       config_lib.get_arguments(foo_cfg, overrides_only=True))
+
+
 class ArgFactoryTest(absltest.TestCase):
 
   def test_build_argfactory(self):
