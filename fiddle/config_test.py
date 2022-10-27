@@ -18,11 +18,13 @@
 import copy
 import dataclasses
 import functools
+import inspect
 import pickle
 import threading
 from typing import Any, Callable, Dict
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import fiddle as fdl
 from fiddle import arg_factory
 from fiddle import config as config_lib
@@ -1186,7 +1188,7 @@ class CallableApisTest(absltest.TestCase):
     self.assertIs(fdl.get_callable(cfg), basic_fn)
 
 
-class OrderedArgumentsTest(absltest.TestCase):
+class OrderedArgumentsTest(parameterized.TestCase):
 
   def test_ordered_arguments(self):
     cfg = fdl.Config(fn_with_var_kwargs)
@@ -1215,6 +1217,36 @@ class OrderedArgumentsTest(absltest.TestCase):
       self.assertEqual(
           metadata.argument_names,
           tuple(path_element.name for path_element in path_elements))
+
+  @parameterized.parameters([
+      # incl_keywords, incl_defaults, incl_unset, expected
+      (False, False, False, [('arg2', 5), ('kwarg2', 99)]),
+      (False, True, False, [('arg2', 5), ('kwarg1', None), ('kwarg2', 99)]),
+      (False, False, True, [('arg1', inspect.Parameter.empty), ('arg2', 5),
+                            ('kwarg2', 99)]),
+      (False, True, True, [('arg1', inspect.Parameter.empty), ('arg2', 5),
+                           ('kwarg1', None), ('kwarg2', 99)]),
+      (True, False, False, [('arg2', 5), ('kwarg2', 99), ('foo', 12)]),
+      (True, True, False, [('arg2', 5), ('kwarg1', None), ('kwarg2', 99),
+                           ('foo', 12)]),
+      (True, False, True, [('arg1', inspect.Parameter.empty), ('arg2', 5),
+                           ('kwarg2', 99), ('foo', 12)]),
+      (True, True, True, [('arg1', inspect.Parameter.empty), ('arg2', 5),
+                          ('kwarg1', None), ('kwarg2', 99), ('foo', 12)]),
+  ])
+  def test_ordered_arguments_options(self, include_var_keywords,
+                                     include_defaults, include_unset, expected):
+
+    def fn(arg1, arg2, kwarg1=None, kwarg2=None, **kwargs):
+      return (arg1, arg2, kwarg1, kwarg2, kwargs)
+
+    cfg = fdl.Config(fn, arg2=5, kwarg2=99, foo=12)
+    args = config_lib.ordered_arguments(
+        cfg,
+        include_var_keywords=include_var_keywords,
+        include_defaults=include_defaults,
+        include_unset=include_unset)
+    self.assertEqual(list(args.items()), expected)
 
 
 class ArgFactoryTest(absltest.TestCase):

@@ -1014,14 +1014,39 @@ def get_callable(buildable: Buildable[T]) -> Union[Callable[..., T], Type[T]]:
   return buildable.__fn_or_cls__
 
 
-def ordered_arguments(buildable: Buildable) -> Dict[str, Any]:
-  """Returns arguments of a Buildable, ordered by the signature."""
+def ordered_arguments(buildable: Buildable,
+                      *,
+                      include_var_keywords: bool = True,
+                      include_defaults: bool = False,
+                      include_unset: bool = False) -> Dict[str, Any]:
+  """Returns arguments of a Buildable, ordered by the signature.
+
+  Args:
+    buildable: The buildable whose arguments should be returned.
+    include_var_keywords: If true, then include arguments that will be consumed
+      by the buildable's callable's `VAR_KEYWORD` parameter (e.g. `**kwargs`).
+    include_defaults: If true, then include arguments that have not been
+      explicitly set, but that have a default value.
+    include_unset: If true, then include arguments that have not been explicitly
+      set, that don't have a default value.  The value for these parameters will
+      be `inspect.Parameter.empty`.
+
+  Returns:
+    A dictionary mapping argument names to values or `inspect.Parameter.empty`.
+  """
   result = {}
   for name, param in buildable.__signature__.parameters.items():
-    if param.kind != param.VAR_KEYWORD and name in buildable.__arguments__:
-      result[name] = buildable.__arguments__[name]
-  for name, value in buildable.__arguments__.items():
-    result.setdefault(name, value)
+    if param.kind != param.VAR_KEYWORD:
+      if name in buildable.__arguments__:
+        result[name] = buildable.__arguments__[name]
+      elif param.default != param.empty:
+        if include_defaults:
+          result[name] = param.default
+      elif include_unset:
+        result[name] = param.empty
+  if include_var_keywords:
+    for name, value in buildable.__arguments__.items():
+      result.setdefault(name, value)
   return result
 
 

@@ -290,8 +290,11 @@ def _wrap_ast_for_fn_with_closure_vars(
   To work around this issue, this function wraps `module.body` in another
   `FunctionDef` that defines dummy variables corresponding to `fn`'s free
   variables. This causes the subsequent compile step to create the right set of
-  free variables, and allows us to use `fn.__closure__` directly when creating a
+  free variables, and allows us to use `fn.__closure__` when creating a
   new function object via `types.FunctionType`.
+
+  We also add <_CALL_HANDLER_ID> as a final dummy variable, and append its value
+  (the call handler) to `fn.__closure__` when creating the new function object.
 
   Effectively, this wrapping looks like the following Python code:
 
@@ -299,6 +302,7 @@ def _wrap_ast_for_fn_with_closure_vars(
         closure_var_1 = None
         closure_var_2 = None
         ...
+        <_CALL_HANDLER_ID> = None
 
         def fn(...):  # Or some expression involving a lambda.
           ...  # Contains references to the closure variables.
@@ -317,7 +321,7 @@ def _wrap_ast_for_fn_with_closure_vars(
   ast_none = ast.Constant(value=None)
   closure_var_definitions = [
       ast.Assign(targets=[ast_name(var_name)], value=ast_none)
-      for var_name in fn.__code__.co_freevars
+      for var_name in fn.__code__.co_freevars + (_CALL_HANDLER_ID,)
   ]
 
   wrapper_module = ast.Module(
@@ -363,6 +367,18 @@ def _unwrap_code_for_fn(code: types.CodeType, fn: types.FunctionType):
   code = _find_function_code(code, _CLOSURE_WRAPPER_ID)
   code = _find_function_code(code, fn.__name__)
   return code
+
+
+def _make_closure_cell(contents):
+  """Returns `types.CellType(contents)`."""
+  if hasattr(types, 'CellType'):
+    # `types.CellType` added in Python 3.8.
+    return types.CellType(contents)  # pytype: disable=wrong-arg-count
+  else:
+    # For earlier versions of Python, build a dummy function to get CellType.
+    dummy_fn = lambda: contents
+    cell_type = type(dummy_fn.__closure__[0])
+    return cell_type(contents)
 
 
 def auto_config(
@@ -533,18 +549,19 @@ def auto_config(
     code = compile(node, inspect.getsourcefile(fn), 'exec')
     code = _unwrap_code_for_fn(code, fn)
 
-    # Make sure that the proper globals are available to the newly created
-    # function, and also add in `auto_config_call_handler`, which is referenced
-    # from the modified AST via the `_CALL_HANDLER_ID` (see `ast.Name` node in
-    # `_AutoConfigNodeTransformer.visit_Call()`).
-    globals_ = {
-        **fn.__globals__,
-        _CALL_HANDLER_ID: auto_config_call_handler,
-    }
+    # Insert auto_config_call_handler into `fn.__closure__` at the index where
+    # _CALL_HANDLER_ID occurs in the freevars.  (_CALL_HANDLER_ID was added to
+    # freevars by _wrap_ast_for_fn_with_closure_vars).
+    closure = list(fn.__closure__ or ())
+    if _CALL_HANDLER_ID in code.co_freevars:
+      closure.insert(
+          code.co_freevars.index(_CALL_HANDLER_ID),
+          _make_closure_cell(auto_config_call_handler))
+    closure = tuple(closure)
 
     # Then, create a function from the compiled function code object, providing
     # the globals and the original function's closure.
-    auto_config_fn = types.FunctionType(code, globals_, closure=fn.__closure__)
+    auto_config_fn = types.FunctionType(code, fn.__globals__, closure=closure)
     auto_config_fn.__defaults__ = fn.__defaults__
     auto_config_fn.__kwdefaults__ = fn.__kwdefaults__
 
