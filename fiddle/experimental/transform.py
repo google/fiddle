@@ -71,7 +71,8 @@ def replace_unconfigured_partials_with_callables(
   """
 
   def transform(value, state: daglish.State):
-    if isinstance(value, config.Partial) and not value.__arguments__:
+    if isinstance(value, config.Partial) and not config.ordered_arguments(
+        value, exclude_equal_to_default=True):
       value = config.get_callable(value)
     return state.map_children(value)
 

@@ -28,6 +28,7 @@ class Foo:
   a_tuple: Tuple[int]
   another_tuple: Tuple[int]
   a_callable: Optional[Callable[[], None]] = None
+  a_field_with_default: Optional[int] = 123
 
 
 class TransformTest(absltest.TestCase):
@@ -95,6 +96,16 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(
         expected_cfg,
         transform.replace_unconfigured_partials_with_callables(cfg))
+
+  def test_replace_unconfigured_partials_with_callables_replace_if_only_defaults(
+      self):
+    # If an argument is passed to the Partial but it has the same value as the
+    # default argument, then still consider it as having no arguments and
+    # replace with the original Callable.
+    self.assertIs(
+        Foo,
+        transform.replace_unconfigured_partials_with_callables(
+            fdl.Partial(Foo, a_field_with_default=123)))
 
 
 if __name__ == "__main__":
