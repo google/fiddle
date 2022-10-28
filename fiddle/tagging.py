@@ -74,6 +74,7 @@ TaggedValueNotFilledError = tag_type.TaggedValueNotFilledError
 
 NO_VALUE = config.NO_VALUE
 NoValue = config.NoValue
+_NoValue = config.NoValue
 
 
 class Tag(metaclass=TagType):
