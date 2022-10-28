@@ -18,6 +18,7 @@
 from absl.testing import absltest
 from fiddle import history
 from fiddle import tagging
+from fiddle.testing.example import fake_encoder_decoder
 
 
 class SampleTag(tagging.Tag):
@@ -88,6 +89,11 @@ class HistoryTest(absltest.TestCase):
 
   def test_deleted_repr(self):
     self.assertEqual(repr(history.DELETED), "DELETED")
+
+  def test_auto_config_history_location(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    entry, = config.__argument_history__["encoder"]
+    self.assertEndsWith(entry.location.filename, "fake_encoder_decoder.py")
 
 
 if __name__ == "__main__":

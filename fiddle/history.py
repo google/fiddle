@@ -72,6 +72,7 @@ def _stacktrace_location_provider() -> Location:
     if (not frame.filename.endswith("fiddle/config.py") and
         not frame.filename.endswith("fiddle/daglish.py") and
         not frame.filename.endswith("fiddle/history.py") and
+        not frame.filename.endswith("fiddle/experimental/auto_config.py") and
         not frame.filename.endswith("fiddle/materialize.py")):
       return Location(
           filename=frame.filename,
