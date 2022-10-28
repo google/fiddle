@@ -15,13 +15,15 @@
 
 """Transformation functions for Fiddle buildables."""
 
-from typing import Optional, TypeVar
+from collections.abc import Iterable
+from typing import Any, Callable, Optional, TypeVar, Union
 
 from fiddle import config
 from fiddle import daglish
 
 # Any subclass of Buildable
-AnyBuildable = TypeVar("AnyBuildable", bound=config.Buildable)
+AnyBuildable = TypeVar(
+    "AnyBuildable", bound=Union[config.Buildable, Iterable[config.Buildable]])
 
 
 def unintern_tuples_of_literals(buildable: AnyBuildable) -> AnyBuildable:
@@ -52,3 +54,25 @@ def unintern_tuples_of_literals(buildable: AnyBuildable) -> AnyBuildable:
     return state.map_children(value)
 
   return transform(buildable)
+
+
+def replace_unconfigured_partials_with_callables(
+    buildable: AnyBuildable) -> Union[AnyBuildable, Callable[..., Any]]:
+  """Replaces unconfigured `fdl.Partial` with their underlying callables.
+
+  Args:
+    buildable: Any Fiddle buildable.
+
+  Returns:
+    A new `fdl.Buildable` with any `fdl.Partial` that does not have any new
+    arguments passed in replaced with just the function or class wrapped by the
+    `fdl.Partial`. This function will return a `Callable` if a `fdl.Partial`
+    was passed in that does not have any new arguments.
+  """
+
+  def transform(value, state: daglish.State):
+    if isinstance(value, config.Partial) and not value.__arguments__:
+      value = config.get_callable(value)
+    return state.map_children(value)
+
+  return daglish.MemoizedTraversal.run(transform, buildable)
