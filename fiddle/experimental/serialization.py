@@ -162,6 +162,12 @@ register_node_traverser(
     path_elements_fn=lambda x: (IdentityElement(),),
 )
 
+register_node_traverser(
+    config_lib.NoValue,
+    flatten_fn=lambda _: ((), None),
+    unflatten_fn=lambda values, metadata: config_lib.NO_VALUE,
+    path_elements_fn=lambda _: ())
+
 
 def find_node_traverser(node_type: Type[Any]):
   """Returns a node traverser for `node_type`.

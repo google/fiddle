@@ -68,28 +68,12 @@ from fiddle import config
 from fiddle import daglish
 from fiddle import tag_type
 from fiddle.experimental import auto_config
-from fiddle.experimental import serialization
 
 TagType = tag_type.TagType
 TaggedValueNotFilledError = tag_type.TaggedValueNotFilledError
 
-
-class _NoValue:
-  """Sentinel class (used in place of object for more precise errors)."""
-
-  def __deepcopy__(self, memo):
-    """Override for deepcopy that does not copy this sentinel object."""
-    del memo
-    return self
-
-
-NO_VALUE = _NoValue()
-
-serialization.register_node_traverser(
-    _NoValue,
-    flatten_fn=lambda _: ((), None),
-    unflatten_fn=lambda values, metadata: NO_VALUE,
-    path_elements_fn=lambda _: ())
+NO_VALUE = config.NO_VALUE
+NoValue = config.NoValue
 
 
 class Tag(metaclass=TagType):
@@ -128,7 +112,7 @@ class Tag(metaclass=TagType):
 T = TypeVar('T')
 
 
-def tagged_value_fn(value: Union[T, _NoValue] = NO_VALUE,
+def tagged_value_fn(value: Union[T, NoValue] = NO_VALUE,
                     tags: Optional[Set[TagType]] = None) -> T:
   """Identity function to return value if set, and raise an error if not.
 
@@ -165,7 +149,7 @@ class TaggedValueCls(Generic[T], config.Config[T]):
 
 def TaggedValue(  # pylint: disable=invalid-name
     tags: Collection[TagType],
-    default: Union[_NoValue, T] = NO_VALUE,
+    default: Union[NoValue, T] = NO_VALUE,
 ) -> TaggedValueCls[T]:
   """Declares a value annotated with a set of `Tag`s.
 
