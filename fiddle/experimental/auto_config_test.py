@@ -58,6 +58,21 @@ def explicit_config_building_fn(x: int) -> fdl.Config:
   return fdl.Config(basic_fn, 5, kwarg=x)
 
 
+@auto_config.auto_config
+def globals_test_fn():
+  """Function to test that auto_config globals act correctly.
+
+  In particular, we're testing that symbols that are added to `globals` *after*
+  the auto_config decorator runs are visible when we call `as_buildable`.  For
+  that reason, this function definition must be placed before the definition for
+  `pass_through`.
+
+  Returns:
+    5
+  """
+  return pass_through(5)
+
+
 def pass_through(arg):
   return arg
 
@@ -726,6 +741,12 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertDagEqual(
         SampleClass.autoconfig_method.as_buildable(self=x),
         fdl.Config(basic_fn, x))
+
+  def test_globals(self):
+    # The following will fail with `NameError: name 'pass_through' is not
+    # defined` if the as_buildable globals don't reflect changes made after
+    # the auto_config decorator is run.
+    globals_test_fn.as_buildable()
 
 
 class AutoUnconfigTest(absltest.TestCase):
