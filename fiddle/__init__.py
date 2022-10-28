@@ -16,7 +16,6 @@
 """Init file for the `fiddle` package."""
 
 from fiddle.building import build
-from fiddle.building import BuildError
 from fiddle.config import add_tag
 from fiddle.config import ArgFactory
 from fiddle.config import assign

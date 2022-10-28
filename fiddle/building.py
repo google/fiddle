@@ -14,14 +14,15 @@
 # limitations under the License.
 
 """Implements Fiddle's build() function."""
-import contextlib
-import threading
 
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, overload
+import contextlib
+import functools
+import threading
+from typing import Any, Callable, TypeVar, overload
 
 from fiddle import config as config_lib
 from fiddle import daglish
-from fiddle import tag_type
+from fiddle._src import reraised_exception
 
 T = TypeVar('T')
 CallableProducingT = Callable[..., T]
@@ -50,35 +51,52 @@ def _in_build():
     _state.in_build = False
 
 
-class BuildError(ValueError):
-  """Error raised when building a Config fails."""
-  buildable: config_lib.Buildable
-  path_from_config_root: str
-  original_error: Exception
-  args: Tuple[Any, ...]
-  kwargs: Dict[str, Any]
+def _format_arg(arg: Any) -> str:
+  """Returns repr(arg), returning a constant string if repr() fails."""
+  try:
+    return repr(arg)
+  except Exception:  # pylint: disable=broad-except
+    return f'<ERROR FORMATTING {type(arg)} ARGUMENT>'
 
-  def __init__(
-      self,
-      buildable: config_lib.Buildable,
-      path_from_config_root: str,
-      original_error: Exception,
-      args: Tuple[Any, ...],
-      kwargs: Dict[str, Any],
-  ) -> None:
-    super().__init__(str(original_error))
-    self.buildable = buildable
-    self.path_from_config_root = path_from_config_root
-    self.original_error = original_error
-    self.args = args
-    self.kwargs = kwargs
 
-  def __str__(self) -> str:
-    fn_or_cls_name = config_lib.get_callable(self.buildable).__qualname__
-    return (f'Failed to construct or call {fn_or_cls_name} '
-            f'(at {self.path_from_config_root}) with arguments\n'
-            f'    args: {self.args}\n'
-            f'    kwargs: {self.kwargs}')
+def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
+                  arguments: dict[str, Any]) -> str:
+  """Returns Fiddle-related debugging information for an exception."""
+  path_str = '<root>' + daglish.path_str(current_path)
+  fn_or_cls = config_lib.get_callable(buildable)
+  try:
+    fn_or_cls_name = fn_or_cls.__qualname__
+  except AttributeError:
+    fn_or_cls_name = str(fn_or_cls)  # callable instances, etc.
+  kwargs_str = ', '.join(
+      f'{name}={_format_arg(value)}' for name, value in arguments.items())
+  return ('\n\nFiddle context: failed to construct or call '
+          f'{fn_or_cls_name} at {path_str} '
+          f'with arguments ({kwargs_str})')
+
+
+def call_buildable(
+    buildable: config_lib.Buildable,
+    arguments: dict[str, Any],
+    *,
+    current_path: daglish.Path,
+) -> Any:
+  make_message = functools.partial(_make_message, current_path, buildable,
+                                   arguments)
+  with reraised_exception.try_with_lazy_message(make_message):
+    return buildable.__build__(**arguments)
+
+
+def _build(value: Any, state: daglish.State) -> Any:
+  """Inner method / implementation of build()."""
+
+  if isinstance(value, config_lib.Buildable):
+    sub_traversal = state.flattened_map_children(value)
+    metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
+    arguments = metadata.arguments(sub_traversal.values)
+    return call_buildable(value, arguments, current_path=state.current_path)
+  else:
+    return state.map_children(value)
 
 
 # Define typing overload for `build(Partial[T])`
@@ -117,25 +135,6 @@ def build(buildable: Any) -> Any:
   ...
 
 
-def _build(value: Any, state: Optional[daglish.State] = None) -> Any:
-  """Inner method / implementation of build()."""
-  state = state or daglish.MemoizedTraversal.begin(_build, value)
-
-  if isinstance(value, config_lib.Buildable):
-    sub_traversal = state.flattened_map_children(value)
-    metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
-    arguments = metadata.arguments(sub_traversal.values)
-    try:
-      return value.__build__(**arguments)
-    except tag_type.TaggedValueNotFilledError:
-      raise
-    except Exception as e:
-      path_str = '<root>' + daglish.path_str(state.current_path)
-      raise BuildError(value, path_str, e, (), arguments) from e
-  else:
-    return state.map_children(value)
-
-
 # This is a free function instead of a method on the `Buildable` object in order
 # to avoid potential naming collisions (e.g., if a function or class has a
 # parameter named `build`).
@@ -167,4 +166,4 @@ def build(buildable):
   """
 
   with _in_build():
-    return _build(buildable)
+    return daglish.MemoizedTraversal.run(_build, buildable)

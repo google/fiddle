@@ -20,7 +20,6 @@ import dataclasses
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle import building
 from fiddle.experimental import fixture_node
 
 
@@ -75,8 +74,7 @@ class FixtureTest(absltest.TestCase):
 
   def test_build_errors(self):
     config = fixture_node.FixtureNode(list_fixture, item=diamond(), num_items=4)
-    with self.assertRaisesRegex(building.BuildError,
-                                "Failed to construct or call list_fixture."):
+    with self.assertRaisesRegex(ValueError, "You must first materialize.*"):
       fdl.build(config)
 
   def test_list_fixture(self):

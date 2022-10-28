@@ -178,6 +178,10 @@ class DataclassParent:
   child: DataclassChild = dataclasses.field(default_factory=DataclassChild)
 
 
+def raise_error():
+  raise ValueError('My fancy exception')
+
+
 class ConfigTest(absltest.TestCase):
 
   def test_config_for_classes(self):
@@ -867,11 +871,9 @@ class ConfigTest(absltest.TestCase):
       return fdl.build(cfg)
 
     outer = fdl.Config(nest_call, 3)
-    expected_msg = r'test_build_inside_build.<locals>.nest_call \(at <root>\)'
-    with self.assertRaisesRegex(fdl.BuildError, expected_msg) as e:
-      fdl.build(outer)
     expected_msg = r'forbidden to call `fdl.build` inside another `fdl.build`'
-    self.assertRegex(str(e.exception.__cause__), expected_msg)
+    with self.assertRaisesRegex(Exception, expected_msg):
+      fdl.build(outer)
 
   def test_history_tracking(self):
     cfg = fdl.Config(SampleClass, 'arg1_value')
@@ -979,24 +981,16 @@ class ConfigTest(absltest.TestCase):
 
   def test_build_raises_nice_error_too_few_args(self):
     cfg = fdl.Config(basic_fn, fdl.Config(SampleClass, 1), 2)
-    with self.assertRaisesRegex(fdl.BuildError, '.*SampleClass.*') as e:
+    with self.assertRaisesRegex(
+        TypeError, r'.*missing 1 required.*\n\n.*<root>\.arg1.*arg1=1'):
       fdl.build(cfg)
-    self.assertIs(e.exception.buildable, cfg.arg1)
-    self.assertEqual(e.exception.path_from_config_root, '<root>.arg1')
-    self.assertIsInstance(e.exception.original_error, TypeError)
-    self.assertEqual(e.exception.args, ())
-    self.assertEqual(e.exception.kwargs, {'arg1': 1})
 
   def test_build_raises_exception_on_call(self):
 
-    def raise_error():
-      raise ValueError('My fancy exception')
-
     cfg = fdl.Config(raise_error)
-    with self.assertRaisesWithLiteralMatch(
-        fdl.BuildError, 'Failed to construct or call ConfigTest.'
-        'test_build_raises_exception_on_call.<locals>.raise_error '
-        '(at <root>) with arguments\n    args: ()\n    kwargs: {}'):
+    msg = ('My fancy exception\n\nFiddle context: failed to construct or call '
+           'raise_error at <root> with arguments ()')
+    with self.assertRaisesWithLiteralMatch(ValueError, msg):
       fdl.build(cfg)
 
   def test_build_error_path(self):
@@ -1005,10 +999,13 @@ class ConfigTest(absltest.TestCase):
     sub_dict = {'a': 0, 'b': 2, 'c': sub_cfg, 'd': 10}
     cfg = fdl.Config(fn_with_var_kwargs, [1, sub_dict])
 
-    with self.assertRaises(fdl.BuildError) as e:
+    with self.assertRaises(TypeError) as e:
       fdl.build(cfg)
 
-    self.assertEqual(e.exception.path_from_config_root, "<root>.arg1[1]['c']")
+    self.assertEqual(
+        e.exception.proxy_message,  # pytype: disable=attribute-error
+        '\n\nFiddle context: failed to construct or call basic_fn at <root>.'
+        "arg1[1]['c'] with arguments (arg1=1)")
 
   def test_multithreaded_build(self):
     """Two threads can each invoke build.build without interfering."""

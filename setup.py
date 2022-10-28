@@ -43,6 +43,7 @@ setup(
     packages=find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},
     install_requires=[
+        'absl-py',
         'libcst',
         'typing-extensions',
     ],
@@ -52,7 +53,6 @@ setup(
             'etils[epath]',
         ],
         'testing': [
-            'absl-py',
             'fiddle[flags]',
             'graphviz',
             'pytest',

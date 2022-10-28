@@ -36,6 +36,7 @@ import contextlib
 import dataclasses
 import enum
 import itertools
+import re
 import traceback
 from typing import Any, Callable, FrozenSet, Iterator, Optional, Set, Union
 
@@ -61,6 +62,29 @@ class Location:
 # A function that returns a location.
 LocationProvider = Callable[[], Location]
 
+_exclude_locations: Set[str] = set([
+    "fiddle/config.py",
+    "fiddle/daglish.py",
+    "fiddle/history.py",
+    "fiddle/experimental/auto_config.py",
+    "fiddle/materialize.py",
+])
+
+
+def _compile_exclude_regex():
+  return re.compile(r"({})$".format("|".join(
+      re.escape(location) for location in _exclude_locations)))
+
+
+_exclude_regex = _compile_exclude_regex()
+
+
+def add_exclude_location(location: str):
+  """Adds a filename pattern to exclude from history stacktraces."""
+  global _exclude_regex
+  _exclude_locations.add(location)
+  _exclude_regex = _compile_exclude_regex()
+
 
 def _stacktrace_location_provider() -> Location:
   """Returns a string corresponding to the user-function that set the field.
@@ -69,11 +93,7 @@ def _stacktrace_location_provider() -> Location:
     RuntimeError: if no suitable stack frame can be found.
   """
   for frame in reversed(traceback.extract_stack()):
-    if (not frame.filename.endswith("fiddle/config.py") and
-        not frame.filename.endswith("fiddle/daglish.py") and
-        not frame.filename.endswith("fiddle/history.py") and
-        not frame.filename.endswith("fiddle/experimental/auto_config.py") and
-        not frame.filename.endswith("fiddle/materialize.py")):
+    if not _exclude_regex.search(frame.filename):
       return Location(
           filename=frame.filename,
           line_number=frame.lineno,
