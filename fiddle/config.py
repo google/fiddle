@@ -75,7 +75,8 @@ class BuildableTraverserMetadata(NamedTuple):
     return self._replace(argument_history={})
 
   def arguments(self, values: Iterable[Any]) -> Dict[str, Any]:
-    """Returns a dictionary combining `self.argument_names` with `values`."""
+    """Returns a dictionary combining ``self.argument_names`` with ``values``.
+    """
     return dict(zip(self.argument_names, values))
 
   def tags(self) -> Dict[str, set[tag_type.TagType]]:
@@ -89,10 +90,10 @@ class BuildableTraverserMetadata(NamedTuple):
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
-  """Base class for buildable types (`Config` and `Partial`).
+  """Base class for buildable types (``Config`` and ``Partial``).
 
-  Buildable types implement a `__build__` method that is called during
-  `fdl.build()` with arguments set on the `Buildable` to get output for the
+  Buildable types implement a ``__build__`` method that is called during
+  ``fdl.build()`` with arguments set on the ``Buildable`` to get output for the
   corresponding instance.
   """
 
@@ -107,12 +108,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
                *args, **kwargs):
-    """Initialize for `fn_or_cls`, optionally specifying parameters.
+    """Initialize for ``fn_or_cls``, optionally specifying parameters.
 
     Args:
-      fn_or_cls: The function or class to configure, or a `Buildable` to copy.
-      *args: Any positional arguments to configure for `fn_or_cls`.
-      **kwargs: Any keyword arguments to configure for `fn_or_cls`.
+      fn_or_cls: The function or class to configure, or a ``Buildable`` to copy.
+      *args: Any positional arguments to configure for ``fn_or_cls``.
+      **kwargs: Any keyword arguments to configure for ``fn_or_cls``.
     """
     if isinstance(fn_or_cls, Buildable):
       raise ValueError(
@@ -202,7 +203,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     return tuple(daglish.Attr(name) for name in ordered_arguments(self).keys())
 
   def __getattr__(self, name: str):
-    """Get parameter with given `name`."""
+    """Get parameter with given ``name``."""
     value = self.__arguments__.get(name, _UNSET_SENTINEL)
 
     # Replace tied values with their contents.
@@ -232,7 +233,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     raise AttributeError(msg)
 
   def __validate_param_name__(self, name) -> None:
-    """Raises an error if `name` is not a valid parameter name."""
+    """Raises an error if ``name`` is not a valid parameter name."""
     param = self.__signature__.parameters.get(name)
 
     if param is not None:
@@ -259,7 +260,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       raise TypeError(err_msg)
 
   def __setattr__(self, name: str, value: Any):
-    """Sets parameter `name` to `value`."""
+    """Sets parameter ``name`` to ``value``."""
 
     self.__validate_param_name__(name)
 
@@ -275,7 +276,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     self.__argument_history__.add_new_value(name, value)
 
   def __delattr__(self, name):
-    """Unsets parameter `name`."""
+    """Unsets parameter ``name``."""
     try:
       del self.__arguments__[name]
       self.__argument_history__.add_deleted_value(name)
@@ -286,9 +287,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __dir__(self) -> Collection[str]:
     """Provide a useful list of attribute names, optimized for Jupyter/Colab.
 
-    `__dir__` is often implicitly called by tooling such as Jupyter/Colab to
-    provide autocomplete suggestions. This implementation of `__dir__` makes it
-    easy to see what are valid attributes to get, set, or delete.
+    ``__dir__`` is often implicitly called by tooling such as Jupyter/Colab to
+    provide autocomplete suggestions. This implementation of ``__dir__`` makes
+    it easy to see what are valid attributes to get, set, or delete.
 
     Returns:
       A list of useful attribute names corresponding to set or unset parameters.
@@ -328,21 +329,21 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     return f"<{name}[{formatted_fn_or_cls}({', '.join(formatted_params)})]>"
 
   def __copy__(self):
-    """Shallowly copies this `Buildable` instance.
+    """Shallowly copies this ``Buildable`` instance.
 
     This copy implementation ensures that setting parameters on a copy of a
-    `Buildable` won't affect the original instance. However, the copy is
+    ``Buildable`` won't affect the original instance. However, the copy is
     shallow, so parameter values will still refer to the same instances of
     objects after the copy.
 
     Returns:
-      A shallow copy of this `Buildable`.
+      A shallow copy of this ``Buildable``.
     """
     # TODO(b/231368256): Preserve argument history...
     return self.__unflatten__(*self.__flatten__())
 
   def __deepcopy__(self, memo: Dict[int, Any]):
-    """Deepcopies this Buildable, skipping copying of __signature__."""
+    """Deepcopies this ``Buildable``, skipping copying of ``__signature__``."""
     # Skipping copying inspect.Signature objects, which are generally immutable,
     # is about 2x faster on artificial benchmarks.
     memo[id(self.__signature__)] = self.__signature__
@@ -353,23 +354,23 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.
 
-    This compares the specific types of `self` and `other`, the function or
+    This compares the specific types of ``self`` and ``other``, the function or
     class being configured, and then checks for equality in the configured
     arguments.
 
     Default argument values are considered in this comparison: If one
-    `Buildable` has an argument explicitly set to its default value while
+    ``Buildable`` has an argument explicitly set to its default value while
     another does not, the two will still be considered equal (motivated by the
     fact that calls to the function or class being configured will be the same).
 
     Argument history is not compared (i.e., it doesn't matter how the
-    `Buildable`s being compared reached their current state).
+    ``Buildable``'s being compared reached their current state).
 
     Args:
-      other: The other value to compare `self` to.
+      other: The other value to compare ``self`` to.
 
     Returns:
-      `True` if `self` equals `other`, `False` if not.
+      ``True`` if ``self`` equals ``other``, ``False`` if not.
     """
     if type(self) is not type(other):
       return False
@@ -390,9 +391,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __getstate__(self):
     """Gets pickle serialization state, removing some fields.
 
-    For now, we discard the __signature__ (which can be recalculated) and
-    __argument_history__, because these tend to contain values which cannot be
-    serialized.
+    For now, we discard the ``__signature__`` (which can be recalculated) and
+    ``__argument_history__``, because these tend to contain values which cannot
+    be serialized.
 
     Returns:
       Dict of serialized state.
@@ -405,10 +406,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """Loads pickle serialization state.
 
     This re-derives the signature if not present, and adds an empty
-    __argument_history__, if it was removed.
+    ``__argument_history__``, if it was removed.
 
     Args:
-      state: State dictionary, from __getstate__.
+      state: State dictionary, from ``__getstate__``.
     """
     self.__dict__.update(state)  # Support unpickle.
     if '__signature__' not in self.__dict__:
@@ -419,7 +420,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 def _add_dataclass_tags(buildable, fields):
   """Adds tags to arguments as indicated by dataclass fields.
 
-  If any dataclass field in `fields` has metadata indicating that the field
+  If any dataclass field in ``fields`` has metadata indicating that the field
   should be given one or more tags, then add those tags to the argument
   corresponding to the field.
 
@@ -439,18 +440,18 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
 
   If an argument has no value supplied when initializing a dataclass, but the
   corresponding field has a default factory, then that factory will be used to
-  construct the argument's value. Thus, when creating a `fdl.Buildable` for the
-  dataclass, it may be possible to fill in the value for the argument with
-  `Config(factory)`, without changing the value that will be built by
-  `buildable` when calling `fdl.build`.  This is useful because it makes the
+  construct the argument's value. Thus, when creating a ``fdl.Buildable`` for
+  the dataclass, it may be possible to fill in the value for the argument with
+  ``Config(factory)``, without changing the value that will be built by
+  ``buildable`` when calling ``fdl.build``.  This is useful because it makes the
   argument "deeply configurable" -- i.e., if the factory has any optional
   arguments, then this makes it possible to configure those objects. And in the
-  special case where `factory` is an `@auto_config`'d function, we can make the
-  argument even more deeply configurable by inlining the factory.
+  special case where ``factory`` is an ``@auto_config``'d function, we can make
+  the argument even more deeply configurable by inlining the factory.
 
   However, expanding default-valued args into `Buildable`s should only be
   performed when it can be done safely -- i.e., without changing the value
-  that will be built by `buildable`. In particular, we need to be careful
+  that will be built by ``buildable``. In particular, we need to be careful
   not to create any "unintentional sharing," where the value built by the
   default factory is used by multiple instances of the dataclass.
 
@@ -462,27 +463,28 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
   not be accessable.
 
   One case where it *is* safe to expand default factories is when
-  `type(buildable)` is `fdl.Config`.  In that case, we know that a single
+  ``type(buildable)`` is ``fdl.Config``.  In that case, we know that a single
   dataclass object will be built from `buildable`, so we are guaranteed that the
   value built by the default factory will only be used by that one object.
 
-  However, if `type(buildable)` is `fdl.Partial`, then the function built from
-  `buildable` can be used to generate multiple dataclass instances; and we need
-  to ensure that the default factory is called for each instance.  For this
-  case, we use `ArgFactory(factory)` rather than `Config(factory)` to expand the
-  argument.  This ensures that the factory is called each time the partial is
-  called.  We also need to replace any nested `Config`s with `ArgFactory`s, to
-  ensure that the nested values are created each time as well.
+  However, if ``type(buildable)`` is ``fdl.Partial``, then the function built
+  from ``buildable`` can be used to generate multiple dataclass instances; and
+  we need to ensure that the default factory is called for each instance.  For
+  this case, we use ``ArgFactory(factory)`` rather than ``Config(factory)`` to
+  expand the argument.  This ensures that the factory is called each time the
+  partial is called.  We also need to replace any nested ``Config``'s with
+  ``ArgFactory``'s, to ensure that the nested values are created each time as
+  well.
 
-  Similarly, if `type(buildable) is `fdl.ArgFactory`, then the factory function
-  built from `buildable` can be used to generate multiple dataclass instances,
-  so we use `ArgFactory(factory)` to expand arguments.
+  Similarly, if ``type(buildable) is fdl.ArgFactory``, then the factory function
+  built from ``buildable`` can be used to generate multiple dataclass instances,
+  so we use ``ArgFactory(factory)`` to expand arguments.
 
-  In the case where `type(buildable)` is `fdl.Partial` or `fdl.ArgFactory`,
-  there is one additional corner case to consider, which occurs when multiple
-  nested partials makes it impossible for Fiddle to describe the correct
-  instance sharing pattern with its current `Buildable` subclasses.  This corner
-  case is demonstrated by the following example:
+  In the case where ``type(buildable)`` is ``fdl.Partial`` or
+  ``fdl.ArgFactory``, there is one additional corner case to consider, which
+  occurs when multiple nested partials makes it impossible for Fiddle to
+  describe the correct instance sharing pattern with its current ``Buildable``
+  subclasses.  This corner case is demonstrated by the following example:
 
   ```
   def f(x):
@@ -498,9 +500,9 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
   p = functools.partial(A)
   ```
 
-  Here, if we write `a1 = p()` to create an instance of `A`, then calling
-  `a1.fn()` multiple times will always return the same object, while another
-  instance `a2 = p()` will return a different object when calling `a2.fn()`:
+  Here, if we write ``a1 = p()`` to create an instance of ``A``, then calling
+  ``a1.fn()`` multiple times will always return the same object, while another
+  instance ``a2 = p()`` will return a different object when calling ``a2.fn()``:
 
   ```
   a1, a2 = p(), p()              # call the partial function twice.
@@ -508,36 +510,36 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
   assert a1.fn() is not a2.fn()  # a1 and a2 return different objects.
   ```
 
-  However, if we construct `fdl.Partial(A)`, and try to make `f` and `g`
+  However, if we construct ``fdl.Partial(A)``, and try to make ``f`` and ``g``
   deeply configurable, then there's no way to generate the same behavior
-  using Fiddle `Buildable`s:
+  using Fiddle ``Buildable``'s:
 
-  * If we use `fdl.Partial(A, fdl.Partial(f, fdl.Config(g)))`, then all
-    instances of `A` generated by `p` will return the same instance
-    (namely, the instance constructed by `fdl.build(fdl.Config(g))`.
-  * If we use `fdl.Partial(A, fdl.Partial(f, fdl.ArgFactory(g)))`, then
-    every call to `A.fn` will return a new object.
+  * If we use ``fdl.Partial(A, fdl.Partial(f, fdl.Config(g)))``, then all
+    instances of ``A`` generated by ``p`` will return the same instance
+    (namely, the instance constructed by ``fdl.build(fdl.Config(g))``).
+  * If we use ``fdl.Partial(A, fdl.Partial(f, fdl.ArgFactory(g)))``, then
+    every call to ``A.fn`` will return a new object.
 
-  Therefore, since is not possible to make the field `A.fn` deeply
+  Therefore, since is not possible to make the field ``A.fn`` deeply
   configurable while preserving the original semantics, we instead raise
   an exception.  If you believe you have a valid use-case for this, please
   contact the Fiddle team.
 
   The precise circumstances that cause this problem are: when we are building
-  a `Partial` (or `ArgFactory`), and the default factory expands into an
-  expression containing a `Partial` (or `ArgFactory`) that contains a `Config`
-  -- in that case, the object built for the `Config` should be shared for each
-  call to the inner partial; but should *not* be shared for each call to
-  the outer partial.
+  a ``Partial`` (or ``ArgFactory``), and the default factory expands into an
+  expression containing a ``Partial`` (or ``ArgFactory``) that contains a
+  ``Config`` -- in that case, the object built for the `Config` should be shared
+  for each call to the inner partial; but should *not* be shared for each call
+  to the outer partial.
 
   Args:
     buildable: The buildable that should be updated.
-    fields: The dataclass fields for buildable.__fn_or_cls__.
-    arguments: The arguments that are being used to construct this `Buildable`.
-      If any argument has no value, and the corresponding field has a default
-      factory, then the argument will be expanded into an equivalent `Buildable`
-      if it's possible to do so without changing the semantics of
-      `fdl.build(buildable)`.
+    fields: The dataclass fields for ``buildable.__fn_or_cls__``.
+    arguments: The arguments that are being used to construct this
+      ``Buildable``. If any argument has no value, and the corresponding field
+      has a default factory, then the argument will be expanded into an
+      equivalent ``Buildable`` if it's possible to do so without changing the
+      semantics of ``fdl.build(buildable)``.
   """
 
   def convert_to_arg_factory(value, state):
@@ -587,7 +589,7 @@ class Config(Generic[T], Buildable[T]):
 
   This class represents the configuration for a given function or class,
   exposing configured parameters as mutable attributes. For example, given a
-  class
+  class::
 
       class SampleClass:
         '''Example class for demonstration purposes.'''
@@ -596,17 +598,17 @@ class Config(Generic[T], Buildable[T]):
           self.arg = arg
           self.kwarg = kwarg
 
-  a configuration may (for instance) be accomplished via
+  a configuration may (for instance) be accomplished via::
 
       class_config = Config(SampleClass, 1, kwarg='kwarg')
 
-  or via
+  or via::
 
       class_config = Config(SampleClass)
       class_config.arg = 1
       class_config.kwarg = 'kwarg'
 
-  A function can be configured in the same ways:
+  A function can be configured in the same ways::
 
       def test_function(arg, kwarg=None):
         return arg, kwarg
@@ -614,25 +616,26 @@ class Config(Generic[T], Buildable[T]):
       fn_config = Config(test_function, 1)
       fn_config.kwarg = 'kwarg'
 
-  A `Config` instance may be transformd into instances and function outputs by
-  passing it to the `build` function. The `build` function invokes each function
-  or class in the configuration tree (appropriately propagating the built
-  outputs from nested `Config`s). For example, using the `SampleClass` config
-  from above:
+  A ``Config`` instance may be transformd into instances and function outputs by
+  passing it to the ``build`` function. The ``build`` function invokes each
+  function or class in the configuration tree (appropriately propagating the
+  built outputs from nested ``Config``'s). For example, using the
+  ``SampleClass`` config from above::
 
       instance = build(class_config)
       assert instance.arg == 'arg'
       assert instance.kwarg == 'kwarg'
 
-  If the same `Config` instance is used in multiple places within the
-  configuration tree, its function or class is invoked only once during `build`,
-  and the result shared across all occurences of the `Config` instance. (See
-  `build` documentation for further details.) To create a new instance of a
-  `Config` with the same parameter settings that will yield a separate instance
-  during `build`, `copy.copy()` or `copy.deepcopy()` may be used.
+  If the same ``Config`` instance is used in multiple places within the
+  configuration tree, its function or class is invoked only once during
+  ``build``, and the result shared across all occurences of the ``Config``
+  instance. (See ``build`` documentation for further details.) To create a new
+  instance of a ``Config`` with the same parameter settings that will yield a
+  separate instance during ``build``, ``copy.copy()`` or ``copy.deepcopy()``
+  may be used.
 
   A class or function can customize the Config instance by defining a
-  `__fiddle_init__` property. For example:
+  ``__fiddle_init__`` property. For example::
 
       class MyClass:
         def __init__(self, x, y, z):
@@ -649,17 +652,17 @@ class Config(Generic[T], Buildable[T]):
   __signature__: inspect.Signature
 
   def __build__(self, *args, **kwargs):
-    """Builds this `Config` for the given `args` and `kwargs`.
+    """Builds this ``Config`` for the given ``args`` and ``kwargs``.
 
     This method is called during `build` to get the output for this `Config`.
 
     Args:
-      *args: Positional arguments to pass to `self.__fn_or_cls__`.
-      **kwargs: Keyword arguments to pass to `self.__fn_or_cls__`.
+      *args: Positional arguments to pass to ``self.__fn_or_cls__``.
+      **kwargs: Keyword arguments to pass to ``self.__fn_or_cls__`.
 
     Returns:
-      The result of calling `self.__fn_or_cls__` with the given `args` and
-      `kwargs`.
+      The result of calling ``self.__fn_or_cls__`` with the given ``args`` and
+      ``kwargs``.
     """
     return self.__fn_or_cls__(*args, **kwargs)
 
@@ -668,8 +671,9 @@ class TiedValue(Generic[T], Config[T]):
   """Class implementing tied values.
 
   The implementation/declaration is here, so that we can write __getattr__ and
-  __setattr__ buildable hooks to eliminate the extra `.value` when it is a field
-  attribute, but please use `experimental/tied_value.py` for the public API.
+  __setattr__ buildable hooks to eliminate the extra ``.value`` when it is a
+  field attribute, but please use ``experimental/tied_value.py`` for the public
+  API.
   """
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
@@ -680,16 +684,16 @@ class TiedValue(Generic[T], Config[T]):
 
 @dataclasses.dataclass(frozen=True)
 class _BuiltArgFactory:
-  """The result of building an `ArgFactory`.
+  """The result of building an ``ArgFactory``.
 
-  This wrapper is returned by `ArgFactory.__build__`, and then consumed by the
-  `__build__` method of the containing `Partial` or `ArgFactory` object.
+  This wrapper is returned by ``ArgFactory.__build__``, and then consumed by the
+  ``__build__`` method of the containing ``Partial`` or ``ArgFactory`` object.
   """
   factory: Callable[..., Any]
 
 
 def _contains_arg_factory(value: Any) -> bool:
-  """Returns true if `value` contains any `_BuiltArgFactory` instances."""
+  """Returns true if ``value`` contains any ``_BuiltArgFactory`` instances."""
 
   def visit(node, state):
     if isinstance(node, _BuiltArgFactory):
@@ -703,7 +707,7 @@ def _contains_arg_factory(value: Any) -> bool:
 
 
 def _invoke_arg_factories(value: Any) -> Any:
-  """Returns a copy of value with any _BuiltArgFactory `f` replaced by `f()`.
+  """Makes a copy of value with any _BuiltArgFactory ``f`` replaced by ``f()``.
 
   The copy is "shallow" in the sense that only containers that (directly or
   indirectly) contain _BuiltArgFactories are replaced.  E.g.:
@@ -811,12 +815,12 @@ def _build_partial(fn: Callable[..., Any], args: Tuple[Any],
 
 
 class Partial(Generic[T], Buildable[T]):
-  """A `Partial` config creates a partial function or class when built.
+  """A ``Partial`` config creates a partial function or class when built.
 
   In some cases, it may be desired to leave a function or class uninvoked, and
-  instead output a corresponding `functools.partial` object. Where the `Config`
-  base class calls its underlying `__fn_or_cls__` when built, this `Partial`
-  instead results in a partially bound function or class:
+  instead output a corresponding ``functools.partial`` object. Where the
+  ``Config`` base class calls its underlying ``__fn_or_cls__`` when built, this
+  ``Partial`` instead results in a partially bound function or class::
 
       partial_config = Partial(SampleClass)
       partial_config.arg = 1
@@ -826,10 +830,11 @@ class Partial(Generic[T], Buildable[T]):
       assert instance.arg == 2
       assert instance.kwarg == 'kwarg'
 
-  A `Partial` can also be created from an existing `Config`, by passing it to
-  the `Partial` constructor. This results in a shallow copy that is decoupled
-  from the `Config` used to create it. In the example below, any further changes
-  to `partial_config` are not reflected by `class_config` (and vice versa):
+  A ``Partial`` can also be created from an existing ``Config``, by passing it
+  to the ``Partial`` constructor. This results in a shallow copy that is
+  decoupled from the ``Config`` used to create it. In the example below, any
+  further changes to ``partial_config`` are not reflected by ``class_config``
+  (and vice versa)::
 
       partial_config = Partial(class_config)
       class_config.arg = 'new value'  # Further modification to `class_config`.
@@ -842,18 +847,19 @@ class Partial(Generic[T], Buildable[T]):
   __fn_or_cls__: TypeOrCallableProducingT
 
   def __build__(self, *args, **kwargs):
-    """Builds this `Partial` for the given `args` and `kwargs`.
+    """Builds this ``Partial`` for the given ``args`` and ``kwargs``.
 
-    This method is called during `build` to get the output for this `Partial`.
+    This method is called during ``build`` to get the output for this
+    ``Partial``.
 
     Args:
-      *args: Positional arguments to partially bind to `self.__fn_or_cls__`.
-      **kwargs: Keyword arguments to partially bind to `self.__fn_or_cls__`.
+      *args: Positional arguments to partially bind to ``self.__fn_or_cls__``.
+      **kwargs: Keyword arguments to partially bind to ``self.__fn_or_cls__``.
 
     Returns:
-      A partial object (`functools.partial` or `arg_factory.partial`) for the
-      callable `self.__fn_or_cls__`, which binds the positional arguments `args`
-      and the keyword arguments `kwargs`.
+      A partial object (``functools.partial`` or ``arg_factory.partial``) for
+      the callable ``self.__fn_or_cls__``, which binds the positional arguments
+      ``args`` and the keyword arguments ``kwargs``.
     """
     return _build_partial(self.__fn_or_cls__, args, kwargs)
 
@@ -861,9 +867,9 @@ class Partial(Generic[T], Buildable[T]):
 class ArgFactory(Generic[T], Buildable[T]):
   """A configuration that creates an argument factory when built.
 
-  When an `ArgFactory` is used as a parameter for a `fdl.Partial`, the
-  partial function built from that `fdl.Partial` will construct a new value for
-  the parameter each time it is called.  For example:
+  When an ``ArgFactory`` is used as a parameter for a ``fdl.Partial``, the
+  partial function built from that ``fdl.Partial`` will construct a new value
+  for the parameter each time it is called.  For example:
 
   >>> def f(x, noise): return x + noise
   >>> cfg = fdl.Partial(f, noise=fdl.ArgFactory(random.random))
@@ -871,23 +877,24 @@ class ArgFactory(Generic[T], Buildable[T]):
   >>> p(5) == p(5)  # noise has a different value for each call to `p`.
   False
 
-  In contrast, if we replaced `fdl.ArgFactory` with `fdl.Config` in the
-  above example, then the same noise value would be added each time `p` is
-  called, since `random.random` would be called when `fdl.build(cfg)` is called.
+  In contrast, if we replaced ``fdl.ArgFactory`` with ``fdl.Config`` in the
+  above example, then the same noise value would be added each time ``p`` is
+  called, since ``random.random`` would be called when ``fdl.build(cfg)`` is
+  called.
 
-  `ArgFactory`s can also be nested inside containers that are parameter values
-  for a `Partial`.  In this case, the partial function will construct the
-  parameter value by copying the containers and replacing any `ArgFactory` with
-  the result of calling its factory.  Only the containers that (directly or
-  indirectly) contain `ArgFactory`s are copied; any elements of the containers
-  that do not contain `ArgFactory`s are not copied.
+  ``ArgFactory``'s can also be nested inside containers that are parameter
+  values for a ``Partial``.  In this case, the partial function will construct
+  the parameter value by copying the containers and replacing any ``ArgFactory``
+  with the result of calling its factory.  Only the containers that (directly or
+  indirectly) contain ``ArgFactory``'s are copied; any elements of the
+  containers that do not contain ``ArgFactory``'s are not copied.
 
-  `ArgFactory` can also be used as the parameter for another `ArgFactory`,
+  ``ArgFactory`` can also be used as the parameter for another ``ArgFactory``,
   in which case a new value will be constructed for the child argument
   each time the parent argument is created.
 
-  `ArgFactory` should *not* be used as a top-level configuration object, or
-  as the argument to a `fdl.Config`.
+  ``ArgFactory`` should *not* be used as a top-level configuration object, or
+  as the argument to a ``fdl.Config``.
   """
   # TODO(fiddle-team): Update build to raise an exception if ArgFactory is built
   # in an inappropriate context.
@@ -912,21 +919,21 @@ def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
 
 def update_callable(buildable: Buildable,
                     new_callable: TypeOrCallableProducingT):
-  """Updates `config` to build `new_callable` instead.
+  """Updates ``config`` to build ``new_callable`` instead.
 
   When extending a base configuration, it can often be useful to swap one class
   for another. For example, an experiment may want to swap in a subclass that
   has augmented functionality.
 
-  `update_callable` updates `config` in-place (preserving argument history).
+  ``update_callable`` updates ``config`` in-place (preserving argument history).
 
   Args:
-    buildable: A `Buildable` (e.g. a `fdl.Config`) to mutate.
-    new_callable: The new callable `config` should call when built.
+    buildable: A ``Buildable`` (e.g. a ``fdl.Config``) to mutate.
+    new_callable: The new callable ``config`` should call when built.
 
   Raises:
-    TypeError: if `new_callable` has varargs, or if there are arguments set on
-      `config` that are invalid to pass to `new_callable`.
+    TypeError: if ``new_callable`` has varargs, or if there are arguments set on
+      ``config`` that are invalid to pass to ``new_callable``.
   """
   # TODO(saeta): Consider adding a "drop_invalid_args: bool = False" argument.
 
@@ -960,27 +967,23 @@ def update_callable(buildable: Buildable,
 
 
 def assign(buildable: Buildable, **kwargs):
-  """Assigns multiple arguments to `buildable`.
+  """Assigns multiple arguments to ``buildable``.
 
   Although this function does not enable a caller to do something they can't
   already do with other syntax, this helper function can be useful when
-  manipulating deeply nested configs. Example:
+  manipulating deeply nested configs. Example::
 
-  ```py
-  cfg = # ...
-  fdl.assign(cfg.my.deeply.nested.child.object, arg_a=1, arg_b='b')
-  ```
+    cfg = # ...
+    fdl.assign(cfg.my.deeply.nested.child.object, arg_a=1, arg_b='b')
 
-  The above code snippet is equivalent to:
+  The above code snippet is equivalent to::
 
-  ```py
-  cfg = # ...
-  cfg.my.deeply.nested.child.object.arg_a = 1
-  cfg.my.deeply.nested.child.object.arg_b = 'b'
-  ```
+    cfg = # ...
+    cfg.my.deeply.nested.child.object.arg_a = 1
+    cfg.my.deeply.nested.child.object.arg_b = 'b'
 
   Args:
-    buildable: A `Buildable` (e.g. a `fdl.Config`) to set values upon.
+    buildable: A ``Buildable`` (e.g. a ``fdl.Config``) to set values upon.
     **kwargs: The arguments and values to assign.
   """
   for name, value in kwargs.items():
@@ -988,10 +991,10 @@ def assign(buildable: Buildable, **kwargs):
 
 
 def copy_with(buildable: Buildable, **kwargs):
-  """Returns a shallow copy of `buildable` with updates to arguments.
+  """Returns a shallow copy of ``buildable`` with updates to arguments.
 
   Args:
-    buildable: A `Buildable` (e.g. a `fdl.Config`) to copy and mutate.
+    buildable: A ``Buildable`` (e.g. a ``fdl.Config``) to copy and mutate.
     **kwargs: The arguments and values to assign.
   """
   buildable = copy.copy(buildable)
@@ -1000,15 +1003,15 @@ def copy_with(buildable: Buildable, **kwargs):
 
 
 def deepcopy_with(buildable: Buildable, **kwargs):
-  """Returns a deep copy of `buildable` with updates to arguments.
+  """Returns a deep copy of ``buildable`` with updates to arguments.
 
-  Note: if any `Config`s inside `buildable` are shared with `Config`s outside
-  of `buildable`, then they will no longer be shared in the returned value.
-  E.g., if `cfg1.x.y is cfg2` is `True`, then
-  `fdl.deepcopy_with(cfg1, ...).x.y is cfg2` will be `False`.
+  Note: if any ``Config``'s inside ``buildable`` are shared with ``Config``'s
+  outside of ``buildable``, then they will no longer be shared in the returned
+  value. E.g., if ``cfg1.x.y is cfg2``, then
+  ``fdl.deepcopy_with(cfg1, ...).x.y is cfg2`` will be ``False``.
 
   Args:
-    buildable: A `Buildable` (e.g. a `fdl.Config`) to copy and mutate.
+    buildable: A ``Buildable`` (e.g. a ``fdl.Config``) to copy and mutate.
     **kwargs: The arguments and values to assign.
   """
   buildable = copy.deepcopy(buildable)
@@ -1119,15 +1122,15 @@ BuildableT = TypeVar('BuildableT', bound=Buildable)
 
 
 def cast(new_type: Type[BuildableT], buildable: Buildable) -> BuildableT:
-  """Returns a copy of `buildable` that has been converted to `new_type`.
+  """Returns a copy of ``buildable`` that has been converted to ``new_type``.
 
-  Requires that `type(buildable)` and `type(new_type)` be compatible.
+  Requires that ``type(buildable)`` and ``type(new_type)`` be compatible.
   If the types may not be compatible, a warning will be issued, but the
   conversion will be attempted.
 
   Args:
     new_type: The type to convert to.
-    buildable: The `Buildable` that should be copied and converted.
+    buildable: The ``Buildable`` that should be copied and converted.
   """
   if not isinstance(buildable, Buildable):
     raise TypeError(f'Expected `buildable` to be a Buildable, got {buildable}')
