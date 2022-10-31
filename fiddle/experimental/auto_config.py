@@ -510,7 +510,8 @@ def auto_config(
 
     if not inspect.isfunction(fn):
       raise ValueError('`auto_config` is only compatible with functions, '
-                       '`@classmethod`s, and `@staticmethod`s.')
+                       f'`@classmethod`s, and `@staticmethod`s.  Got {fn!r} '
+                       f'with type {type(fn)!r}.')
 
     # Get the source code of the function, and remove any indentation which
     # would cause parsing issues when creating the AST (indentation generally is
