@@ -18,7 +18,7 @@
 import contextlib
 import functools
 import threading
-from typing import Any, Callable, TypeVar, overload
+from typing import Any, Callable, Dict, TypeVar, overload
 
 from fiddle import config as config_lib
 from fiddle import daglish
@@ -60,7 +60,7 @@ def _format_arg(arg: Any) -> str:
 
 
 def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
-                  arguments: dict[str, Any]) -> str:
+                  arguments: Dict[str, Any]) -> str:
   """Returns Fiddle-related debugging information for an exception."""
   path_str = '<root>' + daglish.path_str(current_path)
   fn_or_cls = config_lib.get_callable(buildable)
@@ -77,7 +77,7 @@ def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
 
 def call_buildable(
     buildable: config_lib.Buildable,
-    arguments: dict[str, Any],
+    arguments: Dict[str, Any],
     *,
     current_path: daglish.Path,
 ) -> Any:
