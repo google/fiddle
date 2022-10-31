@@ -47,6 +47,10 @@ class NoValue:
     del memo
     return self
 
+  def __copy__(self):
+    """Override for `copy.copy()` that does not copy this sentinel object."""
+    return self
+
 
 NO_VALUE = NoValue()
 

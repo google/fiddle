@@ -535,6 +535,10 @@ class ConfigTest(absltest.TestCase):
     self.assertIsNot(fn_config_copy.arg1, fn_config_copy.arg2)
     self.assertIsNot(fn_config.arg1, fn_config_copy.arg1)
 
+  def test_deep_copy_no_value(self):
+    self.assertIs(fdl.NO_VALUE, copy.copy(fdl.NO_VALUE))
+    self.assertIs(fdl.NO_VALUE, copy.deepcopy(fdl.NO_VALUE))
+
   def test_equality_arguments(self):
     cfg1 = fdl.Config(SampleClass, 'arg1')
     cfg2 = fdl.Config(SampleClass, 'arg1')
