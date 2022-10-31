@@ -32,7 +32,7 @@ from typing import Callable
 from absl import logging
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def make_exception_class(exception_type):
   """Subclasses `exception_type` with one that appends a message."""
 
