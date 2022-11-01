@@ -17,6 +17,7 @@
 
 from fiddle.experimental.autobuilders.autobuilders import auto_skeleton
 from fiddle.experimental.autobuilders.autobuilders import config
+from fiddle.experimental.autobuilders.autobuilders import partial
 from fiddle.experimental.autobuilders.autobuilders import Registry
 from fiddle.experimental.autobuilders.autobuilders import skeleton
 from fiddle.experimental.autobuilders.autobuilders import validator

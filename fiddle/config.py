@@ -1128,6 +1128,7 @@ def get_tags(buildable: Buildable,
 
 
 _SUPPORTED_CASTS = set()
+
 BuildableT = TypeVar('BuildableT', bound=Buildable)
 
 
