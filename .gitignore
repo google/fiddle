@@ -7,3 +7,4 @@ fiddle.egg-info
 
 # Typical editor spam.
 *~
+.vscode
