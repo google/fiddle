@@ -37,6 +37,7 @@ import dataclasses
 import enum
 import itertools
 import re
+import threading
 import traceback
 from typing import Any, Callable, FrozenSet, Iterator, Optional, Set, Union
 
@@ -92,12 +93,14 @@ def _stacktrace_location_provider() -> Location:
   Raises:
     RuntimeError: if no suitable stack frame can be found.
   """
-  for frame in reversed(traceback.extract_stack()):
-    if not _exclude_regex.search(frame.filename):
+  for frame, line_number in traceback.walk_stack(None):
+    filename = frame.f_code.co_filename
+    function_name = frame.f_code.co_name
+    if not _exclude_regex.search(filename):
       return Location(
-          filename=frame.filename,
-          line_number=frame.lineno,
-          function_name=frame.name)
+          filename=filename,
+          line_number=line_number,
+          function_name=function_name)
   raise RuntimeError("Cannot find a suitable frame in the stack trace!")
 
 
@@ -201,6 +204,28 @@ def update_tags(param_name: str,
       location=_location_provider())
 
 
+@dataclasses.dataclass
+class _TrackingState(threading.local):
+  enabled: bool = False
+
+
+_tracking_state = _TrackingState()
+
+
+@contextlib.contextmanager
+def suspend_tracking():
+  previous_value = _tracking_state.enabled
+  _tracking_state.enabled = True
+  try:
+    yield
+  finally:
+    _tracking_state.enabled = previous_value
+
+
+def tracking_enabled() -> bool:
+  return _tracking_state.enabled
+
+
 @contextlib.contextmanager
 def custom_location(
     temporary_provider: LocationProvider) -> Iterator[LocationProvider]:
@@ -223,5 +248,7 @@ def custom_location(
   global _location_provider
   original_location_provider = _location_provider
   _location_provider = temporary_provider
-  yield temporary_provider
-  _location_provider = original_location_provider
+  try:
+    yield temporary_provider
+  finally:
+    _location_provider = original_location_provider
