@@ -26,6 +26,8 @@ import itertools
 import logging
 import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
+import weakref
+
 from fiddle import arg_factory
 from fiddle import daglish
 from fiddle import history
@@ -58,6 +60,17 @@ NO_VALUE = NoValue()
 # be used to differentiate between unset values and user-set values that are
 # None or other commonly-used sentinel.
 _UNSET_SENTINEL = object()
+
+_signature_cache = weakref.WeakKeyDictionary()
+
+
+def _get_signature(fn_or_cls) -> inspect.Signature:
+  if isinstance(fn_or_cls, collections.abc.Hashable):
+    if fn_or_cls not in _signature_cache:
+      _signature_cache[fn_or_cls] = inspect.signature(fn_or_cls)
+    return _signature_cache[fn_or_cls]
+  else:
+    return inspect.signature(fn_or_cls)
 
 
 class BuildableTraverserMetadata(NamedTuple):
@@ -127,7 +140,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     # making them easily gettable but not as easily settable by user code.
     super().__setattr__('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__arguments__', {})
-    signature = inspect.signature(fn_or_cls)
+    signature = _get_signature(fn_or_cls)
     super().__setattr__('__signature__', signature)
     has_var_keyword = any(param.kind == param.VAR_KEYWORD
                           for param in signature.parameters.values())
@@ -423,7 +436,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     self.__dict__.update(state)  # Support unpickle.
     if '__signature__' not in self.__dict__:
       object.__setattr__(self, '__signature__',
-                         inspect.signature(self.__fn_or_cls__))
+                         _get_signature(self.__fn_or_cls__))
 
 
 def _add_dataclass_tags(buildable, fields):
@@ -947,7 +960,7 @@ def update_callable(buildable: Buildable,
   # will result in duplicate history entries.
 
   original_args = buildable.__arguments__
-  signature = inspect.signature(new_callable)
+  signature = _get_signature(new_callable)
   if any(param.kind == param.VAR_POSITIONAL
          for param in signature.parameters.values()):
     raise NotImplementedError(
