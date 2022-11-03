@@ -25,7 +25,7 @@ import inspect
 import itertools
 import logging
 import types
-from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
 from fiddle import arg_factory
 from fiddle import daglish
 from fiddle import history
@@ -53,7 +53,6 @@ class NoValue:
 
 
 NO_VALUE = NoValue()
-
 
 # Unique object instance that should never be used by end-users, and can thus
 # be used to differentiate between unset values and user-set values that are
@@ -83,8 +82,8 @@ class BuildableTraverserMetadata(NamedTuple):
     return collections.defaultdict(
         set, {name: set(tags) for name, tags in self.argument_tags.items()})
 
-  def history(self) -> Dict[str, List[history.HistoryEntry]]:
-    return collections.defaultdict(list, {
+  def history(self) -> history.History:
+    return history.History({
         name: list(entries) for name, entries in self.argument_history.items()
     })
 
@@ -102,7 +101,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   __fn_or_cls__: TypeOrCallableProducingT
   __signature__: inspect.Signature
   __arguments__: Dict[str, Any]
-  __argument_history__: Dict[str, List[history.HistoryEntry]]
+  __argument_history__: history.History
   __argument_tags__: Dict[str, Set[tag_type.TagType]]
   _has_var_keyword: bool
 
@@ -132,9 +131,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__signature__', signature)
     has_var_keyword = any(param.kind == param.VAR_KEYWORD
                           for param in signature.parameters.values())
-    arg_history = collections.defaultdict(list)
-    arg_history['__fn_or_cls__'].append(
-        history.new_value('__fn_or_cls__', fn_or_cls))
+    arg_history = history.History()
+    arg_history.add_new_value('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__argument_history__', arg_history)
     super().__setattr__('__argument_tags__', collections.defaultdict(set))
     super().__setattr__('_has_var_keyword', has_var_keyword)
@@ -274,14 +272,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     else:
       self.__arguments__[name] = value
 
-    self.__argument_history__[name].append(history.new_value(name, value))
+    self.__argument_history__.add_new_value(name, value)
 
   def __delattr__(self, name):
     """Unsets parameter `name`."""
     try:
       del self.__arguments__[name]
-      entry = history.deleted_value(name)
-      self.__argument_history__[name].append(entry)
+      self.__argument_history__.add_deleted_value(name)
     except KeyError:
       err = AttributeError(f"No parameter '{name}' has been set on {self!r}")
       raise err from None
@@ -360,7 +357,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     values, metadata = self.__flatten__()
     deepcopied_values = copy.deepcopy(values, memo)
     deepcopied_metadata = copy.deepcopy(metadata, memo)
-    return self.__unflatten__(deepcopied_values, deepcopied_metadata)
+    with history.suspend_tracking():
+      return self.__unflatten__(deepcopied_values, deepcopied_metadata)
 
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.
@@ -968,8 +966,7 @@ def update_callable(buildable: Buildable,
   object.__setattr__(buildable, '__fn_or_cls__', new_callable)
   object.__setattr__(buildable, '__signature__', signature)
   object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
-  buildable.__argument_history__['__fn_or_cls__'].append(
-      history.new_value('__fn_or_cls__', new_callable))
+  buildable.__argument_history__.add_new_value('__fn_or_cls__', new_callable)
 
 
 def assign(buildable: Buildable, **kwargs):
@@ -1086,8 +1083,8 @@ def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
   """Tags `name` with `tag` in `buildable`."""
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].add(tag)
-  buildable.__argument_history__[argument].append(
-      history.update_tags(argument, buildable.__argument_tags__[argument]))
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument])
 
 
 def set_tags(buildable: Buildable, argument: str,
@@ -1096,8 +1093,8 @@ def set_tags(buildable: Buildable, argument: str,
   clear_tags(buildable, argument)
   for tag in tags:
     add_tag(buildable, argument, tag)
-  buildable.__argument_history__[argument].append(
-      history.update_tags(argument, buildable.__argument_tags__[argument]))
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument])
 
 
 def remove_tag(buildable: Buildable, argument: str,
@@ -1110,16 +1107,16 @@ def remove_tag(buildable: Buildable, argument: str,
         f'{tag} not set on {argument}; current tags: {field_tag_set}.')
   # TODO: Track in history?
   field_tag_set.remove(tag)
-  buildable.__argument_history__[argument].append(
-      history.update_tags(argument, buildable.__argument_tags__[argument]))
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument])
 
 
 def clear_tags(buildable: Buildable, argument: str) -> None:
   """Removes all tags from a named argument of a Buildable."""
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].clear()
-  buildable.__argument_history__[argument].append(
-      history.update_tags(argument, buildable.__argument_tags__[argument]))
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument])
 
 
 def get_tags(buildable: Buildable,
