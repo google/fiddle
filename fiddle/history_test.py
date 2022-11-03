@@ -25,7 +25,7 @@ class SampleTag(tagging.Tag):
   """A sample tag."""
 
 
-class AdditonalTag(tagging.Tag):
+class AdditionalTag(tagging.Tag):
   """An extra tag."""
 
 
@@ -54,7 +54,7 @@ class HistoryTest(absltest.TestCase):
     self.assertEqual(entry.new_value, history.DELETED)
 
   def test_updating_tags(self):
-    tag_set = {SampleTag, AdditonalTag}
+    tag_set = {SampleTag, AdditionalTag}
     entry = history.update_tags("z", tag_set)
     self.assertEqual(entry.param_name, "z")
     self.assertEqual(entry.kind, history.ChangeKind.UPDATE_TAGS)
@@ -94,6 +94,42 @@ class HistoryTest(absltest.TestCase):
     config = fake_encoder_decoder.fixture.as_buildable()
     entry, = config.__argument_history__["encoder"]
     self.assertEndsWith(entry.location.filename, "fake_encoder_decoder.py")
+
+  def test_suspend_tracking_new_value(self):
+    arg_history = history.History()
+    arg_history.add_new_value("arg_name", 1)
+    self.assertLen(arg_history["arg_name"], 1)
+    self.assertEqual(arg_history["arg_name"][-1].new_value, 1)
+    with history.suspend_tracking():
+      arg_history.add_new_value("arg_name", 2)
+    self.assertLen(arg_history["arg_name"], 1)
+
+  def test_suspend_tracking_deleted_value(self):
+    arg_history = history.History()
+    arg_history.add_new_value("arg_name", 1)
+    self.assertLen(arg_history["arg_name"], 1)
+    with history.suspend_tracking():
+      arg_history.add_deleted_value("arg_name")
+    self.assertLen(arg_history["arg_name"], 1)
+    arg_history.add_deleted_value("arg_name")
+    self.assertLen(arg_history["arg_name"], 2)
+    self.assertEqual(arg_history["arg_name"][-1].kind,
+                     history.ChangeKind.NEW_VALUE)
+    self.assertEqual(arg_history["arg_name"][-1].new_value, history.DELETED)
+
+  def test_suspend_tracking_update_tags(self):
+    arg_history = history.History()
+    arg_history.add_updated_tags("arg_name", {SampleTag})
+    self.assertLen(arg_history["arg_name"], 1)
+    with history.suspend_tracking():
+      arg_history.add_updated_tags("arg_name", {SampleTag, AdditionalTag})
+    self.assertLen(arg_history["arg_name"], 1)
+    arg_history.add_updated_tags("arg_name", {SampleTag, AdditionalTag})
+    self.assertLen(arg_history["arg_name"], 2)
+    self.assertEqual(arg_history["arg_name"][-1].kind,
+                     history.ChangeKind.UPDATE_TAGS)
+    self.assertEqual(arg_history["arg_name"][-1].new_value,
+                     {SampleTag, AdditionalTag})
 
 
 if __name__ == "__main__":
