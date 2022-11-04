@@ -27,7 +27,6 @@ import builtins
 import dataclasses
 import functools
 import inspect
-import linecache
 import textwrap
 import types
 from typing import Any, Callable, cast, Optional, Union
@@ -37,7 +36,6 @@ from fiddle import config
 from fiddle._src import mutate_buildable
 from fiddle.experimental import auto_config_policy
 from fiddle.experimental import daglish_legacy
-import libcst as cst
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
 _CLOSURE_WRAPPER_ID = '__auto_config_closure_wrapper__'
@@ -515,7 +513,11 @@ def auto_config(
                        f'`@classmethod`s, and `@staticmethod`s.  Got {fn!r} '
                        f'with type {type(fn)!r}.')
 
-    source = _getsource(fn)
+    # Get the source code of the function, and remove any indentation which
+    # would cause parsing issues when creating the AST (indentation generally is
+    # present for nested functions or class methods).
+    source = inspect.getsource(fn)
+    source = textwrap.dedent(source)
 
     # Create the NodeTransformer that will transform the AST. The
     # `_AutoConfigNodeTransformer` requires some additional information about
@@ -741,70 +743,3 @@ def inline(buildable: config.Config):
 
   mutate_buildable.move_buildable_internals(
       source=tmp_config, destination=buildable)
-
-
-def _getsource(fn: Any) -> str:
-  """Returns the source code for callable `fn`."""
-  if _is_lambda(fn):
-    return _getsource_for_lambda(fn)
-  else:
-    # Remove any indentation which would cause parsing issues when creating the
-    # AST (indentation generally is present for nested functions or class
-    # methods).
-    return textwrap.dedent(inspect.getsource(fn))
-
-
-def _is_lambda(fn: Any) -> bool:
-  """Returns True if `fn` is a lambda function."""
-  if not inspect.isfunction(fn):
-    return False
-  if not (hasattr(fn, '__name__') and hasattr(fn, '__code__')):
-    return False
-  return ((fn.__name__ == '<lambda>') or (fn.__code__.co_name == '<lambda>'))
-
-
-class _LambdaFinder(cst.CSTVisitor):
-  """CST Visitor that searches for the source code for a given lambda func."""
-  METADATA_DEPENDENCIES = (cst.metadata.PositionProvider,)
-
-  def __init__(self, lambda_fn):
-    super().__init__()
-    self.lambda_fn = lambda_fn
-    self.lineno = lambda_fn.__code__.co_firstlineno
-    self.candidates = []
-
-  def visit_Lambda(self, node) -> None:
-    loc = self.get_metadata(cst.metadata.PositionProvider, node)
-    if loc.start.line == self.lineno:
-      self.candidates.append(node)
-
-
-def _getsource_for_lambda(fn: Callable[..., Any]) -> str:
-  """Returns source code for the given lambda function."""
-  # Get the source for the module that defines `fn`.
-  module = inspect.getmodule(fn)
-  filename = inspect.getsourcefile(fn)
-  lines = linecache.getlines(filename, module.__dict__)
-  source = ''.join(lines)
-
-  # Parse the CST for the module, and search for the lambda.
-  module_cst = cst.parse_module(source)
-  lambda_finder = _LambdaFinder(fn)
-  cst.metadata.MetadataWrapper(module_cst).visit(lambda_finder)
-
-  if len(lambda_finder.candidates) == 1:
-    lambda_node = lambda_finder.candidates[0]
-    return cst.Module(body=[lambda_node]).code
-
-  elif not lambda_finder.candidates:
-    raise ValueError(
-        'Fiddle auto_config was unable to find the source code for '
-        f'{fn}: could not find lambda on line {lambda_finder.lineno}.')
-  else:
-    # TODO: If desired, we could narrow down which lambda is
-    # used based on the signature (or even fancier things like the checking
-    # fn.__code__.co_names).
-    raise ValueError(
-        'Fiddle auto_config was unable to find the source code for '
-        f'{fn}: multiple lambdas found on line {lambda_finder.lineno}; '
-        'try moving each lambda to its own line.')
