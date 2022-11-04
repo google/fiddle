@@ -748,23 +748,6 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     # the auto_config decorator is run.
     globals_test_fn.as_buildable()
 
-  def test_trailing_paren_after_lambda(self):
-    # Test that we can handle a lambda that has an extra trailing paren on
-    # the line that contains the lambda expression.
-    x = (  # do not re-format this expression.
-        lambda: basic_fn(5))  # pyformat: disable
-    x = auto_config.auto_config(x)
-    self.assertDagEqual(x.as_buildable(), fdl.Config(basic_fn, 5))
-
-  def test_multiple_lambdas_on_one_line(self):
-    # TODO Enable this test if/when we add support for this.
-    self.skipTest('multiple lambdas on one line not supported yet')
-    x = (lambda a: basic_fn(2 * a), lambda b: basic_fn(3 * b))
-    x0 = auto_config.auto_config(x[0])
-    x1 = auto_config.auto_config(x[1])
-    self.assertDagEqual(x0.as_buildable(10), fdl.Config(basic_fn, 20))
-    self.assertDagEqual(x1.as_buildable(10), fdl.Config(basic_fn, 30))
-
 
 class AutoUnconfigTest(absltest.TestCase):
 
