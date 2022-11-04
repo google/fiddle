@@ -746,7 +746,8 @@ def inline(buildable: config.Config):
 def _getsource(fn: Any) -> str:
   """Returns the source code for callable `fn`."""
   if _is_lambda(fn):
-    return _getsource_for_lambda(fn)
+    raise ValueError(f'Hi autoconfig lambda: {fn.__module__} {fn}')
+    # return _getsource_for_lambda(fn)
   else:
     # Remove any indentation which would cause parsing issues when creating the
     # AST (indentation generally is present for nested functions or class
