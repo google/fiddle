@@ -548,6 +548,28 @@ def auto_config(
     code = compile(node, inspect.getsourcefile(fn), 'exec')
     code = _unwrap_code_for_fn(code, fn)
 
+    if _is_lambda(fn):
+      source2 = textwrap.dedent(inspect.getsource(fn))
+      node_transformer2 = _AutoConfigNodeTransformer(
+          source=source2,
+          filename=filename,
+          line_offset=line_offset,
+          allow_control_flow=experimental_allow_control_flow)
+      node2 = ast.parse(source2)
+      node2 = node_transformer2.visit(node2)
+      node2 = ast.fix_missing_locations(node2)
+      node2 = ast.increment_lineno(node2, line_offset)
+      node2 = _wrap_ast_for_fn_with_closure_vars(node2, fn)
+      assert isinstance(node2, ast.Module)
+      code2 = compile(node2, inspect.getsourcefile(fn), 'exec')
+      code2 = _unwrap_code_for_fn(code2, fn)
+      if (code.co_code != code2.co_code or
+          code.co_varnames != code2.co_varnames or
+          code.co_cellvars != code2.co_cellvars):
+        print('OUCH OLD', ast.unparse(node2))
+        print('OUCH NEW', ast.unparse(node))
+        assert False
+
     # Insert auto_config_call_handler into `fn.__closure__` at the index where
     # _CALL_HANDLER_ID occurs in the freevars.  (_CALL_HANDLER_ID was added to
     # freevars by _wrap_ast_for_fn_with_closure_vars).
