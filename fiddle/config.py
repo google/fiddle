@@ -341,25 +341,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     # TODO: Preserve argument history...
     return self.__unflatten__(*self.__flatten__())
 
-  def __deepcopy__(self, memo):
-    """Deeply copies this `Buildable` instance.
-
-    This copy implementation ensures that setting parameters on a copy of a
-    `Buildable` won't affect the original instance.
-
-    Args:
-      memo: The `deepcopy` memoization dictionary (used to avoid copying the
-        same instance of an object more than once).
-
-    Returns:
-      A deep copy of this `Buildable`.
-    """
-    values, metadata = self.__flatten__()
-    deepcopied_values = copy.deepcopy(values, memo)
-    deepcopied_metadata = copy.deepcopy(metadata, memo)
-    with history.suspend_tracking():
-      return self.__unflatten__(deepcopied_values, deepcopied_metadata)
-
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.
 
