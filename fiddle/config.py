@@ -29,6 +29,7 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable
 from fiddle import arg_factory
 from fiddle import daglish
 from fiddle import history
+from fiddle import signature_cache
 from fiddle import tag_type
 from fiddle._src import field_metadata
 
@@ -127,7 +128,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     # making them easily gettable but not as easily settable by user code.
     super().__setattr__('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__arguments__', {})
-    signature = inspect.signature(fn_or_cls)
+    signature = signature_cache.get(fn_or_cls)
     super().__setattr__('__signature__', signature)
     has_var_keyword = any(param.kind == param.VAR_KEYWORD
                           for param in signature.parameters.values())
@@ -341,25 +342,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     # TODO: Preserve argument history...
     return self.__unflatten__(*self.__flatten__())
 
-  def __deepcopy__(self, memo):
-    """Deeply copies this `Buildable` instance.
-
-    This copy implementation ensures that setting parameters on a copy of a
-    `Buildable` won't affect the original instance.
-
-    Args:
-      memo: The `deepcopy` memoization dictionary (used to avoid copying the
-        same instance of an object more than once).
-
-    Returns:
-      A deep copy of this `Buildable`.
-    """
-    values, metadata = self.__flatten__()
-    deepcopied_values = copy.deepcopy(values, memo)
-    deepcopied_metadata = copy.deepcopy(metadata, memo)
-    with history.suspend_tracking():
-      return self.__unflatten__(deepcopied_values, deepcopied_metadata)
-
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.
 
@@ -423,7 +405,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     self.__dict__.update(state)  # Support unpickle.
     if '__signature__' not in self.__dict__:
       object.__setattr__(self, '__signature__',
-                         inspect.signature(self.__fn_or_cls__))
+                         signature_cache.get(self.__fn_or_cls__))
 
 
 def _add_dataclass_tags(buildable, fields):
@@ -947,7 +929,7 @@ def update_callable(buildable: Buildable,
   # will result in duplicate history entries.
 
   original_args = buildable.__arguments__
-  signature = inspect.signature(new_callable)
+  signature = signature_cache.get(new_callable)
   if any(param.kind == param.VAR_POSITIONAL
          for param in signature.parameters.values()):
     raise NotImplementedError(
