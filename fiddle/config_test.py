@@ -271,6 +271,12 @@ class ConfigTest(absltest.TestCase):
         'kwargs': 'kwarg_called_kwarg'
     })
 
+  def test_config_for_dicts(self):
+    dict_config = fdl.Config(dict, a=1, b=2)
+    dict_config.c = 3
+    instance = fdl.build(dict_config)
+    self.assertEqual(instance, {'a': 1, 'b': 2, 'c': 3})
+
   def test_fiddle_init_config_static(self):
     cfg = fdl.Config(FiddleInitStaticMethod)
     self.assertEqual(5, cfg.z)
