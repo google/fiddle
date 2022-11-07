@@ -341,6 +341,15 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     # TODO: Preserve argument history...
     return self.__unflatten__(*self.__flatten__())
 
+  def __deepcopy__(self, memo: Dict[int, Any]):
+    """Deepcopies this Buildable, skipping copying of __signature__."""
+    # Skipping copying inspect.Signature objects, which are generally immutable,
+    # is about 2x faster on artificial benchmarks.
+    memo[id(self.__signature__)] = self.__signature__
+    result = object.__new__(type(self))
+    result.__dict__.update(copy.deepcopy(self.__dict__, memo))
+    return result
+
   def __eq__(self, other):
     """Returns true iff self and other contain the same argument values.
 
