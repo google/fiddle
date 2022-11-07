@@ -91,7 +91,8 @@ class Diff:
     """
     new_changes = tuple(
         change for change in self.changes if not ignore_fn(change))
-    # TODO: prune new_shared_values as some may not be relevant anymore
+    # TODO: prune new_shared_values as some may not be relevant
+    # anymore
     return Diff(new_changes, self.new_shared_values)
 
   def ignoring_paths(self, paths=Iterable[daglish.Path]) -> 'Diff':
