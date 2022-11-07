@@ -60,6 +60,10 @@ class Location:
       return f"{self.filename}:{self.line_number}"
     return f"{self.filename}:{self.line_number}:{self.function_name}"
 
+  def __deepcopy__(self, memo):
+    del memo  # unused
+    return self
+
 
 # A function that returns a location.
 LocationProvider = Callable[[], Location]
@@ -150,6 +154,10 @@ class HistoryEntry:
   kind: ChangeKind
   new_value: Union[Any, FrozenSet[tag_type.TagType], _Deleted]
   location: Location
+
+  def __deepcopy__(self, memo):
+    del memo  # unused
+    return self
 
 
 def new_value(param_name: str, value: Any) -> HistoryEntry:
