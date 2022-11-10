@@ -147,7 +147,7 @@ class LingvoConfig(config.Config):
   def __setattr__(self, name: str, value: Any):
     if isinstance(value, hyperparams.Params):
       value = LingvoConfig(value)
-    # TODO: what about params hidden inside containers?
+    # TODO(saeta): what about params hidden inside containers?
     super().__setattr__(name, value)
 
   @classmethod

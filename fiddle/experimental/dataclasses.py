@@ -79,7 +79,7 @@ def field(
     The result of calling dataclasses.field. Note: the return type is marked as
     a union with Any to pass static typechecking at usage sites.
   """
-  # TODO: Make a function to return a metadata object to users to enable
+  # TODO(saeta): Make a function to return a metadata object to users to enable
   # them to call `dataclasses.field` themselves.
   if isinstance(tags, tag_type.TagType):
     tags = (tags,)

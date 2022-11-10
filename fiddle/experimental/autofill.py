@@ -65,7 +65,7 @@ def autofill(cfg: config_lib.Buildable):
     cfg: The root of the configuration to fill out. This Buildable is modified
       in-place.
   """
-  # TODO: Explore adding a configurable policy argument.
+  # TODO(b/219358673): Explore adding a configurable policy argument.
   type_hints = typing.get_type_hints(config_lib.get_callable(cfg))
   for param in cfg.__signature__.parameters.values():
 

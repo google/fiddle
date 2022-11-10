@@ -89,7 +89,7 @@ def with_defaults_trimmed(config: _T) -> _T:
     Copy of the Buildable with args matching defaults removed.
   """
 
-  # TODO: Remove args matching dataclasses' default_factory too.
+  # TODO(b/241261427): Remove args matching dataclasses' default_factory too.
   def traverse_fn(_, value):
     new_value = (yield)
     if isinstance(value, config_lib.Buildable):

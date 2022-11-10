@@ -23,7 +23,7 @@ from fiddle import tag_type
 _FIDDLE_DATACLASS_METADATA_KEY = object()
 
 
-# TODO: Add kw_only=True when available.
+# TODO(saeta): Add kw_only=True when available.
 @dataclasses.dataclass(frozen=True)
 class FieldMetadata:
   """Fiddle-specific metadata that can be attached to each dataclasses.Field.
@@ -35,7 +35,7 @@ class FieldMetadata:
   """
   tags: Collection[tag_type.TagType]
   buildable_initializer: Optional[Callable[[], Any]]
-  # TODO: Add additional metadata here (e.g. value validation rules).
+  # TODO(saeta): Add additional metadata here (e.g. value validation rules).
 
 
 def field_metadata(

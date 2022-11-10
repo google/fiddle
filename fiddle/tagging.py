@@ -231,7 +231,7 @@ def materialize_tags(
     tags: Optional[collections.abc.Set[TagType]] = None) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
 
-  TODO: Consider supporting tags directly on Config objects, e.g.
+  TODO(b/242574056): Consider supporting tags directly on Config objects, e.g.
   by removing those tags.
 
   Converts:

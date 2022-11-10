@@ -50,7 +50,7 @@ def materialize(config: Any):
   def traverse_fn(unused_all_paths, unused_value):
     new_value = (yield)
     if isinstance(new_value, FixtureNode):
-      # TODO: If this proposal is taken forward, preserve
+      # TODO(b/236129682): If this proposal is taken forward, preserve
       # __argument_history__ as well.
       return config_lib.get_callable(new_value)(**new_value.__arguments__)
     else:

@@ -68,7 +68,7 @@ parse_path = testing.parse_path
 parse_reference = testing.parse_reference
 
 
-# TODO: Get rid of this helper once there's a way to specify
+# TODO(fiddle-team): Get rid of this helper once there's a way to specify
 # tags when constructing a Config.
 def config_with_tags(fdl_config, parameter_tags):
   """Updates `fdl_configs` to have the specified tags, and returns it."""

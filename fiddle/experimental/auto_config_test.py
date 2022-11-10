@@ -385,7 +385,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
                      'AutoConfigTest.test_classmethod.<locals>.MyClass.simple')
     self.assertEqual(MyClass.simple.__module__,
                      'fiddle.experimental.auto_config')
-    # TODO: Make `__doc__` return the original function's
+    # TODO(b/243710800): Make `__doc__` return the original function's
     # docstring.
     # self.assertEqual(MyClass.simple.__doc__, 'Test simple docstring.')
 
@@ -921,7 +921,7 @@ class InlineTest(test_util.TestCase):
 
     self.assertEqual(inline_expected_config, actual_config)
 
-  # TODO: Investigate fixing this.
+  # TODO(saeta): Investigate fixing this.
   @absltest.skip('Cannot inline a function that returns a partial currently.')
   def test_inlined_func_returns_partial(self):
 

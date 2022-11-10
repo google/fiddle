@@ -146,7 +146,7 @@ class NodeSelection(Selection):
       if self._matches(node):
         return copy.deepcopy(value) if deepcopy else value
       elif state.is_traversable(node):
-        # TODO: Consider moving this into Daglish.
+        # TODO(b/245969949): Consider moving this into Daglish.
         result = state.map_children(node)
         if isinstance(node, config_lib.Buildable):
           mutate_buildable.move_buildable_internals(

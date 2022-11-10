@@ -387,7 +387,7 @@ def auto_config(
     experimental_allow_control_flow=False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,  # pylint: disable=line-too-long
-) -> Any:  # TODO: More precise return type.
+) -> Any:  # TODO(saeta): More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
   This function creates a new function from `fn` by rewriting its AST (abstract
@@ -594,7 +594,7 @@ def auto_unconfig(
     fn=None,
     *,
     experimental_always_inline: Optional[bool] = None
-) -> Any:  # TODO: More precise return type.
+) -> Any:  # TODO(saeta): More precise return type.
   """Converts functions that create buildables directly into auto_config form.
 
   While most of the time, the benefits of an auto_config representation of

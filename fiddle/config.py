@@ -141,7 +141,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     for name in list(arguments.keys()):  # Make a copy in case we mutate.
       param = signature.parameters[name]
       if param.kind == param.VAR_POSITIONAL:
-        # TODO: Add *args support.
+        # TODO(b/197367863): Add *args support.
         err_msg = 'Variable positional arguments (aka `*args`) not supported.'
         raise NotImplementedError(err_msg)
       elif param.kind == param.VAR_KEYWORD:
@@ -220,7 +220,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if param is not None and param.default is not param.empty:
       return param.default
     msg = f"No parameter '{name}' has been set on {self!r}."
-    # TODO: Implement an edit distance function and display valid
+    # TODO(b/219988937): Implement an edit distance function and display valid
     # attributes that are close to `name`.
     if hasattr(self.__fn_or_cls__, name):
       msg += (f' Note: {self.__fn_or_cls__.__module__}.'
@@ -237,7 +237,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     if param is not None:
       if param.kind == param.POSITIONAL_ONLY:
-        # TODO: Add positional-only arg support.
+        # TODO(b/197367863): Add positional-only arg support.
         raise NotImplementedError(
             'Positional only arguments not supported. '
             f'Tried to set {name!r} on {self.__fn_or_cls__}')
@@ -338,7 +338,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       A shallow copy of this `Buildable`.
     """
-    # TODO: Preserve argument history...
+    # TODO(b/231368256): Preserve argument history...
     return self.__unflatten__(*self.__flatten__())
 
   def __deepcopy__(self, memo: Dict[int, Any]):
@@ -644,7 +644,7 @@ class Config(Generic[T], Buildable[T]):
           cfg.z = Config(MyOtherClass)
   """
 
-  # NOTE: We currently need to repeat these annotations for pytype.
+  # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
   __signature__: inspect.Signature
 
@@ -671,7 +671,7 @@ class TiedValue(Generic[T], Config[T]):
   __setattr__ buildable hooks to eliminate the extra `.value` when it is a field
   attribute, but please use `experimental/tied_value.py` for the public API.
   """
-  # NOTE: We currently need to repeat these annotations for pytype.
+  # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
   __signature__: inspect.Signature
 
@@ -838,7 +838,7 @@ class Partial(Generic[T], Buildable[T]):
       assert instance.arg == 'arg'  # The instance config is still 'arg'.
   """
 
-  # NOTE: We currently need to repeat this annotation for pytype.
+  # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
 
   def __build__(self, *args, **kwargs):
@@ -889,10 +889,10 @@ class ArgFactory(Generic[T], Buildable[T]):
   `ArgFactory` should *not* be used as a top-level configuration object, or
   as the argument to a `fdl.Config`.
   """
-  # TODO: Update build to raise an exception if ArgFactory is built
+  # TODO(fiddle-team): Update build to raise an exception if ArgFactory is built
   # in an inappropriate context.
 
-  # NOTE: We currently need to repeat this annotation for pytype.
+  # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
 
   def __build__(self, *args, **kwargs):
@@ -928,7 +928,7 @@ def update_callable(buildable: Buildable,
     TypeError: if `new_callable` has varargs, or if there are arguments set on
       `config` that are invalid to pass to `new_callable`.
   """
-  # TODO: Consider adding a "drop_invalid_args: bool = False" argument.
+  # TODO(saeta): Consider adding a "drop_invalid_args: bool = False" argument.
 
   # Note: can't just call config.__init__(new_callable, **config.__arguments__)
   # to preserve history.
@@ -1095,7 +1095,7 @@ def remove_tag(buildable: Buildable, argument: str,
   if tag not in field_tag_set:
     raise ValueError(
         f'{tag} not set on {argument}; current tags: {field_tag_set}.')
-  # TODO: Track in history?
+  # TODO(saeta): Track in history?
   field_tag_set.remove(tag)
   buildable.__argument_history__.add_updated_tags(
       argument, buildable.__argument_tags__[argument])
@@ -1147,6 +1147,6 @@ def register_supported_cast(src_type, dst_type):
   _SUPPORTED_CASTS.add((src_type, dst_type))
 
 
-# TODO: Add ArgFactory to this list.
+# TODO(fiddle-team): Add ArgFactory to this list.
 for _src_type, _dst_type in itertools.product([Config, Partial], repeat=2):
   register_supported_cast(_src_type, _dst_type)

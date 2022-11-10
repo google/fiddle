@@ -366,7 +366,7 @@ class TaggingTest(absltest.TestCase):
     self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
 
-# TODO: Test set_tagged that leverages tag inheritance.
+# TODO(saeta): Test set_tagged that leverages tag inheritance.
 
 
 class TestWithSelectorMock(TaggingTest):

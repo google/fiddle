@@ -145,7 +145,7 @@ def _rearrange_buildable_args_and_insert_unset_sentinels(
   Returns:
     Copy of `value` with arguments normalized.
   """
-  # TODO: Consider pulling part of this function into a shared
+  # TODO(b/243576914): Consider pulling part of this function into a shared
   # module, or achieving the same effect by modifying traversal order.
   value = copy.copy(value)
   old_arguments = dict(value.__arguments__)
@@ -313,7 +313,7 @@ def _make_per_leaf_history_text(path: daglish.Path,
     value = _format_value(entry.new_value, raw_value_repr=raw_value_repr)
     return f'  - previously: {value} @ {entry.location}'
 
-  # TODO: Add support for printing tags changes.
+  # TODO(b/240713080): Add support for printing tags changes.
   value_history = [
       entry for entry in param_history
       if entry.kind == history.ChangeKind.NEW_VALUE

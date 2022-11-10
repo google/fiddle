@@ -34,7 +34,7 @@ def move_buildable_internals(*, source: config.Buildable,
     destination: One of the buildables to swap.
   """
   if type(source) is not type(destination):
-    # TODO: Relax this constraint such that both types merely need to be
+    # TODO(saeta): Relax this constraint such that both types merely need to be
     # buildable's.
     raise TypeError(f'types must match exactly: {type(source)} vs '
                     f'{type(destination)}.')

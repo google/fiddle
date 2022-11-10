@@ -673,7 +673,7 @@ def render_diff(diff: Optional[diffing.Diff] = None,
       instance_colors=fill_color, curved_edges=True).render(config)
 
 
-# TODO If memoized_traverse is updated to allow access to the
+# TODO(fiddle-team) If memoized_traverse is updated to allow access to the
 # memo dict, then we could refactor this code to not need this NamedTuple.
 class _OldAndNewSharedValues(NamedTuple):
   """A NamedTuple that pairs an `old` structure with a diff's new shared values.

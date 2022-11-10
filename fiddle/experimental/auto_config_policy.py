@@ -226,7 +226,7 @@ V1_SKIPLIST = [
     typing.cast,
 ]
 
-# TODO: Add Google-specific entries here (e.g. absl logging?)
+# TODO(saeta): Add Google-specific entries here (e.g. absl logging?)
 
 
 def _is_builtin_method(fn_or_cls) -> bool:
