@@ -24,27 +24,18 @@ rest of Fiddle.
 """
 
 import dataclasses
-import inspect
 import types
 from typing import Any, Collection, Mapping, Optional, Union
 
 from fiddle import config
 from fiddle import tag_type
 from fiddle._src import field_metadata
+from fiddle._src import signatures
 from fiddle.experimental import auto_config
 
 TagOrTags = Union[tag_type.TagType, Collection[tag_type.TagType]]
 
 FieldMetadata = field_metadata.FieldMetadata
-
-
-def _has_signature(value):
-  """Returns true if inspect.signature(value) succeeds."""
-  try:
-    inspect.signature(value)
-  except ValueError:
-    return False
-  return True
 
 
 def field(
@@ -90,7 +81,7 @@ def field(
                        "auto_config'ed functions.")
     buildable_initializer = default_factory.as_buildable
   elif configurable_factory:
-    if not (default_factory and _has_signature(default_factory)):
+    if not (default_factory and signatures.has_signature(default_factory)):
       raise ValueError("configurable_factory requires that default_factory "
                        "be set to a function or class with a signature.")
     buildable_initializer = lambda: config.Config(default_factory)
