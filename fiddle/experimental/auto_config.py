@@ -388,7 +388,8 @@ def auto_config(
     *,
     experimental_allow_control_flow=False,
     experimental_always_inline: Optional[bool] = None,
-    experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,  # pylint: disable=line-too-long
+    experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
+    experimental_config_cls=config.Config,
 ) -> Any:  # TODO(saeta): More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
@@ -463,6 +464,10 @@ def auto_config(
       which ones should simply be executed normally during the `as_buildable`
       interpretation of `fn`. This predicate should return `True` if the given
       callable should be exempted from auto-configuration.
+    experimental_config_cls: The class to use to generate configs. By default,
+      this is just `fdl.Config`, but projects with custom `Config` subclasses
+      can use this to override the default. This is experimental and may be
+      removed in the future.
 
   Returns:
     A wrapped version of `fn`, but with an additional `as_buildable` attribute
@@ -504,7 +509,7 @@ def auto_config(
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
 
-    return config.Config(fn_or_cls, *args, **kwargs)
+    return experimental_config_cls(fn_or_cls, *args, **kwargs)
 
   def make_auto_config(fn):
     if isinstance(fn, (staticmethod, classmethod)):
