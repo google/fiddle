@@ -822,15 +822,18 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
     structure_with_changed_values: The structure to trim.  Mutated in place.
     old_value_ids: ids of all objects reachable via _ChangedValue.old_value.
   """
+  changed_parent_ids = _find_mutable_values_with_changed_parents(
+      structure_with_changed_values)
 
   def visit(value, state: daglish.State):
     """Returns true if any child has changed."""
+    parents_changed = id(value) in changed_parent_ids
     if state.is_traversable(value):
       subtraversal = state.flattened_map_children(value)
       any_changed = any(subtraversal.values)
       if isinstance(value, dict) and id(value) in old_value_ids:
         _trim_dict(value, subtraversal.values)
-      return any_changed
+      return any_changed or parents_changed
     elif isinstance(value, _ChangedValue):
       state.call(value.old_value, daglish.Attr('old_value'))
       state.call(value.new_value, daglish.Attr('new_value'))
@@ -846,11 +849,35 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
       changed = any(args_changed) or callable_changed or tags_changed
       if id(value) in old_value_ids:
         _trim_dict(value.arguments, args_changed)
-      return changed
+      return changed or parents_changed
     else:
-      return False
+      return parents_changed
 
   daglish.MemoizedTraversal.run(visit, structure_with_changed_values)
+
+
+def _find_mutable_values_with_changed_parents(structure_with_changed_values):
+  """Returns a set of ids of mutable objects whose parent(s) changed."""
+  result = set()
+
+  def visit(value, state: daglish.State):
+    if state.is_traversable(value):
+      state.flattened_map_children(value)
+    elif isinstance(value, _ChangedValue):
+      assert value.old_value is not value.new_value
+      if daglish.is_memoizable(value.old_value):
+        result.add(id(value.old_value))
+      if daglish.is_memoizable(value.new_value):
+        result.add(id(value.new_value))
+      state.call(value.old_value, daglish.Attr('old_value'))
+      state.call(value.new_value, daglish.Attr('new_value'))
+      return True
+    elif isinstance(value, _ChangedBuildable):
+      for arg in value.arguments.values():
+        state.call(arg, daglish.Attr('args'))
+
+  daglish.MemoizedTraversal.run(visit, structure_with_changed_values)
+  return result
 
 
 def _trim_dict(value, val_changed):
