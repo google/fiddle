@@ -802,6 +802,16 @@ class ConfigTest(absltest.TestCase):
     expected_repr = "<Config[SampleClass(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(class_config), expected_repr)
 
+  def test_repr_nested_indentation(self):
+    config = fdl.Config(basic_fn, 1,
+                        fdl.Config(basic_fn, 'x' * 50, fdl.Config(basic_fn, 1)))
+    expected_repr = """<Config[basic_fn(
+  arg1=1,
+  arg2=<Config[basic_fn(
+    arg1='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    arg2=<Config[basic_fn(arg1=1)]>)]>)]>"""
+    self.assertEqual(repr(config), expected_repr)
+
   def test_repr_fn_config(self):
     fn_config = fdl.Config(basic_fn, 1, 2, kwarg1='kwarg1')
     expected_repr = "<Config[basic_fn(arg1=1, arg2=2, kwarg1='kwarg1')]>"
@@ -837,11 +847,12 @@ class ConfigTest(absltest.TestCase):
     fdl.add_tag(config, 'arg2', Tag2)
     fdl.add_tag(config, 'kwarg2', Tag1)
     fdl.add_tag(config, 'kwarg2', Tag2)
-    expected_repr = (
-        '<Config[SampleClass(arg1[#{module}.Tag1]=1, arg2[#{module}.Tag2], ' +
-        "kwarg1='kwarg1', kwarg2[#{module}.Tag1, #{module}.Tag2]=" +
-        "<Config[SampleClass(arg1='nested value might be large so put tag " +
-        "next to param, not after value.')]>)]>")
+    expected_repr = """<Config[SampleClass(
+  arg1[#{module}.Tag1]=1,
+  arg2[#{module}.Tag2],
+  kwarg1='kwarg1',
+  kwarg2[#{module}.Tag1, #{module}.Tag2]=<Config[SampleClass(
+    arg1='nested value might be large so put tag next to param, not after value.')]>)]>"""
     self.assertEqual(repr(config), expected_repr.format(module=__name__))
 
   def test_nonexistent_attribute_error(self):

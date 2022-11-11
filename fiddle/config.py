@@ -316,6 +316,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
             name for name in self.__arguments__
             if name not in self.__signature__.parameters
         ])
+
     for name in param_names:
       tags = self.__argument_tags__.get(name, ())
       value = self.__arguments__.get(name, _UNSET_SENTINEL)
@@ -326,8 +327,22 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         if value is not _UNSET_SENTINEL:
           param_str += f'={value!r}'
         formatted_params.append(param_str)
+
     name = type(self).__name__
-    return f"<{name}[{formatted_fn_or_cls}({', '.join(formatted_params)})]>"
+
+    formatted_params_no_linebreak = ', '.join(formatted_params)
+    # An arbitrary threshold to determine whether to add linebreaks to args.
+    if len(formatted_params_no_linebreak) + len(name) + len(
+        formatted_fn_or_cls) > 80:
+
+      def indent(s):
+        return '\n'.join(['  ' + x for x in s.split('\n')])
+
+      formatted_params = ','.join(['\n' + indent(x) for x in formatted_params])
+    else:
+      formatted_params = formatted_params_no_linebreak
+
+    return f'<{name}[{formatted_fn_or_cls}({formatted_params})]>'
 
   def __copy__(self):
     """Shallowly copies this `Buildable` instance.
