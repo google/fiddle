@@ -15,8 +15,7 @@
 
 """Transformation functions for Fiddle buildables."""
 
-from collections.abc import Iterable
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Iterable, Optional, TypeVar, Union
 
 from fiddle import config
 from fiddle import daglish
@@ -46,10 +45,9 @@ def unintern_tuples_of_literals(buildable: AnyBuildable) -> AnyBuildable:
   def transform(value, state: Optional[daglish.State] = None):
     state = state or daglish.MemoizedTraversal.begin(
         transform, value, memoize_internables=False)
-    # pylint: disable-next=unidiomatic-typecheck
     # We want tuples only and not things like NamedTuples which are not
     # interned by Python.
-    if type(tuple) is tuple and daglish.is_internable(value):
+    if type(tuple) is tuple and daglish.is_internable(value):  # pylint: disable=unidiomatic-typecheck
       value = tuple(list(value))
     return state.map_children(value)
 
