@@ -22,7 +22,7 @@ import sys
 from setuptools import find_packages
 from setuptools import setup
 
-_VERSION = '0.2.3'
+_VERSION = '0.2.4'
 
 long_description = """
 # Fiddle
