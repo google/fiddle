@@ -33,10 +33,11 @@ import types
 from typing import Any, Callable, cast, Optional, Union
 
 from fiddle import building
-from fiddle import config
+from fiddle import config as config_lib
+from fiddle import daglish
+from fiddle import history
 from fiddle._src import mutate_buildable
 from fiddle.experimental import auto_config_policy
-from fiddle.experimental import daglish_legacy
 import libcst as cst
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
@@ -59,7 +60,7 @@ class AutoConfig:
   custom behavior for bound methods.
   """
   func: Callable[..., Any]
-  buildable_func: Callable[..., config.Buildable]
+  buildable_func: Callable[..., config_lib.Buildable]
   always_inline: bool
 
   def __post_init__(self):
@@ -77,7 +78,7 @@ class AutoConfig:
   def __call__(self, *args, **kwargs) -> Any:
     return self.func(*args, **kwargs)
 
-  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+  def as_buildable(self, *args, **kwargs) -> config_lib.Buildable:
     return self.buildable_func(*args, **kwargs)
 
   def __get__(self, obj, objtype=None):
@@ -128,7 +129,7 @@ class _BoundAutoConfig:
   def __call__(self, *args, **kwargs) -> Any:
     return self.auto_config.func(self.obj, *args, **kwargs)
 
-  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+  def as_buildable(self, *args, **kwargs) -> config_lib.Buildable:
     return self.auto_config.buildable_func(self.obj, *args, **kwargs)
 
   @property
@@ -260,20 +261,16 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
   # pylint: enable=invalid-name
 
 
-def _contains_buildable(structure):
-  """Returns `True` if `structure` contains a `fdl.Buildable`."""
-  contains_buildable = False
+def _contains_buildable(value: Any, state: Optional[daglish.State] = None):
+  """Returns `True` if `value` contains a `fdl.Buildable`."""
+  state = state or daglish.MemoizedTraversal.begin(_contains_buildable, value)
 
-  def traverse(unused_path, value):
-    nonlocal contains_buildable
-    if isinstance(value, config.Buildable):
-      contains_buildable = True
-      return  # Stop traversal.
-    else:
-      yield  # Continue traversal.
-
-  daglish_legacy.traverse_with_path(traverse, structure)
-  return contains_buildable
+  if isinstance(value, config_lib.Buildable):
+    return True
+  elif state.is_traversable(value):
+    return any(state.flattened_map_children(value).values)
+  else:
+    return False
 
 
 def _wrap_ast_for_fn_with_closure_vars(
@@ -371,6 +368,75 @@ def _unwrap_code_for_fn(code: types.CodeType, fn: types.FunctionType):
   return code
 
 
+_UNSUPPORTED_OPERATION_EXPLANATION = """
+
+Some operations on the output of a function call in an auto_config function are
+prohibited, because they may have different semantics when running in normal
+Python mode (where they involve the result of a function call) as opposed to in
+`as_buildable` mode (where they involve a Fiddle object representing that
+function call). For additional documentation, please see
+
+https://colab.sandbox.google.com/github/google/fiddle/blob/main/fiddle/examples/colabs/auto_config.ipynb
+"""
+
+
+class UnsupportedOperationError(Exception):
+  """An error due to an unsupported operation in an auto_config function."""
+
+  def __str__(self):
+    return super().__str__() + _UNSUPPORTED_OPERATION_EXPLANATION
+
+
+class _AutoConfigProxy:
+  """A proxy object that intercepts attempts at attribute/item access.
+
+  This object is created during execution of the `as_buildable` path of
+  `auto_config` functions: For any call that will be transformed into a
+  corresponding `fdl.Buildable` object, this proxy stores the object until after
+  `as_buildable` completes, intercepting attempts at unsupported operations
+  (attribute access, bool coercion, etc) and throwing a corresponding error.
+  """
+  __value__: Any
+
+  def __init__(self, value):
+    super().__setattr__('__value__', value)
+
+  def _raise_unsupported_operation_error(self, operation: str):
+    raise UnsupportedOperationError(
+        f'{operation} inside auto_config functions is not supported.')
+
+  def __bool__(self) -> bool:  # pylint: disable=invalid-bool-returned
+    self._raise_unsupported_operation_error('Bool coercion of results')
+
+  def __getattr__(self, name):
+    self._raise_unsupported_operation_error('Attribute access')
+
+  def __setattr__(self, name, value):
+    self._raise_unsupported_operation_error('Attribute assignment')
+
+  def __getitem__(self, key):
+    self._raise_unsupported_operation_error('Item access')
+
+  def __setitem__(self, key, value):
+    self._raise_unsupported_operation_error('Item assignment')
+
+
+def _unbox(value: Any, state: Optional[daglish.State] = None):
+  """Removes any `AutoConfigProxy` wrappers from elements of `value`."""
+  state = state or daglish.MemoizedTraversal.begin(_unbox, value)
+  if isinstance(value, _AutoConfigProxy):
+    return state.call(value.__value__)
+  elif isinstance(value, config_lib.Buildable):
+    result = state.flattened_map_children(value)
+    unboxed_history = state.map_children(result.metadata.argument_history)
+    new_metadata = result.metadata._replace(argument_history=unboxed_history)
+    return result.node_traverser.unflatten(result.values, new_metadata)
+  elif isinstance(value, history.HistoryEntry):
+    return dataclasses.replace(value, new_value=state.call(value.new_value))
+  else:
+    return state.map_children(value)
+
+
 def _make_closure_cell(contents):
   """Returns `types.CellType(contents)`."""
   if hasattr(types, 'CellType'):
@@ -389,7 +455,7 @@ def auto_config(
     experimental_allow_control_flow=False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
-    experimental_config_cls=config.Config,
+    experimental_config_cls=config_lib.Config,
 ) -> Any:  # TODO(saeta): More precise return type.
   """Rewrites the given function to make it generate a `Config`.
 
@@ -431,10 +497,10 @@ def auto_config(
   will result in the same model as just calling `build_model()` directly.
   However, `config` permits changes to the model hyperparameters, for example:
 
-      config.layers[0].num_units = 64
-      config.layers[0].activation = 'elu'
-      config.layers[1].num_units = 64
-      config.layers[1].activation = 'elu'
+      config_lib.layers[0].num_units = 64
+      config_lib.layers[0].activation = 'elu'
+      config_lib.layers[1].num_units = 64
+      config_lib.layers[1].activation = 'elu'
 
       modified_model = fdl.build(config)
 
@@ -499,17 +565,18 @@ def auto_config(
       Depending on `fn_or_cls`, either `Partial`, a `Config`, or the result of
       calling `fn_or_cls` with the provided arguments.
     """
-    if (is_auto_config(fn_or_cls) and
-        cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline):
-      return fn_or_cls.as_buildable(*args, **kwargs)
-
-    if fn_or_cls is functools.partial:
-      return config.Partial(args[0], *args[1:], **kwargs)
-
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
 
-    return experimental_config_cls(fn_or_cls, *args, **kwargs)
+    if (is_auto_config(fn_or_cls) and
+        cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline):
+      value = fn_or_cls.as_buildable(*args, **kwargs)
+    elif fn_or_cls is functools.partial:
+      value = config_lib.Partial(args[0], *args[1:], **kwargs)
+    else:
+      value = experimental_config_cls(fn_or_cls, *args, **kwargs)
+
+    return _AutoConfigProxy(value)
 
   def make_auto_config(fn):
     if isinstance(fn, (staticmethod, classmethod)):
@@ -574,6 +641,7 @@ def auto_config(
     @functools.wraps(auto_config_fn)
     def as_buildable(*args, **kwargs):
       output = auto_config_fn(*args, **kwargs)  # pylint: disable=not-callable
+      output = _unbox(output)
       if not _contains_buildable(output):
         raise TypeError(
             f'The `auto_config` rewritten version of `{fn.__qualname__}` '
@@ -618,9 +686,9 @@ def auto_unconfig(
     dataset = make_dataset.as_buildable()
     # Build fdl.Config's imperatively.
     trainer_config = fdl.Config(MyTrainer)
-    trainer_config.model = model
-    trainer_config.train_dataset = dataset
-    trainer_config.skip_eval = True
+    trainer_config_lib.model = model
+    trainer_config_lib.train_dataset = dataset
+    trainer_config_lib.skip_eval = True
     return trainer_config  # Return a `fdl.Buildable`
 
   # Sample usage within an auto_config'd function.
@@ -639,7 +707,7 @@ def auto_unconfig(
 
     # Or manipulate the configuration before calling `fdl.build`:
     trainer_config = make_experiment_trainer.as_buildable('my_experiment')
-    trainer_config.skip_eval = False  # Tweak configuration.
+    trainer_config_lib.skip_eval = False  # Tweak configuration.
     trainer2 = fdl.build(trainer_config)
     run_trainer(trainer2)
   ```
@@ -647,7 +715,7 @@ def auto_unconfig(
   Args:
     fn: The function to convert.
     experimental_always_inline: Whether the output of `fn` should always be
-      inlined into the caller's config.
+      inlined into the caller's config_lib.
 
   Returns:
     An `AutoConfig` that corresponds to `fn`.
@@ -684,7 +752,7 @@ def is_auto_config(function_object: Any) -> bool:
   return isinstance(function_object, (AutoConfig, _BoundAutoConfig))
 
 
-def inline(buildable: config.Config):
+def inline(buildable: config_lib.Config):
   """Converts `buildable` of an `auto_config` function into a DAG of Buildables.
 
   `inline` updates `buildable` in place to preserve aliasing within a larger
@@ -712,12 +780,14 @@ def inline(buildable: config.Config):
   # experiment_configuration.py
   def make_experiment():
     config = make_experiment.as_buildable()
-    config.data.name = 'advanced_dataset'
-    # config.data.augmentation = 'custom_augmentation'  # Not configurable!!!
+    config_lib.data.name = 'advanced_dataset'
+    # config_lib.data.augmentation = 'custom_augmentation'  # Not
+    configurable!!!
     # return fdl.build(config)                          # Works like normal.
-    auto_config.inline(config.data)
-    print(config.data.file_path)         # Prints: '/base_path/advanced_dataset'
-    config.data.augmentation = 'custom_augmentation'    # Now exposed.
+    auto_config.inline(config_lib.data)
+    print(config_lib.data.file_path)         # Prints:
+    '/base_path/advanced_dataset'
+    config_lib.data.augmentation = 'custom_augmentation'    # Now exposed.
     experiment = fdl.build(config)                      # Works like normal.
     return experiment
   ```
@@ -730,7 +800,7 @@ def inline(buildable: config.Config):
     ValueError: If `buildable` is not a `Config`, or if `buildable` doesn't
       correspond to an auto_config'd function.
   """
-  if not isinstance(buildable, config.Config):
+  if not isinstance(buildable, config_lib.Config):
     raise ValueError('Cannot `inline` non-Config buildables; '
                      f'{type(buildable)} is not compatible.')
   if not is_auto_config(buildable.__fn_or_cls__):
@@ -740,7 +810,7 @@ def inline(buildable: config.Config):
   auto_config_fn = cast(Union[AutoConfig, _BoundAutoConfig],
                         buildable.__fn_or_cls__)
   tmp_config = auto_config_fn.as_buildable(**buildable.__arguments__)
-  if not isinstance(tmp_config, config.Buildable):
+  if not isinstance(tmp_config, config_lib.Buildable):
     raise ValueError('You cannot currently inline functions that do not return '
                      '`fdl.Buildable`s.')
 

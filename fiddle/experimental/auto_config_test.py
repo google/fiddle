@@ -20,7 +20,8 @@ import dataclasses
 import functools
 import inspect
 import sys
-from typing import Any
+import traceback
+from typing import Any, List
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -75,6 +76,16 @@ def globals_test_fn():
 
 def pass_through(arg):
   return arg
+
+
+def make_list(max_value=3) -> List[int]:
+  return list(range(max_value))
+
+
+def set_item_test_fn():
+  a = make_list()
+  a[0] = 1
+  return a
 
 
 def _line_number():
@@ -235,6 +246,37 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertTrue(auto_config_policy.v1(fdl.Partial))
     # Auto-config annotations are not eligible, and this case is tested in
     # `test_calling_auto_config` above.
+
+  @parameterized.parameters([
+      (lambda: SampleClass(1, 2).arg1, 'Attribute access'),
+      (lambda: setattr(SampleClass(1, 2), 'arg1', 3), 'Attribute assignment'),
+      (lambda: make_list()[0], 'Item access'),
+      (set_item_test_fn, 'Item assignment'),
+      (lambda: 1 if SampleClass(1, 2) else 2, 'Bool coercion'),
+  ])
+  def test_proxy_disallows_behaviors(self, behavior_fn, expected_msg):
+    with self.assertRaisesRegex(auto_config.UnsupportedOperationError,
+                                expected_msg):
+      auto_config_fn = auto_config.auto_config(
+          behavior_fn, experimental_allow_control_flow=True)
+      auto_config_fn.as_buildable()
+
+  def test_proxy_errors_have_useful_tracebacks(self):
+    auto_config_fn = auto_config.auto_config(lambda: SampleClass(1, 2).arg1)
+    error_line_no = _line_number() - 1
+    # Unfortunately, assertRaisesRegex clears traceback information, so we need
+    # to use an explicit try/except block in this test.
+    try:
+      auto_config_fn.as_buildable()
+    except auto_config.UnsupportedOperationError as e:
+      self.assertRegex(str(e), 'Attribute access')
+      formatted_traceback = traceback.format_tb(e.__traceback__)
+      root_cause_is_in_traceback = any(
+          f'line {error_line_no}, in <lambda>' in frame
+          for frame in formatted_traceback)
+      self.assertTrue(root_cause_is_in_traceback)
+    else:
+      self.fail("Expected exception wasn't raised.")
 
   def test_autobuilders_in_auto_config(self):
     expected_config = fdl.Config(
@@ -500,9 +542,6 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_custom_policy(self):
 
-    def make_list(max_value):
-      return list(range(max_value))
-
     def custom_policy(fn):
       if fn is make_list:
         return True
@@ -543,6 +582,33 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         expected_parameters, return_annotation=SampleClass)
     self.assertEqual(expected_signature, inspect.signature(my_helpful_function))
     self.assertEqual('my_helpful_function', my_helpful_function.__name__)
+
+  def test_history(self):
+
+    @auto_config.auto_config
+    def test_fn():
+      a = SampleClass(1, 2)
+      b = SampleClass(a, 3)
+      c = SampleClass(b, 4)
+      return c
+
+    a_line_num = _line_number() - 5
+    b_line_num = a_line_num + 1
+    c_line_num = b_line_num + 1
+
+    config = test_fn.as_buildable()
+    c_arg_history = config.__argument_history__
+    self.assertLen(c_arg_history['arg1'], 1)
+    self.assertEqual(c_arg_history['arg1'][-1].new_value, config.arg1)
+    self.assertEqual(c_arg_history['arg1'][-1].location.line_number, c_line_num)
+    b_arg_history = config.arg1.__argument_history__
+    self.assertLen(b_arg_history['arg1'], 1)
+    self.assertEqual(b_arg_history['arg1'][-1].new_value, config.arg1.arg1)
+    self.assertEqual(b_arg_history['arg1'][-1].location.line_number, b_line_num)
+    a_arg_history = config.arg1.arg1.__argument_history__
+    self.assertLen(a_arg_history['arg1'], 1)
+    self.assertEqual(a_arg_history['arg1'][-1].new_value, 1)
+    self.assertEqual(a_arg_history['arg1'][-1].location.line_number, a_line_num)
 
   def test_control_flow_if(self):
 
