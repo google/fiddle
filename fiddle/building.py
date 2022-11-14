@@ -139,30 +139,30 @@ def build(buildable: Any) -> Any:
 # to avoid potential naming collisions (e.g., if a function or class has a
 # parameter named `build`).
 def build(buildable):
-  """Builds `buildable`, recursively building any nested `Buildable` instances.
+  """Builds ``buildable``, recursively building nested ``Buildable`` instances.
 
-  This is the core function for turning a `Buildable` into a usable object. It
-  recursively walks through `buildable`'s parameters, building any nested
-  `Config` instances. Depending on the specific `Buildable` type passed
-  (`Config` or `Partial`), the result is either the result of calling
-  `config.__fn_or_cls__` with the configured parameters, or a partial function
+  This is the core function for turning a ``Buildable`` into a usable object. It
+  recursively walks through ``buildable``'s parameters, building any nested
+  ``Config`` instances. Depending on the specific ``Buildable`` type passed
+  (``Config`` or ``Partial``), the result is either the result of calling
+  ``config.__fn_or_cls__`` with the configured parameters, or a partial function
   or class with those parameters bound.
 
-  If the same `Buildable` instance is seen multiple times during traversal of
-  the configuration tree, `build` is called only once (for the first instance
+  If the same ``Buildable`` instance is seen multiple times during traversal of
+  the configuration tree, ``build`` is called only once (for the first instance
   encountered), and the result is reused for subsequent copies of the instance.
-  This is achieved via the `memo` dictionary (similar to `deepcopy`). This has
-  the effect that for configured class instances, each separate config instance
-  is in one-to-one correspondence with an actual instance of the configured
-  class after calling `build` (shared config instances <=> shared class
-  instances).
+  This is achieved via the ``memo`` dictionary (similar to ``deepcopy``). This
+  has the effect that for configured class instances, each separate config
+  instance is in one-to-one correspondence with an actual instance of the
+  configured class after calling ``build`` (shared config instances <=> shared
+  class instances).
 
   Args:
-    buildable: A `Buildable` instance to build, or a nested structure of
-      `Buildable` objects.
+    buildable: A ``Buildable`` instance to build, or a nested structure of
+      ``Buildable`` objects.
 
   Returns:
-    The built version of `buildable`.
+    The built version of ``buildable``.
   """
 
   with _in_build():
