@@ -48,6 +48,11 @@ class ATaggedType:
     return cls(untagged='untagged_default')
 
 
+@dataclasses.dataclass
+class AnotherTaggedType:
+  tagged: str = fdl_dc.field(tags=AdditionalTag, default='tagged')
+
+
 def test_fn():
   return 1
 
@@ -92,6 +97,17 @@ class ParentPair:
       default_factory=Parent, configurable_factory=True)
   second: Parent = fdl_dc.field(
       default_factory=Parent, configurable_factory=True)
+
+
+@dataclasses.dataclass
+class ParentWithOptionalChild:
+  child: Any = None
+
+
+@dataclasses.dataclass
+class ParentWithATaggedTypeChild:
+  child: Any = fdl_dc.field(
+      default_factory=ATaggedType, configurable_factory=True)
 
 
 @dataclasses.dataclass
@@ -308,6 +324,50 @@ class DataclassesTest(test_util.TestCase):
         fdl_dc.field_has_tag(fdl_dc.field(tags=AdditionalTag), SampleTag))
     self.assertFalse(fdl_dc.field_has_tag(fdl_dc.field(), SampleTag))
     self.assertFalse(fdl_dc.field_has_tag(dataclasses.field(), SampleTag))
+
+  def test_update_callable_for_tagged_fields(self):
+    cfg = fdl.Config(ATaggedType)
+    self.assertEqual(fdl.get_tags(cfg, 'tagged'), {SampleTag})
+
+    # When we switch to a new dataclass callable, any tags associated with
+    # fields get added.
+    fdl.update_callable(cfg, AnotherTaggedType)
+    self.assertEqual(fdl.get_tags(cfg, 'tagged'), {SampleTag, AdditionalTag})
+
+    # Even if we've manually adjusted the tags, they will get added.
+    fdl.clear_tags(cfg, 'tagged')
+    fdl.update_callable(cfg, ATaggedType)
+    self.assertEqual(fdl.get_tags(cfg, 'tagged'), {SampleTag})
+
+  def test_update_callable_for_configurable_factories(self):
+
+    with self.subTest('add_configurable_factory'):
+      # fdl.update_callable will add configurable factories for any fields that
+      # do not have any (explicit) value.
+      cfg = fdl.Config(ParentWithOptionalChild)
+      self.assertIsNone(cfg.child)
+      fdl.update_callable(cfg, Parent)
+      self.assertEqual(fdl.get_callable(cfg.child), AnAutoconfigType)
+
+    with self.subTest('do_not_overwrite_explicit_value'):
+      # This example differs from the one above in that child is *explicitly*
+      # set to `None`, so it won't get overwritten.
+      cfg = fdl.Config(ParentWithOptionalChild, child=None)
+      fdl.update_callable(cfg, Parent)
+      self.assertIsNone(cfg.child)
+
+    with self.subTest('do_not_overwrite_previous_configurable_factory'):
+      cfg = fdl.Config(ParentWithATaggedTypeChild)
+      self.assertEqual(fdl.get_callable(cfg.child), ATaggedType)
+      fdl.update_callable(cfg, Parent)
+      self.assertEqual(fdl.get_callable(cfg.child), ATaggedType)
+
+    with self.subTest('do_not_delete_configruable_factory'):
+      # In this test, we change to a class whose default value for `child` is
+      # None; but we leave the fdl.Config built with the configurable factory.
+      cfg = fdl.Config(ParentWithATaggedTypeChild)
+      fdl.update_callable(cfg, ParentWithOptionalChild)
+      self.assertEqual(fdl.get_callable(cfg.child), ATaggedType)
 
 
 if __name__ == '__main__':
