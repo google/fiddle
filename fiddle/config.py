@@ -985,6 +985,12 @@ def update_callable(buildable: Buildable,
   object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
   buildable.__argument_history__.add_new_value('__fn_or_cls__', new_callable)
 
+  if dataclasses.is_dataclass(buildable.__fn_or_cls__):
+    fields = dataclasses.fields(buildable.__fn_or_cls__)
+    _add_dataclass_tags(buildable, fields)
+    _expand_dataclass_default_factories(buildable, fields,
+                                        buildable.__arguments__)
+
 
 def assign(buildable: Buildable, **kwargs):
   """Assigns multiple arguments to ``buildable``.
