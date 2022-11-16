@@ -79,7 +79,7 @@ from typing import Any, Callable, Dict, Generic, TypeVar
 T = TypeVar('T')
 
 
-def partial(*args, **kwargs):
+def partial(func, /, *args, **kwargs):
   """A specialized version of `functools.partial` that binds args to factories.
 
   `arg_factory.partial` is similar to `functools.partial`, except that it binds
@@ -114,20 +114,19 @@ def partial(*args, **kwargs):
   >>> h = functools.partial(arg_factory.partial(f, noise=random.random), x=4)
 
   Args:
-    *args: The function whose arguments should be bound to factories, followed
-      by factories for positional arguments to `func`.
+    func: The function whose arguments should be bound to factories.
+    *args: Factories for positional arguments to `func`.
     **kwargs: Factories for keyword arguments to `func`.
 
   Returns:
     A `functools.partial` object.
   """
-  func, *args = args
   args = [_ArgFactory(arg) for arg in args]
   kwargs = {name: _ArgFactory(arg) for name, arg in kwargs.items()}
   return functools.partial(_InvokeArgFactoryWrapper(func), *args, **kwargs)
 
 
-def partialmethod(*args, **kwargs):
+def partialmethod(func, /, *args, **kwargs):
   """Version of `functools.partialmethod` that supports binds args to factories.
 
   `arg_factory.partialmethod` behaves like `arg_factory.partial`, except that it
@@ -137,14 +136,13 @@ def partialmethod(*args, **kwargs):
   See `functools.partialmethod` and `arg_factory.partial` for more details.
 
   Args:
-    *args: The function whose arguments should be bound to factories, followed
-      by factories for positional arguments to `func`.
+    func: The function whose arguments should be bound to factories.
+    *args: Factories for positional arguments to `func`.
     **kwargs: Factories for keyword arguments to `func`.
 
   Returns:
     A `functools.partialmethod` object.
   """
-  func, *args = args
   args = [_ArgFactory(arg) for arg in args]
   kwargs = {name: _ArgFactory(arg) for name, arg in kwargs.items()}
   return functools.partialmethod(
@@ -194,7 +192,7 @@ class _InvokeArgFactoryWrapper:
 
   func: Callable[..., Any]
 
-  def __call__(self, *args, **kwargs):
+  def __call__(self, /, *args, **kwargs):
     args = tuple(_arg_factory_value(arg) for arg in args)
     kwargs = {key: _arg_factory_value(arg) for (key, arg) in kwargs.items()}
     return self.func(*args, **kwargs)
@@ -242,12 +240,12 @@ class CallableWithDefaultFactories(Generic[T]):
   _default_factories: Dict[str, Callable[..., Any]]
   __signature__: inspect.Signature
 
-  def __init__(self, *args: Callable[..., T],
+  def __init__(self, func: Callable[..., T], /,
                **default_factories: Callable[..., Any]):
     """Constructs a `CallableWithDefaultFactories`.
 
     Args:
-      *args: Only one argument `func`, the function that should be wrapped.
+      func: The function that should be wrapped.
       **default_factories: Default factories for the wrapped function's
         parameters.  Keys may be the names of positional-only parameters,
         keyword-only parameters, or positional-or-keyword parameters.
@@ -258,8 +256,6 @@ class CallableWithDefaultFactories(Generic[T]):
       ValueError: If any key of `default_factories` is not a positional
         or keyword parameter to `func`.
     """
-    # Mimic `__init__(self, func, /, ...)` without using positional args.
-    func, = args
     if isinstance(func, CallableWithDefaultFactories):
       default_factories = {**func.default_factories, **default_factories}
       func = func.func
@@ -304,7 +300,7 @@ class CallableWithDefaultFactories(Generic[T]):
                         getattr(self._func, '__name__', repr(self._func)))
     return f'<{type(self).__qualname__} {func_name}{self.__signature__}>'
 
-  def __call__(self, *args, **kwargs) -> T:
+  def __call__(self, /, *args, **kwargs) -> T:
     signature = self.__signature__
     bound_args = signature.bind_partial(*args, **kwargs)
     for name, factory in self._default_factories.items():

@@ -108,7 +108,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   __argument_tags__: Dict[str, Set[tag_type.TagType]]
   _has_var_keyword: bool
 
-  def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
+  def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT], /,
                *args, **kwargs):
     """Initialize for ``fn_or_cls``, optionally specifying parameters.
 
@@ -170,7 +170,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     )
 
   @abc.abstractmethod
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds output for this instance; see subclasses for details."""
     raise NotImplementedError()
 
@@ -668,7 +668,7 @@ class Config(Generic[T], Buildable[T]):
   __fn_or_cls__: TypeOrCallableProducingT
   __signature__: inspect.Signature
 
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds this ``Config`` for the given ``args`` and ``kwargs``.
 
     This method is called during `build` to get the output for this `Config`.
@@ -866,7 +866,7 @@ class Partial(Generic[T], Buildable[T]):
   # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
 
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds this ``Partial`` for the given ``args`` and ``kwargs``.
 
     This method is called during ``build`` to get the output for this
@@ -922,7 +922,7 @@ class ArgFactory(Generic[T], Buildable[T]):
   # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
 
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     if args or kwargs:
       return _BuiltArgFactory(_build_partial(self.__fn_or_cls__, args, kwargs))
     else:
@@ -992,7 +992,7 @@ def update_callable(buildable: Buildable,
                                         buildable.__arguments__)
 
 
-def assign(buildable: Buildable, **kwargs):
+def assign(buildable: Buildable, /, **kwargs):
   """Assigns multiple arguments to ``buildable``.
 
   Although this function does not enable a caller to do something they can't
@@ -1016,7 +1016,7 @@ def assign(buildable: Buildable, **kwargs):
     setattr(buildable, name, value)
 
 
-def copy_with(buildable: Buildable, **kwargs):
+def copy_with(buildable: Buildable, /, **kwargs):
   """Returns a shallow copy of ``buildable`` with updates to arguments.
 
   Args:
@@ -1028,7 +1028,7 @@ def copy_with(buildable: Buildable, **kwargs):
   return buildable
 
 
-def deepcopy_with(buildable: Buildable, **kwargs):
+def deepcopy_with(buildable: Buildable, /, **kwargs):
   """Returns a deep copy of ``buildable`` with updates to arguments.
 
   Note: if any ``Config``'s inside ``buildable`` are shared with ``Config``'s

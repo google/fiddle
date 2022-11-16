@@ -912,7 +912,7 @@ class AnyCallable(AnyValue):
   """Object used by `skeleton_from_diff` to encode an unknown callable."""
   __name__ = '*'
 
-  def __call__(self, **kwargs):
+  def __call__(self, /, **kwargs):
     raise ValueError('AnyCallable should not be called.')
 
 

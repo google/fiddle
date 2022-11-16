@@ -53,7 +53,7 @@ https://github.com/$$YOUR_USERNAME$$/fiddle`.
 > Note: if you're developing on a mac, you'll need xcode installed. (Required
 > for PyType.)
 
-1. Install Python (>= 3.7) locally.
+1. Install Python (>= 3.8) locally.
 2. Navigate to the directory containing your local clone of the git
    repository. (To ensure you're in the right directory, if you type
    `ls | grep CONTRIBUTING.md`, you should see this file listed.)
