@@ -37,6 +37,11 @@ class Foo:
   baz: Any
 
 
+@dataclasses.dataclass
+class Foo2:
+  bloop: Any
+
+
 class SampleNamedTuple(NamedTuple):
   fizz: Any
   buzz: Any
@@ -94,11 +99,7 @@ class DataclassAwareRegistry(daglish.NodeTraverserRegistry):
     return super().find_node_traverser(node_type)
 
 
-dataclass_registry = DataclassAwareRegistry()
-
-# Copy existing traversers.
-dataclass_registry._node_traversers = (
-    daglish._default_traverser_registry._node_traversers.copy())
+dataclass_registry = DataclassAwareRegistry(use_fallback=True)
 
 
 def _flatten_dataclass(value):
@@ -261,7 +262,7 @@ class TraverserRegistryTest(parameterized.TestCase):
       daglish.find_node_traverser(cast(Any, 42))
 
   def test_custom_traverser_registries(self):
-    registry = daglish.NodeTraverserRegistry()
+    registry = daglish.NodeTraverserRegistry(use_fallback=False)
     self.assertIsNone(registry.find_node_traverser(Foo))
     registry.register_node_traverser(
         Foo,
@@ -294,6 +295,46 @@ class TraverserRegistryTest(parameterized.TestCase):
           flatten_fn=lambda x: (tuple(x), None),
           unflatten_fn=lambda x, _: list(x),
           path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
+
+  def test_node_traverser_registry_with_fallback(self):
+    registry = daglish.NodeTraverserRegistry(use_fallback=True)
+    self.assertIsNotNone(registry.find_node_traverser(dict))
+    self.assertIsNone(registry.find_node_traverser(Foo))
+    registry.register_node_traverser(
+        Foo,
+        flatten_fn=lambda x: ((x.bar, x.baz), None),
+        unflatten_fn=lambda values, _: Foo(*values),
+        path_elements_fn=lambda _: (daglish.Attr("bar"), daglish.Attr("baz")))
+    self.assertIsNone(daglish.find_node_traverser(Foo))
+    foo_traverser = registry.find_node_traverser(Foo)
+    self.assertIsNotNone(foo_traverser)
+    self.assertEqual(((1, 2), None), foo_traverser.flatten(Foo(1, 2)))
+
+  def test_stacked_node_traverser_registry_with_fallback(self):
+    registry1 = daglish.NodeTraverserRegistry(use_fallback=True)
+    registry1.register_node_traverser(
+        Foo,
+        flatten_fn=lambda x: ((x.bar, x.baz), None),
+        unflatten_fn=lambda values, _: Foo(*values),
+        path_elements_fn=lambda _: (daglish.Attr("bar"), daglish.Attr("baz")))
+
+    registry2 = daglish.NodeTraverserRegistry(use_fallback=registry1)
+    registry2.register_node_traverser(
+        Foo2,
+        flatten_fn=lambda x: ((x.bloop,), None),
+        unflatten_fn=lambda values, _: Foo(*values),
+        path_elements_fn=lambda _: (daglish.Attr("bloop"),))
+
+    self.assertIsNone(daglish.find_node_traverser(Foo))
+    self.assertIsNone(daglish.find_node_traverser(Foo2))
+
+    self.assertIsNotNone(registry1.find_node_traverser(dict))
+    self.assertIsNotNone(registry1.find_node_traverser(Foo))
+    self.assertIsNone(registry1.find_node_traverser(Foo2))
+
+    self.assertIsNotNone(registry2.find_node_traverser(dict))
+    self.assertIsNotNone(registry2.find_node_traverser(Foo))
+    self.assertIsNotNone(registry2.find_node_traverser(Foo2))
 
 
 class BasicStructuredMappingTest(parameterized.TestCase):

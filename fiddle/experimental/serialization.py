@@ -112,8 +112,9 @@ class IdentityElement(daglish.PathElement):
 # A serialization-specific traverser registry. This can be used to register
 # traversal for types that should be serializable but shouldn't be traversed
 # during other Fiddle operations (e.g., `fdl.build()`).
-_traverser_registry = daglish.NodeTraverserRegistry()
+_traverser_registry = daglish.NodeTraverserRegistry(use_fallback=True)
 register_node_traverser = _traverser_registry.register_node_traverser
+find_node_traverser = _traverser_registry.find_node_traverser
 
 
 def _flatten_standard_object(instance):
@@ -167,19 +168,6 @@ register_node_traverser(
     flatten_fn=lambda _: ((), None),
     unflatten_fn=lambda values, metadata: config_lib.NO_VALUE,
     path_elements_fn=lambda _: ())
-
-
-def find_node_traverser(node_type: Type[Any]):
-  """Returns a node traverser for `node_type`.
-
-  This first looks in the serialization-specific registry. If no traverser is
-  found there, it falls back to the main daglish registry.
-
-  Args:
-    node_type: The node type to find a node traverser for.
-  """
-  return (_traverser_registry.find_node_traverser(node_type) or
-          daglish.find_node_traverser(node_type))
 
 
 def _is_leaf_type(value_type):

@@ -131,8 +131,28 @@ class NodeTraverser:
 class NodeTraverserRegistry:
   """A registry of `NodeTraverser`s."""
 
-  def __init__(self):
+  def __init__(
+      self,
+      *,
+      use_fallback: Union["NodeTraverserRegistry", bool] = False,
+  ):
+    """Initializes the instance.
+
+    Args:
+      use_fallback: Whether to use a fallback registry for lookups if a
+        traverser can't be found in this registry. If `True`, this uses the
+        default daglish registry for fallbacks. If `False`, fallback behavior is
+        disabled. This can also be a `NodeTraverserRegistry` instance, in which
+        case it will be used for fallback lookups. Defaults to `False`.
+    """
     self._node_traversers: Dict[Type[Any], NodeTraverser] = {}
+    if isinstance(use_fallback, NodeTraverserRegistry):
+      fallback_registry = use_fallback
+    elif use_fallback:
+      fallback_registry = _default_traverser_registry  # pytype: disable=name-error
+    else:
+      fallback_registry = None
+    self.fallback_registry = fallback_registry
 
   def register_node_traverser(
       self,
@@ -141,7 +161,7 @@ class NodeTraverserRegistry:
       unflatten_fn: UnflattenFn,
       path_elements_fn: PathElementsFn,
   ) -> None:
-    """Registers a node traverser for `node_type` in the default registry.
+    """Registers a node traverser for `node_type`.
 
     Args:
       node_type: The node type to regiser a traverser for. The traverser will be
@@ -179,6 +199,9 @@ class NodeTraverserRegistry:
     `NamedTuple` (as determined by the `is_namedtuple_subclass` function), then
     `daglish.NamedTupleType` is looked up in `registry` instead.
 
+    If this node traverser registry doesn't contain a traverser for `node_type`,
+    then it will be looked up in `self.fallback_registry`.
+
     Args:
       node_type: The node type to find a traverser for.
 
@@ -189,7 +212,10 @@ class NodeTraverserRegistry:
       raise TypeError(f"`node_type` ({node_type}) must be a type.")
     if is_namedtuple_subclass(node_type):
       node_type = NamedTupleType
-    return self._node_traversers.get(node_type)
+    traverser = self._node_traversers.get(node_type)
+    if traverser is None and self.fallback_registry:
+      traverser = self.fallback_registry.find_node_traverser(node_type)
+    return traverser
 
   def is_traversable_type(self, node_type: Type[Any]) -> bool:
     """Returns whether `node_type` can be traversed."""
@@ -197,12 +223,13 @@ class NodeTraverserRegistry:
 
 
 # The default registry of node traversers.
-_default_traverser_registry = NodeTraverserRegistry()
+_default_traverser_registry = NodeTraverserRegistry(use_fallback=False)
 
 # Forward functions from the module level to the default registry.
 register_node_traverser = _default_traverser_registry.register_node_traverser
 find_node_traverser = _default_traverser_registry.find_node_traverser
 is_traversable_type = _default_traverser_registry.is_traversable_type
+
 
 register_node_traverser(
     dict,
@@ -334,9 +361,9 @@ def is_internable(value: Any) -> bool:
     value: any value, it can be a Fiddle buildable or a regular Python value.
   """
   return not is_memoizable(value) or (
-      # pylint: disable-next=unidiomatic-typecheck
       # We want tuples only and not things like NamedTuples which are not
       # interned by Python.
+      # pylint: disable-next=unidiomatic-typecheck
       type(value) is tuple and all(is_internable(e) for e in value))
 
 
