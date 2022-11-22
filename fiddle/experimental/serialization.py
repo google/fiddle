@@ -25,6 +25,7 @@ import abc
 import collections
 import copy
 import dataclasses
+import enum
 import importlib
 import inspect
 import itertools
@@ -367,6 +368,19 @@ def register_constant(module: str, symbol: str, compare_by_identity: bool):
   else:
     _serialization_constants_by_value[value] = serialization_constant
 
+
+def register_enum(enum_type: Type[enum.Enum]) -> None:
+  """Registers all members of the given enum using `register_constant`.
+
+  Args:
+    enum_type: Any class that inherits from `enum.Enum`.
+  """
+  for name in enum_type.__members__:
+    register_constant(
+        enum_type.__module__,
+        f'{enum_type.__qualname__}.{name}',
+        compare_by_identity=True,
+    )
 
 # The following constants define the keys (and some values) in the
 # JSON-serializable object representation produced as an intermediate step in
