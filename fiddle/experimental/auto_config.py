@@ -30,7 +30,7 @@ import inspect
 import linecache
 import textwrap
 import types
-from typing import Any, Callable, cast, Optional, Union
+from typing import Any, Callable, cast, Optional
 
 from fiddle import building
 from fiddle import config
@@ -81,10 +81,12 @@ class AutoConfig:
     return self.buildable_func(*args, **kwargs)
 
   def __get__(self, obj, objtype=None):
-    if obj is None:
-      return self
-    else:
-      return _BoundAutoConfig(self, obj)
+    # pytype: disable=attribute-error
+    return AutoConfig(
+        func=self.func.__get__(obj, objtype),
+        buildable_func=self.buildable_func.__get__(obj, objtype),
+        always_inline=self.always_inline)
+    # pytype: enable=attribute-error
 
   @property
   def __wrapped__(self):
@@ -94,49 +96,6 @@ class AutoConfig:
     # Pass through extra things on the thing we wrapped. We use
     # super().__getattribute__('func') here to avoid an infinite recursion.
     return getattr(super().__getattribute__('func'), name)
-
-
-@dataclasses.dataclass(frozen=True)
-class _BoundAutoConfig:
-  """An `AutoConfig` bound to an object.
-
-  This parallels the function / bound method pair.
-  """
-  auto_config: AutoConfig
-  obj: Any
-
-  def __getattr__(self, name: str):
-    if name == '__qualname__':
-      # When `obj` is a class, it seems to provide __qualname__, but when it is
-      # an instance, we'll have to read this off the class, if available. If
-      # none of these are available, fall back to `func.__qualname__` instead of
-      # failing.
-      func = self.auto_config.func
-      try:
-        return f'{self.obj.__qualname__}.{func.__name__}'
-      except AttributeError:
-        try:
-          return f'{self.obj.__class__.__qualname__}.{func.__name__}'
-        except AttributeError:
-          return func.__qualname__
-    elif name in ('auto_config', 'obj'):
-      return super().__getattribute__(name)
-    else:
-      # Pass through extra things on the thing we wrapped.
-      return getattr(super().__getattribute__('auto_config'), name)
-
-  def __call__(self, *args, **kwargs) -> Any:
-    return self.auto_config.func(self.obj, *args, **kwargs)
-
-  def as_buildable(self, *args, **kwargs) -> config.Buildable:
-    return self.auto_config.buildable_func(self.obj, *args, **kwargs)
-
-  @property
-  def always_inline(self) -> bool:
-    return self.auto_config.always_inline
-
-
-AutoConfigFn = Union[AutoConfig, _BoundAutoConfig]
 
 
 class UnsupportedLanguageConstructError(SyntaxError):
@@ -149,7 +108,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
   def __init__(self,
                source: str,
                filename: str,
-               line_offset: int,
+               line_number: int,
                allow_control_flow=False):
     """Initializes the auto config node transformer instance.
 
@@ -157,7 +116,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       source: The source code of the node that will be transformed by this
         instance. This is used for better error reporting.
       filename: The filename `source` is from.
-      line_offset: The line offset of `source` within `filename`.
+      line_number: The line number of `source` within `filename`.
       allow_control_flow: Whether to permit control flow constructs (loops,
         conditionals, comprehensions, etc). By default, this is `False`, and
         control flow constructs will cause an
@@ -165,13 +124,13 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     """
     self._lines = source.splitlines()
     self._filename = filename
-    self._line_offset = line_offset
+    self._line_number = line_number
     self._allow_control_flow = allow_control_flow
 
     self._function_def_depth = 0
 
   def _location_for(self, node: ast.AST):
-    line_number = node.lineno + self._line_offset
+    line_number = self._line_number + node.lineno - 1
     line = self._lines[node.lineno - 1]
     return (self._filename, line_number, node.col_offset, line)
 
@@ -187,6 +146,38 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       return self.generic_visit(node)
     finally:
       self._function_def_depth -= 1
+
+  def _validate_decorator_ordering(self, node: ast.FunctionDef):
+    """Validates that decorators are applied in the right order.
+
+    This is done on a best effort basis to catch cases where @classmethod or
+    @staticmethod are applied on top of @auto_config.
+
+    Args:
+      node: The `ast.FunctionDef` node to validate decorators for.
+    """
+    decorator_list = []
+    for decorator in node.decorator_list:
+      if isinstance(decorator, ast.Attribute):
+        decorator = decorator.attr
+      if isinstance(decorator, ast.Name):
+        decorator = decorator.id
+      decorator_list.append(decorator)
+
+    try:
+      auto_config_index = decorator_list.index('auto_config')
+    except ValueError:
+      # Probably auto_config wasn't called as a decorator. Another alternative
+      # is that the auto_config function was assigned to a variable with a
+      # different name before being applied as a decorator...
+      return
+
+    for decorator in decorator_list[:auto_config_index]:
+      if decorator in ('classmethod', 'staticmethod'):
+        raise AssertionError(
+            f'@{decorator} placed above @auto_config on function {node.name} '
+            f'at {self._filename}:{self._line_number}. Reorder decorators so '
+            f'that @auto_config is placed above @{decorator}.')
 
   # pylint: disable=invalid-name
   def visit_Call(self, node: ast.Call):
@@ -240,6 +231,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       msg = 'Nested function definitions are not supported by auto_config.'
       raise UnsupportedLanguageConstructError(msg, self._location_for(node))
     else:
+      self._validate_decorator_ordering(node)
       return self._generic_visit_inside_function(node)
 
   def visit_Lambda(self, node: ast.Lambda):
@@ -450,6 +442,10 @@ def auto_config(
   using `itertools` functions in conjunction with a loop will not work, since
   the calls to `itertools` functions will be turned into `fdl.Config` objects).
 
+  Using `@auto_config` is compatible with both `@staticmethod` and
+  `@classmethod`, however the `@auto_config` decorator must appear above the
+  `@classmethod` or `@staticmethod` in the decorator list.
+
   Args:
     fn: The function to create a config-generating function from.
     experimental_allow_control_flow: Whether to allow control flow constructs in
@@ -499,8 +495,7 @@ def auto_config(
       Depending on `fn_or_cls`, either `Partial`, a `Config`, or the result of
       calling `fn_or_cls` with the provided arguments.
     """
-    if (is_auto_config(fn_or_cls) and
-        cast(Union[AutoConfig, _BoundAutoConfig], fn_or_cls).always_inline):
+    if isinstance(fn_or_cls, AutoConfig) and fn_or_cls.always_inline:
       return fn_or_cls.as_buildable(*args, **kwargs)
 
     if fn_or_cls is functools.partial:
@@ -512,13 +507,16 @@ def auto_config(
     return experimental_config_cls(fn_or_cls, *args, **kwargs)
 
   def make_auto_config(fn):
-    if isinstance(fn, (staticmethod, classmethod)):
-      return type(fn)(make_auto_config(fn.__func__))
-
-    if not inspect.isfunction(fn):
+    if not isinstance(fn, (types.FunctionType, classmethod, staticmethod)):
       raise ValueError('`auto_config` is only compatible with functions, '
                        f'`@classmethod`s, and `@staticmethod`s.  Got {fn!r} '
                        f'with type {type(fn)!r}.')
+
+    if isinstance(fn, (classmethod, staticmethod)):
+      method_type = type(fn)
+      fn = fn.__func__
+    else:
+      method_type = None
 
     source = _getsource(fn)
 
@@ -526,11 +524,11 @@ def auto_config(
     # `_AutoConfigNodeTransformer` requires some additional information about
     # the source to provide more informative error messages.
     filename = inspect.getsourcefile(fn)
-    line_offset = fn.__code__.co_firstlineno - 1
+    line_number = fn.__code__.co_firstlineno
     node_transformer = _AutoConfigNodeTransformer(
         source=source,
         filename=filename,
-        line_offset=line_offset,
+        line_number=line_number,
         allow_control_flow=experimental_allow_control_flow)
 
     # Parse the AST, and modify it by intercepting all `Call`s with the
@@ -540,7 +538,7 @@ def auto_config(
     node = ast.parse(source)
     node = node_transformer.visit(node)
     node = ast.fix_missing_locations(node)
-    node = ast.increment_lineno(node, line_offset)
+    node = ast.increment_lineno(node, line_number - 1)
     assert isinstance(node, ast.Module)
 
     # In order to allow us to use the original function closure below when
@@ -583,6 +581,9 @@ def auto_config(
             'supported container (list, tuple, dict) containing one.')
       return output
 
+    if method_type:
+      fn = method_type(fn)
+      as_buildable = method_type(as_buildable)
     return AutoConfig(
         fn, as_buildable, always_inline=experimental_always_inline)
 
@@ -681,7 +682,7 @@ def auto_unconfig(
 
 
 def is_auto_config(function_object: Any) -> bool:
-  return isinstance(function_object, (AutoConfig, _BoundAutoConfig))
+  return isinstance(function_object, AutoConfig)
 
 
 def inline(buildable: config.Config):
@@ -737,8 +738,7 @@ def inline(buildable: config.Config):
     raise ValueError('Cannot `inline` a non-auto_config function; '
                      f'`{buildable.__fn_or_cls__}` is not compatible.')
   # Evaluate the `as_buildable` interpretation.
-  auto_config_fn = cast(Union[AutoConfig, _BoundAutoConfig],
-                        buildable.__fn_or_cls__)
+  auto_config_fn = cast(AutoConfig, buildable.__fn_or_cls__)
   tmp_config = auto_config_fn.as_buildable(**buildable.__arguments__)
   if not isinstance(tmp_config, config.Buildable):
     raise ValueError('You cannot currently inline functions that do not return '

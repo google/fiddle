@@ -300,8 +300,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
     class MyClass:
 
-      @staticmethod
       @auto_config.auto_config
+      @staticmethod
       def my_fn():
         return SampleClass(2, 1)
 
@@ -318,8 +318,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
     class MyClass:
 
-      @staticmethod
       @auto_config.auto_config
+      @staticmethod
       def my_fn(x):
         return SampleClass(x, x + 1)
 
@@ -333,21 +333,20 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         fdl.Config(SampleClass, 5, 6), instance.my_fn.as_buildable(5))
     self.assertEqual(SampleClass(5, 6), instance.my_fn(5))
 
-  def test_staticmethod_not_on_top(self):
+  def test_staticmethod_on_top(self):
 
-    class MyClass:  # pylint: disable=unused-variable
+    expected_msg = (
+        r'@staticmethod placed above @auto_config on function my_fn at '
+        r'.+:\d+\. Reorder decorators so that @auto_config is placed above '
+        r'@staticmethod.')
+    with self.assertRaisesRegex(AssertionError, expected_msg):
 
-      @auto_config.auto_config
-      @staticmethod
-      def my_fn(x, y):
-        return SampleClass(x, y)
+      class MyClass:  # pylint: disable=unused-variable
 
-    instance = MyClass()
-    cfg = instance.my_fn.as_buildable(x=3, y=5)
-
-    self.assertEqual(SampleClass, fdl.get_callable(cfg))
-    self.assertEqual(3, cfg.arg1)
-    self.assertEqual(5, cfg.arg2)
+        @staticmethod
+        @auto_config.auto_config
+        def my_fn(x, y):
+          pass
 
   def test_staticmethod_ctor(self):
 
@@ -356,8 +355,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       a: int
       b: float
 
-      @staticmethod
       @auto_config.auto_config
+      @staticmethod
       def staticmethod_init(b=1.0):
         return ClassWithStaticmethodCtor(1, b)
 
@@ -373,8 +372,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       y: str
       z: float = 2.0
 
-      @classmethod
       @auto_config.auto_config
+      @classmethod
       def simple(cls):
         """Test simple docstring."""
         return cls(x=1, y='1', z=1.0)
@@ -398,44 +397,31 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(MyClass.simple.__name__, 'simple')
     self.assertEqual(MyClass.simple.__qualname__,
                      'AutoConfigTest.test_classmethod.<locals>.MyClass.simple')
-    self.assertEqual(MyClass.simple.__module__,
-                     'fiddle.experimental.auto_config')
-    # TODO(b/243710800): Make `__doc__` return the original function's
-    # docstring.
-    # self.assertEqual(MyClass.simple.__doc__, 'Test simple docstring.')
+    self.assertEqual(MyClass.simple.__module__, __name__)
+    self.assertEqual(MyClass.simple.__doc__, 'Test simple docstring.')
 
     # The attributes on the subclass should be the same, except for
     # __qualname__.
     self.assertEqual(MySubclass.simple.__name__, 'simple')
-    self.assertEqual(
-        MySubclass.simple.__qualname__,
-        'AutoConfigTest.test_classmethod.<locals>.MySubclass.simple')
-    self.assertEqual(MySubclass.simple.__module__,
-                     'fiddle.experimental.auto_config')
-    # self.assertEqual(MySubclass.simple.__doc__, 'Test simple docstring.')
+    self.assertEqual(MySubclass.simple.__qualname__,
+                     'AutoConfigTest.test_classmethod.<locals>.MyClass.simple')
+    self.assertEqual(MySubclass.simple.__module__, __name__)
+    self.assertEqual(MySubclass.simple.__doc__, 'Test simple docstring.')
 
-  def test_classmethod_not_on_top(self):
+  def test_classmethod_on_top(self):
 
-    class MyClass:  # pylint: disable=unused-variable
+    expected_msg = (
+        r'@classmethod placed above @auto_config on function my_fn at .+:\d+\. '
+        r'Reorder decorators so that @auto_config is placed above @classmethod.'
+    )
+    with self.assertRaisesRegex(AssertionError, expected_msg):
 
-      def __init__(self, x=None, y=None):
-        self.x = x
-        self.y = y
+      class MyClass:  # pylint: disable=unused-variable
 
-      @auto_config.auto_config
-      @classmethod
-      def my_fn(cls, x, y):
-        return cls(x, y)
-
-    instance = MyClass()
-    cfg = instance.my_fn.as_buildable(x=3, y=5)
-
-    self.assertEqual(MyClass, fdl.get_callable(cfg))
-
-    obj = fdl.build(cfg)
-
-    self.assertEqual(3, obj.x)
-    self.assertEqual(5, obj.y)
+        @classmethod
+        @auto_config.auto_config
+        def my_fn(cls, x, y):
+          pass
 
   def test_copy(self):
 
@@ -462,8 +448,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       a: int
       b: int
 
-      @classmethod
       @auto_config.auto_config
+      @classmethod
       def test_method(cls):
         return cls(1, 2)
 
@@ -740,7 +726,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_access_autoconfig_method_via_class(self):
     # If we access an autoconfig via an instance, we get a bound method:
     self.assertIsInstance(
-        SampleClass(1, 2).autoconfig_method, auto_config._BoundAutoConfig)
+        SampleClass(1, 2).autoconfig_method, auto_config.AutoConfig)
 
     # But if we access it via the class, we get the (unbound) AutoConfig:
     self.assertIsInstance(SampleClass.autoconfig_method, auto_config.AutoConfig)
@@ -884,8 +870,8 @@ class InlineTest(test_util.TestCase):
       x: Any
       y: Any
 
-      @classmethod
       @auto_config.auto_config
+      @classmethod
       def default(cls, z):
         return cls(z, z + 2)
 

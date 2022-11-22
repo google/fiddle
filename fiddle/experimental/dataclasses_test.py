@@ -42,8 +42,8 @@ class ATaggedType:
   double_tagged: str = fdl_dc.field(
       tags=(AdditionalTag, SampleTag), default_factory=lambda: 'other_field')
 
-  @classmethod
   @auto_config.auto_config
+  @classmethod
   def default(cls):
     return cls(untagged='untagged_default')
 
@@ -70,8 +70,8 @@ class AnAutoconfigType:
 
   # We need this for `AncestorType` below, but we might be able to make
   # `auto_config.auto_config(AnAutoconfigType)` work in the future.
-  @classmethod
   @auto_config.auto_config
+  @classmethod
   def default(cls):
     return cls()
 
