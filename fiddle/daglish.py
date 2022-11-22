@@ -131,11 +131,7 @@ class NodeTraverser:
 class NodeTraverserRegistry:
   """A registry of `NodeTraverser`s."""
 
-  def __init__(
-      self,
-      *,
-      use_fallback: Union["NodeTraverserRegistry", bool] = False,
-  ):
+  def __init__(self, *, use_fallback: Union["NodeTraverserRegistry", bool]):
     """Initializes the instance.
 
     Args:
@@ -143,7 +139,7 @@ class NodeTraverserRegistry:
         traverser can't be found in this registry. If `True`, this uses the
         default daglish registry for fallbacks. If `False`, fallback behavior is
         disabled. This can also be a `NodeTraverserRegistry` instance, in which
-        case it will be used for fallback lookups. Defaults to `False`.
+        case it will be used for fallback lookups.
     """
     self._node_traversers: Dict[Type[Any], NodeTraverser] = {}
     if isinstance(use_fallback, NodeTraverserRegistry):
