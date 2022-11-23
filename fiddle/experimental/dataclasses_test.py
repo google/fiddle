@@ -53,13 +53,13 @@ class AnotherTaggedType:
   tagged: str = fdl_dc.field(tags=AdditionalTag, default='tagged')
 
 
-def test_fn():
+def sample_fn():
   return 1
 
 
 @auto_config.auto_config
 def nested_structure():
-  return {'foo': [test_fn(), (2, 3)]}
+  return {'foo': [sample_fn(), (2, 3)]}
 
 
 @dataclasses.dataclass

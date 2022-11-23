@@ -30,7 +30,7 @@ from fiddle import testing
 from fiddle.testing import test_util
 
 
-def test_func(**kwargs):
+def sample_fn(**kwargs):
   return kwargs
 
 
@@ -47,10 +47,10 @@ class SampleClass:
 def make_test_value():
   shared_list = [1, 2]
   shared_object = SampleClass(5)
-  shared_config = fdl.Config(test_func, x=22)
+  shared_config = fdl.Config(sample_fn, x=22)
   nested_shared_list = [3, shared_list]
   return fdl.Config(
-      test_func,
+      sample_fn,
       a=shared_list,
       b=shared_object,
       c=shared_config,
@@ -140,13 +140,13 @@ class DescribeDagDiffsTest(parameterized.TestCase):
         ['* Sharing diff: y[1] is y[0] but x[1] is not x[0]'])
 
   def test_leaf_diff(self):
-    x = fdl.Config(test_func, a=5)
-    y = fdl.Config(test_func, a=6)
+    x = fdl.Config(sample_fn, a=5)
+    y = fdl.Config(sample_fn, a=6)
     self.assertEqual(test_util.describe_dag_diffs(x, y), ['* x.a=5 but y.a=6'])
 
   def test_big_leaf_diff(self):
-    x = fdl.Config(test_func, a='x' * 40)
-    y = fdl.Config(test_func, a='y' * 40)
+    x = fdl.Config(sample_fn, a='x' * 40)
+    y = fdl.Config(sample_fn, a='y' * 40)
     self.assertEqual(
         test_util.describe_dag_diffs(x, y), [
             "* x.a='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' but\n" +
@@ -155,8 +155,8 @@ class DescribeDagDiffsTest(parameterized.TestCase):
 
   def test_set_diff(self):
     # Sets are considered leaves -- not traversed by daglish.
-    x = fdl.Config(test_func, a=set([1, 2]))
-    y = fdl.Config(test_func, a=set([2, 3]))
+    x = fdl.Config(sample_fn, a=set([1, 2]))
+    y = fdl.Config(sample_fn, a=set([2, 3]))
     self.assertEqual(
         test_util.describe_dag_diffs(x, y), ['* x.a={1, 2} but y.a={2, 3}'])
 
@@ -189,8 +189,8 @@ class DescribeDagDiffsTest(parameterized.TestCase):
         ])
 
   def test_config_arg_names_diff(self):
-    x = fdl.Config(test_func, a=3)
-    y = fdl.Config(test_func, b=3)
+    x = fdl.Config(sample_fn, a=3)
+    y = fdl.Config(sample_fn, b=3)
     self.assertEqual(
         test_util.describe_dag_diffs(x, y), [
             '* x.a has a value but y.a does not.',
@@ -200,10 +200,10 @@ class DescribeDagDiffsTest(parameterized.TestCase):
   def test_config_callable_diff(self):
     # Note: Config.__fn_or_cls__ is metadata (not a traversed child).
     x = fdl.Config(SampleClass)
-    y = fdl.Config(test_func)
+    y = fdl.Config(sample_fn)
     self.assertEqual(
         test_util.describe_dag_diffs(x, y), [
-            '* x=<Config[SampleClass()]> but y=<Config[test_func()]>',
+            '* x=<Config[SampleClass()]> but y=<Config[sample_fn()]>',
         ])
 
   def test_replace_value_with_unrelated_value(self):

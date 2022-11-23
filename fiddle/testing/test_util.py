@@ -224,7 +224,7 @@ class TestCase(absltest.TestCase):
 
 
 @contextlib.contextmanager
-def test_serialization_register_constant():
+def temporary_serialization_constants():
   """Context manager used to test `serialization.register_constant`.
 
   Saves the registered serialization constants when the context manager is
