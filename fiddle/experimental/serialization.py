@@ -26,6 +26,7 @@ import collections
 import copy
 import dataclasses
 import enum
+import functools
 import importlib
 import inspect
 import itertools
@@ -37,6 +38,7 @@ from typing import Any, Dict, Iterable, List, Optional, Type
 
 from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle._src import reraised_exception
 from fiddle.experimental import daglish_legacy
 
 _VERSION = '0.0.1'
@@ -176,19 +178,18 @@ def _is_leaf_type(value_type):
   return value_type in (int, float, bool, str, type(None))
 
 
+def path_str(path: daglish.Path) -> str:
+  """Returns a path string for `path`."""
+  return '<root>' + daglish.path_str(path)
+
+
 def path_strs(paths: Iterable[daglish.Path]) -> List[str]:
   """Returns a list of path strings corresponding to `paths`."""
-  return ['<root>' + daglish.path_str(path) for path in paths]
+  return [path_str(path) for path in paths]
 
 
 class UnserializableValueError(Exception):
   """An exception thrown when an unserializable value is encountered."""
-
-  def __init__(self, value: Any, path: daglish.Path):
-    self.value = value
-    self.path = path
-    msg = f'Unserializable value {value} of type {type(value)} at <root>{daglish.path_str(self.path)}'
-    super().__init__(msg)
 
 
 class PyrefPolicy(metaclass=abc.ABCMeta):
@@ -221,11 +222,7 @@ class PyrefPolicy(metaclass=abc.ABCMeta):
     """
 
 
-class PyrefError(Exception):
-  """An error arising when trying to import a Python reference."""
-
-
-class PyrefPolicyError(PyrefError):
+class PyrefPolicyError(Exception):
   """An error arising when an import is disallowed by a `PyrefPolicy`."""
 
   PRE_IMPORT = object()
@@ -264,6 +261,12 @@ class DefaultPyrefPolicy(PyrefPolicy):
     return is_serializable_type or not is_builtin
 
 
+def _fiddle_pyref_context(module: str, symbol: str) -> str:
+  return (
+      f'\nFiddle context: Error occurred while importing pyref to {symbol!r} '
+      f'from {module!r}.')
+
+
 def import_symbol(policy: PyrefPolicy, module: str, symbol: str):
   """Returns the value obtained from importing `symbol` from `module`.
 
@@ -273,26 +276,18 @@ def import_symbol(policy: PyrefPolicy, module: str, symbol: str):
     symbol: The symbol to import from `module`.
 
   Raises:
-    PyrefError: If `module` can't be found, or 'symbol' can't be accessed on
-      `module`, or if a `PyrefPolicyError` is raised (since `PyrefPolicyError`
-      is a subclass of `PyrefError`).
+    ModuleNotFoundError: If `module` can't be found.
+    AttributeError: If `symbol` can't be accessed on `module`.
     PyrefPolicyError: If importing `symbol` from `module` is disallowed by
       this `PyrefPolicy`.
   """
   value = PyrefPolicyError.PRE_IMPORT
   if policy.allows_import(module, symbol):
-    try:
+    make_message = functools.partial(_fiddle_pyref_context, module, symbol)
+    with reraised_exception.try_with_lazy_message(make_message):
       value = importlib.import_module(module)
-    except ModuleNotFoundError as e:
-      msg = f'Error while importing pyref to {symbol!r} from {module!r}.'
-      raise PyrefError(msg) from e
-
-    for attr_name in symbol.split('.'):
-      try:
+      for attr_name in symbol.split('.'):
         value = getattr(value, attr_name)
-      except AttributeError as e:
-        msg = f'Error while importing pyref to {symbol!r} from {module!r}.'
-        raise PyrefError(msg) from e
 
     if policy.allows_value(value):
       return value
@@ -338,9 +333,10 @@ def register_constant(module: str, symbol: str, compare_by_identity: bool):
       False, then the value must be hashable.
 
   Raises:
-    PyrefError: If `module` can't be found, or 'symbol' can't be accessed on
-      `module`, or if a `PyrefPolicyError` is raised (since `PyrefPolicyError`
-      is a subclass of `PyrefError`).
+    ModuleNotFoundError: If `module` can't be found.
+    AttributeError If 'symbol' can't be accessed on `module`.
+    PyrefPolicyError: If importing `symbol` from `module` is disallowed by the
+      `DefaultPyrefPolicy`.
     ValueError: If registration is unnecessary for `<module>.<symbol>` (e.g.,
       because it is a `type` or `function`).
   """
@@ -478,8 +474,10 @@ class Serialization:
 
     Raises:
       UnserializableValueError: If an unserializable value is encountered.
-      PyrefError: If an error is encountered while serializing a Python
-        reference.
+      ModuleNotFoundError: If a module can't be imported in the course of
+        creating a Python reference.
+      AttributeError: If an attribute or symbol can't be accessed in the course
+        of creating a Python reference.
       PyrefPolicyError: If a Python reference (e.g., function or type) is
         disallowed by `pyref_policy`.
     """
@@ -535,15 +533,17 @@ class Serialization:
     self._refcounts[key] += 1
     return {_TYPE_KEY: _REF_TYPE, _KEY_KEY: key}
 
-  def _pyref(self, value):
+  def _pyref(self, value, current_path: daglish.Path):
     """Creates a reference to an importable Python value."""
     module = inspect.getmodule(value).__name__
     symbol = value.__qualname__
-    # Check to make sure we can import the symbol. This will potentially throw
-    # a PyrefError or a PyrefPolicyError.
+    # Check to make sure we can import the symbol.
     if value is not import_symbol(self._pyref_policy, module, symbol):
-      raise PyrefError(
-          f"Couldn't obtain {value!r} by importing {symbol!r} from {module!r}.")
+      msg = (
+          f"Couldn't create a pyref for {value!r}; the same value was not "
+          f'obtained by importing {symbol!r} from {module!r}. Error occurred '
+          f'at path {path_str(current_path)!r}.')
+      raise UnserializableValueError(msg)
     return {
         _TYPE_KEY: _PYREF_TYPE,
         _MODULE_KEY: module,
@@ -598,14 +598,16 @@ class Serialization:
           return value  # If we don't need to add paths, just return the value.
         output = self._leaf(value)
       elif isinstance(value, (type, types.FunctionType)):
-        output = self._pyref(value)
+        output = self._pyref(value, current_path)
       elif id(value) in _serialization_constants_by_id:
         output = _serialization_constants_by_id[id(value)].to_pyref()
       elif (isinstance(value, collections.abc.Hashable) and
             value in _serialization_constants_by_value):
         output = _serialization_constants_by_value[value].to_pyref()
       else:
-        raise UnserializableValueError(value, current_path)
+        msg = (f'Unserializable value {value} of type {type(value)}. Error '
+               f'occurred at path {path_str(current_path)!r}.")')
+        raise UnserializableValueError(msg)
     else:  # We have a traverser; serialize value's flattened elements.
       values, metadata = traverser.flatten(value)
       path_elements = traverser.path_elements(value)
@@ -629,7 +631,7 @@ class Serialization:
           metadata, current_path + (MetadataElement(),), all_paths=None)
 
       output = {
-          _TYPE_KEY: self._pyref(type(value)),
+          _TYPE_KEY: self._pyref(type(value), current_path),
           _ITEMS_KEY: serialized_items,
           _METADATA_KEY: serialized_metadata
       }
@@ -777,7 +779,6 @@ def dump_json(
 
   Raises:
     UnserializableValueError: If an unserializable value is encountered.
-    PyrefError: If an error is encountered while serializing a Python reference.
     PyrefPolicyError: If a Python reference (e.g., function or type) is
       disallowed by `pyref_policy`.
   """
@@ -798,8 +799,8 @@ def load_json(
   Raises:
     DeserializationError: If an unknown type or other serialization format error
       is encountered  during deserialization.
-    PyrefError: If an error is encountered while deserializing a Python
-      reference.
+    ModuleNotFoundError: If a referenced module can't be imported.
+    AttributeError: If a referenced attribute or symbol can't be accessed.
     PyrefPolicyError: If a Python reference (e.g., function or type) is
       disallowed by `pyref_policy`.
     json.decoder.JSONDecodeError: If Python's `json.loads` encounters an error
