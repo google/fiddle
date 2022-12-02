@@ -240,13 +240,13 @@ class DiffAlignmentTest(absltest.TestCase):
     d = fdl.Config(SimpleClass, x='bop')
     old = fdl.Config(
         make_triple,
-        first=fdl.Config(SimpleClass, x=1, y=2, z=[3, 4]),
+        first=fdl.Config(SimpleClass, x=1, y=2, z=range(10)),
         second=fdl.Config(basic_fn, arg1=[set([5])], arg2=5, kwarg1=c),
         third=[[1], 2])
     new = fdl.Config(
         make_triple,
         first=fdl.Config(basic_fn, arg1=1, arg2=c, kwarg1=3, kwarg2=4),
-        second=fdl.Partial(basic_fn, arg1=[set([8])], arg2=[3, 4], kwarg1=d),
+        second=fdl.Partial(basic_fn, arg1=[set([8])], arg2=range(10), kwarg1=d),
         third=[[1, 2], 2, [3, 4]])
     alignment = diffing.align_heuristically(old, new)
     self.assertCountEqual(

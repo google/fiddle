@@ -18,7 +18,7 @@
 import abc
 import copy
 import dataclasses
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union, Mapping
 
 from fiddle import config as config_lib
 from fiddle import daglish
@@ -462,7 +462,8 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
     be reached using the same path.
 
   * The third pass aligns any memoizable objects in `old` and `new` that have
-    equal values.  Note: this takes `O(size(old) * size(new))` time.
+    equal values.  Note: this takes `O(size(old) * size(new))` time.  Values
+    that are "too simple" (e.g., empty lists) are never aligned this pass.
 
   Args:
     old: The root object of the `old` structure.
@@ -494,10 +495,30 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
   for old_value in old_by_id.values():
     for new_value in new_by_id.values():
       if type(old_value) is type(new_value) and old_value == new_value:
-        if alignment.can_align(old_value, new_value):
-          alignment.align(old_value, new_value)
+        if _should_align_by_equality(old_value):
+          if alignment.can_align(old_value, new_value):
+            alignment.align(old_value, new_value)
 
   return alignment
+
+
+def _should_align_by_equality(value):
+  """Returns true if two equal copies of `value` should be aligned.
+
+  Generally, we should avoid aligning "small" values by equality, since
+  they might be unrelated, and just happen to be equal.  This function
+  uses several heuristics to decide whether the value should be aligned.
+
+  Args:
+    value: The value that might be aligned.
+  """
+  if isinstance(value, (Sequence, Mapping)) and not value:
+    return False
+
+  if len(repr(value)) < 10:
+    return False
+
+  return True
 
 
 class _DiffFromAlignmentBuilder:
