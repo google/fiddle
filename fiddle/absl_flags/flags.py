@@ -267,7 +267,13 @@ def apply_overrides_to(cfg: config.Buildable):
     except Exception as e:
       raise ValueError(f'Invalid path "{path}".') from e
     try:
-      last.update(walk, ast.literal_eval(value))
+      literal_value = ast.literal_eval(value)
+    except Exception as e:
+      raise ValueError(
+          f'Could not parse literal value "{value}" while trying to set '
+          f'"{path}". Does a string need to be quoted?') from e
+    try:
+      last.update(walk, literal_value)
     except Exception as e:
       raise ValueError(f'Could not set "{path}" to "{value}".') from e
 
