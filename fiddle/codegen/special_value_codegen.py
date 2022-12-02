@@ -74,7 +74,9 @@ _EXACT_VALUE_LOOKUP = {}
 
 def register_exact_value(value: Any, resolution: Importable) -> None:
   """Registers an exact-value match."""
-  _EXACT_VALUE_LOOKUP[value] = resolution
+  # Note: we include `value` in the _EXACT_VALUE_LOOKUP dict to keep it alive,
+  # to ensure that `id(value)` remains valid.
+  _EXACT_VALUE_LOOKUP[id(value)] = resolution, value
 
 
 def transform_py_value(value: Any, import_manager: ImportManagerApi) -> Any:
@@ -93,7 +95,7 @@ def transform_py_value(value: Any, import_manager: ImportManagerApi) -> Any:
     and mostly a function of what extensions the user has enabled.)
   """
   try:
-    importable: Importable = _EXACT_VALUE_LOOKUP[value]
+    importable, _ = _EXACT_VALUE_LOOKUP[id(value)]
   except (KeyError, TypeError):
     pass
   else:

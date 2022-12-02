@@ -23,6 +23,7 @@ import fiddle as fdl
 from fiddle import graphviz
 from fiddle import printing
 from fiddle.codegen import codegen
+from fiddle.codegen import formatting_utilities
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.codegen import special_value_codegen
 from fiddle.experimental import serialization
@@ -98,6 +99,10 @@ def build_config():
     config = fdl.Config(foo, dtype=tf.bfloat16)
     result = printing.as_str_flattened(config)
     self.assertEqual("dtype = tf.bfloat16", result)
+
+  def test_int_does_not_get_printed_as_dtype(self):
+    # b/261060973 caused this to print `1` as `tf.float32`.
+    self.assertEqual(formatting_utilities.pretty_print(1), "1")
 
   def test_history_printing(self):
     config = fdl.Config(foo, dtype=tf.float16)

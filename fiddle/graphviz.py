@@ -584,7 +584,7 @@ class _GraphvizRenderer:
   def _render_leaf(self, value: Any) -> str:
     """Renders `value` as its `__repr__` string."""
     value = formatting_utilities.pretty_print(value)
-    return html.escape(repr(value))
+    return html.escape(value)
 
   def _render_changed_value(self, value) -> str:
     """Renders a `_ChangedValue` as an HTML table."""

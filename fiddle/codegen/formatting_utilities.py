@@ -44,4 +44,5 @@ class LazyImportManager(special_value_codegen.ImportManagerApi):
 
 def pretty_print(value: Any) -> str:
   """Returns the nicest eval-able string representation for `value`."""
-  return special_value_codegen.transform_py_value(value, LazyImportManager())
+  return repr(
+      special_value_codegen.transform_py_value(value, LazyImportManager()))
