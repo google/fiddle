@@ -143,3 +143,9 @@ Learn More
    colabs.md
    flags_code_lab.md
    api_reference/index
+
+Developing
+----------
+.. toctree::
+
+    README.md

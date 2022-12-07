@@ -605,7 +605,7 @@ class _GraphvizRenderer:
 
 
 def render(config: Any) -> graphviz.Graph:
-  """Renders the given `config` as a `graphviz.Graph`.
+  """Renders the given ``config`` as a ``graphviz.Graph``.
 
   Each config is rendered as a table of keys and values (with a header row).
   Any nested configs get their own separate table, with an edge pointing to
@@ -614,12 +614,13 @@ def render(config: Any) -> graphviz.Graph:
   edges to parent configs.
 
   Args:
-    config: The `fdl.Buildable` (or nested structure of `fdl.Buildable`s) to
-      render.
+    config: The ``fdl.Buildable`` (or nested structure of ``fdl.Buildable``'s)
+      to render.
 
   Returns:
-    A `graphviz.Graph` object containing the resulting rendering of `config`.
-    Standard `graphviz` methods can then be used to export this to a file.
+    A ``graphviz.Graph`` object containing the resulting rendering of
+    ``config``. Standard ``graphviz`` methods can then be used to export this to
+    a file.
   """
   return _GraphvizRenderer().render(config)
 
@@ -673,8 +674,6 @@ def render_diff(diff: Optional[diffing.Diff] = None,
       instance_colors=fill_color, curved_edges=True).render(config)
 
 
-# TODO(fiddle-team) If memoized_traverse is updated to allow access to the
-# memo dict, then we could refactor this code to not need this NamedTuple.
 class _OldAndNewSharedValues(NamedTuple):
   """A NamedTuple that pairs an `old` structure with a diff's new shared values.
 

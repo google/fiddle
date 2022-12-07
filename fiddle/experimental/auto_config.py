@@ -378,50 +378,51 @@ def _make_closure_cell(contents):
 def auto_config(
     fn=None,
     *,
-    experimental_allow_control_flow=False,
+    experimental_allow_control_flow: bool = False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
     experimental_config_cls=config.Config,
 ) -> Any:  # TODO(saeta): More precise return type.
-  """Rewrites the given function to make it generate a `Config`.
+  """Rewrites the given function to make it generate a ``Config``.
 
-  This function creates a new function from `fn` by rewriting its AST (abstract
-  syntax tree), replacing all `Call` nodes with a custom call handler. When the
-  rewritten function is run, the call handler intercepts calls and applies the
-  following rules:
+  This function creates a new function from ``fn`` by rewriting its AST
+  (abstract syntax tree), replacing all ``Call`` nodes with a custom call
+  handler. When the rewritten function is run, the call handler intercepts calls
+  and applies the following rules:
 
-    - Calls to builtins, methods, callables without an inferrable signature, or
-      other functions that have been `auto_config`ed take place as usual.
-    - Calls to `functools.partial` are replaced by calling `fdl.Partial` with
-      the same arguments;
-    - All other calls are replaced by calling `fdl.Config` with the arguments
-      that would have been passed to the called function or class.
+  - Calls to builtins, methods, callables without an inferrable signature, or
+    other functions that have been ``auto_config``'ed take place as usual.
+  - Calls to ``functools.partial`` are replaced by calling ``fdl.Partial`` with
+    the same arguments;
+  - All other calls are replaced by calling ``fdl.Config`` with the arguments
+    that would have been passed to the called function or class.
 
   This function may be used standalone or as a decorator. The returned function
-  is simply a wrapper around `fn`, but with an additional `as_buildable`
-  attribute containing the rewritten function. For example:
+  is simply a wrapper around ``fn``, but with an additional ``as_buildable``
+  attribute containing the rewritten function. For example::
 
-      def build_model():
-        return Sequential([
-            Dense(num_units=128, activation=relu),
-            Dense(num_units=128, activation=relu),
-            Dense(num_units=1, activation=None),
-        ])
-
-      config = auto_config(build_model).as_buildable()
-
-  The resulting `config` is equivalent to the following "manually" constructed
-  configuration graph:
-
-      fdl.Config(Sequential, layers=[
-          fdl.Config(Dense, num_units=128, activation=relu),
-          fdl.Config(Dense, num_units=128, activation=relu),
-          fdl.Config(Dense, num_units=1, activation=None),
+    def build_model():
+      return Sequential([
+          Dense(num_units=128, activation=relu),
+          Dense(num_units=128, activation=relu),
+          Dense(num_units=1, activation=None),
       ])
 
-  This can then be built with `fdl.build(config)`. Without modification, this
-  will result in the same model as just calling `build_model()` directly.
-  However, `config` permits changes to the model hyperparameters, for example:
+    config = auto_config(build_model).as_buildable()
+
+  The resulting ``config`` is equivalent to the following "manually" constructed
+  configuration graph::
+
+    fdl.Config(Sequential, layers=[
+        fdl.Config(Dense, num_units=128, activation=relu),
+        fdl.Config(Dense, num_units=128, activation=relu),
+        fdl.Config(Dense, num_units=1, activation=None),
+    ])
+
+  This can then be built with ``fdl.build(config)``. Without modification, this
+  will result in the same model as just calling ``build_model()`` directly.
+  However, ``config`` permits changes to the model hyperparameters, for
+  example::
 
       config.layers[0].num_units = 64
       config.layers[0].activation = 'elu'
@@ -430,44 +431,45 @@ def auto_config(
 
       modified_model = fdl.build(config)
 
-  Currently, control flow is not supported by default in `auto_config`.
+  Currently, control flow is not supported by default in ``auto_config``.
   Experimental support for control flow can be enabled using the
-  `experimental_allow_control_flow` argument. If enabled, control flow
+  ``experimental_allow_control_flow`` argument. If enabled, control flow
   constructs may be used within the function to construct the resulting config
-  (for example, a `for` loop could be used to build a list of layers). Control
-  flow is never encoded directly as part of the resulting `fdl.Config` (for
-  example, there is no `fdl.Config` that will correspond to a conditional or
-  loop). While many simple constructs (`for _ in range(10)` etc) work, there
+  (for example, a ``for`` loop could be used to build a list of layers). Control
+  flow is never encoded directly as part of the resulting ``fdl.Config`` (for
+  example, there is no ``fdl.Config`` that will correspond to a conditional or
+  loop). While many simple constructs (``for _ in range(10)`` etc) work, there
   will also likely be surprising behavior in some circumstances (for example,
-  using `itertools` functions in conjunction with a loop will not work, since
-  the calls to `itertools` functions will be turned into `fdl.Config` objects).
+  using ``itertools`` functions in conjunction with a loop will not work, since
+  the calls to ``itertools`` functions will be turned into ``fdl.Config``
+  objects).
 
-  Using `@auto_config` is compatible with both `@staticmethod` and
-  `@classmethod`, however the `@auto_config` decorator must appear above the
-  `@classmethod` or `@staticmethod` in the decorator list.
+  Using ``@auto_config`` is compatible with both ``@staticmethod`` and
+  ``@classmethod``, however the ``@auto_config`` decorator must appear above the
+  ``@classmethod`` or ``@staticmethod`` in the decorator list.
 
   Args:
     fn: The function to create a config-generating function from.
     experimental_allow_control_flow: Whether to allow control flow constructs in
-      `fn`. By default, control flow constructs will cause an
-      `UnsupportedLanguageConstructError` to be thrown.
+      ``fn``. By default, control flow constructs will cause an
+      ``UnsupportedLanguageConstructError`` to be thrown.
     experimental_always_inline: If true, this function (when called in an
-      `auto_config` context) will always be `inline`'d in-place. See the
-      documentation on `inline` for an example. The default (if unspecified) is
-      currently `False`, but this may change in the future.
+      ``auto_config`` context) will always be ``inline``'d in-place. See the
+      documentation on ``inline`` for an example. The default (if unspecified)
+      is currently ``False``, but this may change in the future.
     experimental_exemption_policy: An optional policy to control which function
-      calls within the body of `fn` should be turned into `fdl.Config`s and
-      which ones should simply be executed normally during the `as_buildable`
-      interpretation of `fn`. This predicate should return `True` if the given
-      callable should be exempted from auto-configuration.
+      calls within the body of ``fn`` should be turned into ``fdl.Config``'s and
+      which ones should simply be executed normally during the ``as_buildable``
+      interpretation of ``fn``. This predicate should return ``True`` if the
+      given callable should be exempted from auto-configuration.
     experimental_config_cls: The class to use to generate configs. By default,
-      this is just `fdl.Config`, but projects with custom `Config` subclasses
-      can use this to override the default. This is experimental and may be
-      removed in the future.
+      this is just ``fdl.Config``, but projects with custom ``Config``
+      subclasses can use this to override the default. This is experimental and
+      may be removed in the future.
 
   Returns:
-    A wrapped version of `fn`, but with an additional `as_buildable` attribute
-    containing the rewritten function.
+    A wrapped version of ``fn``, but with an additional ``as_buildable``
+    attribute containing the rewritten function.
   """
   if experimental_always_inline is None:
     experimental_always_inline = True
@@ -604,54 +606,52 @@ def auto_unconfig(
   While most of the time, the benefits of an auto_config representation of
   object configuration and construction are valuable (e.g. static type
   checking and tooling / refactoring support), sometimes it is more convenient
-  to manipulate buildable objects directly. `auto_unconfig` converts a function
-  that directly manipulates `fdl.Buildable`s (e.g. `fdl.Config`s) into one that
-  looks identically to an `auto_config`'d function, and is fully interoperable
-  with the rest of the `auto_config` ecosystem.
+  to manipulate buildable objects directly. ``auto_unconfig`` converts a
+  function that directly manipulates ``fdl.Buildable``'s (e.g. ``fdl.Config``'s)
+  into one that looks identically to an ``auto_config``'d function, and is fully
+  interoperable with the rest of the ``auto_config`` ecosystem.
 
-  Example:
+  Example::
 
-  ```py
-  @auto_unconfig
-  def make_experiment_trainer(name: str) -> fdl.Config[MyTrainer]
-    model = make_model.as_buildable(name)
-    select(model, DropOut).set(rate=0.42)  # Full Fiddle API available!
-    dataset = make_dataset.as_buildable()
-    # Build fdl.Config's imperatively.
-    trainer_config = fdl.Config(MyTrainer)
-    trainer_config.model = model
-    trainer_config.train_dataset = dataset
-    trainer_config.skip_eval = True
-    return trainer_config  # Return a `fdl.Buildable`
+    @auto_unconfig
+    def make_experiment_trainer(name: str) -> fdl.Config[MyTrainer]
+      model = make_model.as_buildable(name)
+      select(model, DropOut).set(rate=0.42)  # Full Fiddle API available!
+      dataset = make_dataset.as_buildable()
+      # Build fdl.Config's imperatively.
+      trainer_config = fdl.Config(MyTrainer)
+      trainer_config.model = model
+      trainer_config.train_dataset = dataset
+      trainer_config.skip_eval = True
+      return trainer_config  # Return a `fdl.Buildable`
 
-  # Sample usage within an auto_config'd function.
-  @auto_config
-  def make_driver():
-    return TrainerDriver(
-      trainer=make_experiment_trainer('my_experiment'),
-      checkpointer=CustomCheckpointer())
+    # Sample usage within an auto_config'd function.
+    @auto_config
+    def make_driver():
+      return TrainerDriver(
+        trainer=make_experiment_trainer('my_experiment'),
+        checkpointer=CustomCheckpointer())
 
-  # Sample usage outside of auto_config contexts.
-  def main():
-    # Use instantiated objects:
-    trainer = make_experiment_trainer('my_experiment')
-    for example in trainer.train_dataset:
-      print_prediction(trainer.model.predict(example))
+    # Sample usage outside of auto_config contexts.
+    def main():
+      # Use instantiated objects:
+      trainer = make_experiment_trainer('my_experiment')
+      for example in trainer.train_dataset:
+        print_prediction(trainer.model.predict(example))
 
-    # Or manipulate the configuration before calling `fdl.build`:
-    trainer_config = make_experiment_trainer.as_buildable('my_experiment')
-    trainer_config.skip_eval = False  # Tweak configuration.
-    trainer2 = fdl.build(trainer_config)
-    run_trainer(trainer2)
-  ```
+      # Or manipulate the configuration before calling `fdl.build`:
+      trainer_config = make_experiment_trainer.as_buildable('my_experiment')
+      trainer_config.skip_eval = False  # Tweak configuration.
+      trainer2 = fdl.build(trainer_config)
+      run_trainer(trainer2)
 
   Args:
     fn: The function to convert.
-    experimental_always_inline: Whether the output of `fn` should always be
+    experimental_always_inline: Whether the output of ``fn`` should always be
       inlined into the caller's config.
 
   Returns:
-    An `AutoConfig` that corresponds to `fn`.
+    An ``AutoConfig`` that corresponds to ``fn``.
   """
 
   if experimental_always_inline is None:
@@ -686,50 +686,48 @@ def is_auto_config(function_object: Any) -> bool:
 
 
 def inline(buildable: config.Config):
-  """Converts `buildable` of an `auto_config` function into a DAG of Buildables.
+  """Converts an ``auto_config``-based ``buildable`` into a DAG of Buildables.
 
-  `inline` updates `buildable` in place to preserve aliasing within a larger
-  Fiddle configuration. If you would like to leave `buildable` unmodified, make
-  a shallow copy (`copy.copy`) before calling `inline`.
+  ``inline`` updates ``buildable`` in place to preserve aliasing within a larger
+  Fiddle configuration. If you would like to leave ``buildable`` unmodified,
+  make a shallow copy (``copy.copy``) before calling ``inline``.
 
-  Example:
+  Example::
 
-  ```py
-  # shared/input_pipelines.py
-  @auto_config(experimental_api_boundary=True)
-  def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
-    file_path = '/base_path/'+name
-    augmentation = 'my_augmentation_routine'
-    # ...
-    return InputPipeline(file_path, augmentation, ...)
+    # shared/input_pipelines.py
+    @auto_config(experimental_api_boundary=True)
+    def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
+      file_path = '/base_path/'+name
+      augmentation = 'my_augmentation_routine'
+      # ...
+      return InputPipeline(file_path, augmentation, ...)
 
-  # config/main.py
-  @auto_config
-  def make_experiment():
-    data = make_input_pipeline('normal_dataset', batch_size)
-    model = ...
-    return Experiment(data, model)
+    # config/main.py
+    @auto_config
+    def make_experiment():
+      data = make_input_pipeline('normal_dataset', batch_size)
+      model = ...
+      return Experiment(data, model)
 
-  # experiment_configuration.py
-  def make_experiment():
-    config = make_experiment.as_buildable()
-    config.data.name = 'advanced_dataset'
-    # config.data.augmentation = 'custom_augmentation'  # Not configurable!!!
-    # return fdl.build(config)                          # Works like normal.
-    auto_config.inline(config.data)
-    print(config.data.file_path)         # Prints: '/base_path/advanced_dataset'
-    config.data.augmentation = 'custom_augmentation'    # Now exposed.
-    experiment = fdl.build(config)                      # Works like normal.
-    return experiment
-  ```
+    # experiment_configuration.py
+    def make_experiment():
+      config = make_experiment.as_buildable()
+      config.data.name = 'advanced_dataset'
+      # config.data.augmentation = 'custom_augmentation'  # Not configurable!!!
+      # return fdl.build(config)                          # Works like normal.
+      auto_config.inline(config.data)
+      print(config.data.file_path)       # Prints: '/base_path/advanced_dataset'
+      config.data.augmentation = 'custom_augmentation'    # Now exposed.
+      experiment = fdl.build(config)                      # Works like normal.
+      return experiment
 
   Args:
-    buildable: The buildable of an `auto_config`'d function to replace with the
-      root of a Fiddle DAG that corresponds to it.
+    buildable: The buildable of an ``auto_config``'d function to replace with
+      the root of a Fiddle DAG that corresponds to it.
 
   Raises:
-    ValueError: If `buildable` is not a `Config`, or if `buildable` doesn't
-      correspond to an auto_config'd function.
+    ValueError: If ``buildable`` is not a ``Config``, or if ``buildable``
+      doesn't correspond to an ``auto_config``'d function.
   """
   if not isinstance(buildable, config.Config):
     raise ValueError('Cannot `inline` non-Config buildables; '
