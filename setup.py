@@ -44,6 +44,7 @@ setup(
     package_data={'testdata': ['testdata/*.fiddle']},
     install_requires=[
         'absl-py',
+        'graphviz',
         'libcst',
         'typing-extensions',
     ],
