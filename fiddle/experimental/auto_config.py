@@ -378,7 +378,7 @@ def _make_closure_cell(contents):
 def auto_config(
     fn=None,
     *,
-    experimental_allow_control_flow=False,
+    experimental_allow_control_flow: bool = False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
     experimental_config_cls=config.Config,
