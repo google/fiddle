@@ -152,7 +152,7 @@ def TaggedValue(  # pylint: disable=invalid-name
     tags: Collection[TagType],
     default: Union[NoValue, T] = NO_VALUE,
 ) -> TaggedValueCls[T]:
-  """Declares a value annotated with a set of `Tag`s.
+  """Declares a value annotated with a set of ``Tag``'s.
 
   This is now basically a fdl.Config(lambda value: value) configuration, since
   tags can be set on any field.
@@ -198,7 +198,7 @@ def list_tags(
   """Lists all tags in a buildable.
 
   Args:
-    root: The root of a DAG of `Buildable`s.
+    root: The root of a DAG of ``Buildable``'s.
     add_superclasses: For tags that inherit from other tags, add the
       superclasses as well.
 
