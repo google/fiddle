@@ -423,6 +423,21 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         def my_fn(cls, x, y):
           pass
 
+  def test_classmethod_on_top_with_auto_config_arguments(self):
+
+    expected_msg = (
+        r'@classmethod placed above @auto_config on function my_fn at .+:\d+\. '
+        r'Reorder decorators so that @auto_config is placed above @classmethod.'
+    )
+    with self.assertRaisesRegex(AssertionError, expected_msg):
+
+      class MyClass:  # pylint: disable=unused-variable
+
+        @classmethod
+        @auto_config.auto_config(experimental_allow_control_flow=True)
+        def my_fn(cls, x, y):
+          pass
+
   def test_copy(self):
 
     @auto_config.auto_config

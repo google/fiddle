@@ -158,6 +158,8 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     """
     decorator_list = []
     for decorator in node.decorator_list:
+      if isinstance(decorator, ast.Call):
+        decorator = decorator.func
       if isinstance(decorator, ast.Attribute):
         decorator = decorator.attr
       if isinstance(decorator, ast.Name):
