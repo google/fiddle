@@ -55,6 +55,7 @@ setup(
         ],
         'testing': [
             'fiddle[flags]',
+            'flax',
             'graphviz',
             'pytest',
             'pytype',

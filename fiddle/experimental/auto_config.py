@@ -62,6 +62,10 @@ class AutoConfig:
   buildable_func: Callable[..., config.Buildable]
   always_inline: bool
 
+  @property
+  def nowrap(self):
+    return True  # Tells Flax not to decorate this object, for classmethods.
+
   def __post_init__(self):
     # Must copy-over to correctly implement "functools.wraps"-like
     # functionality.
