@@ -31,6 +31,10 @@ class Foo:
   a_field_with_default: Optional[int] = 123
 
 
+class PartialSubclass(fdl.Partial):
+  """A subclass of `fdl.Partial` used for testing only."""
+
+
 class TransformTest(absltest.TestCase):
 
   def test_python_interns_tuples(self):
@@ -106,6 +110,12 @@ class TransformTest(absltest.TestCase):
         Foo,
         transform.replace_unconfigured_partials_with_callables(
             fdl.Partial(Foo, a_field_with_default=123)))
+
+  def test_replace_unconfigured_partials_with_callables_ignores_partial_subclass(
+      self):
+    cfg = PartialSubclass(Foo)
+    self.assertEqual(
+        cfg, transform.replace_unconfigured_partials_with_callables(cfg))
 
 
 if __name__ == "__main__":

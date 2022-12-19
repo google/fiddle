@@ -69,7 +69,11 @@ def replace_unconfigured_partials_with_callables(
   """
 
   def transform(value, state: daglish.State):
-    if isinstance(value, config.Partial) and not config.ordered_arguments(
+    # This transform is guaranteed to be safe for fdl.Partial, but subclasses
+    # may have specialized behavior such that this transformation no longer
+    # makes sense, so do not apply this to subclasses of fdl.Partial.
+    # pylint: disable-next=unidiomatic-typecheck
+    if type(value) is config.Partial and not config.ordered_arguments(
         value, exclude_equal_to_default=True):
       value = config.get_callable(value)
     return state.map_children(value)
