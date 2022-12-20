@@ -1016,7 +1016,10 @@ def assign(buildable: Buildable, **kwargs):
     setattr(buildable, name, value)
 
 
-def copy_with(buildable: Buildable, **kwargs):
+BuildableT = TypeVar('BuildableT', bound=Buildable)
+
+
+def copy_with(buildable: BuildableT, **kwargs) -> BuildableT:
   """Returns a shallow copy of ``buildable`` with updates to arguments.
 
   Args:
@@ -1144,7 +1147,6 @@ def get_tags(buildable: Buildable,
 
 
 _SUPPORTED_CASTS = set()
-BuildableT = TypeVar('BuildableT', bound=Buildable)
 
 
 def cast(new_type: Type[BuildableT], buildable: Buildable) -> BuildableT:
