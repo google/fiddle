@@ -1178,6 +1178,6 @@ def register_supported_cast(src_type, dst_type):
   _SUPPORTED_CASTS.add((src_type, dst_type))
 
 
-# TODO(fiddle-team): Add ArgFactory to this list.
-for _src_type, _dst_type in itertools.product([Config, Partial], repeat=2):
+for _src_type, _dst_type in itertools.product([Config, Partial, ArgFactory],
+                                              repeat=2):
   register_supported_cast(_src_type, _dst_type)

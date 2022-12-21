@@ -182,7 +182,7 @@ def raise_error():
   raise ValueError('My fancy exception')
 
 
-class ConfigTest(absltest.TestCase):
+class ConfigTest(parameterized.TestCase):
 
   def test_config_for_classes(self):
     class_config = fdl.Config(SampleClass, 1, kwarg2='kwarg2')
@@ -1075,11 +1075,15 @@ class ConfigTest(absltest.TestCase):
     with self.assertRaisesRegex(TypeError, 'not_there'):
       fdl.assign(cfg, arg1=1, not_there=2)
 
-  def test_cast(self):
-    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
+  @parameterized.product(
+      from_type=[fdl.Config, fdl.Partial, fdl.ArgFactory],
+      to_type=[fdl.Config, fdl.Partial, fdl.ArgFactory],
+  )
+  def test_cast(self, from_type, to_type):
+    cfg1 = from_type(fn_with_var_kwargs, 1, 2)
     fdl.add_tag(cfg1, 'arg1', Tag1)
-    cfg2 = fdl.cast(fdl.Partial, cfg1)
-    self.assertIsInstance(cfg2, fdl.Partial)
+    cfg2 = fdl.cast(to_type, cfg1)
+    self.assertIsInstance(cfg2, to_type)
     self.assertEqual(fdl.get_callable(cfg1), fdl.get_callable(cfg2))
     self.assertEqual(cfg1.__arguments__, cfg2.__arguments__)
     self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
