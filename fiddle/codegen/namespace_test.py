@@ -21,9 +21,18 @@ from fiddle.codegen import namespace
 
 class NamespaceTest(absltest.TestCase):
 
-  def test__camel_to_snake(self):
-    self.assertEqual(namespace._camel_to_snake("FooBar"), "foo_bar")
-    self.assertEqual(namespace._camel_to_snake("fooBar"), "foo_bar")
+  def test_camel_to_snake(self):
+    self.assertEqual(namespace.camel_to_snake("FooBar"), "foo_bar")
+    self.assertEqual(namespace.camel_to_snake("fooBar"), "foo_bar")
+
+  def test_py_var_name(self):
+    self.assertEqual(namespace.py_var_name("FooBar"), "foo_bar")
+    self.assertEqual(namespace.py_var_name("012FooBar"), "foo_bar")
+    self.assertEqual(namespace.py_var_name("012Foo3Bar4"), "foo3_bar4")
+
+    # This is often sub-optimal for ML-like names, where "JMT" might be a single
+    # acronym, and "qux_jmt_bar" would be better.
+    self.assertEqual(namespace.py_var_name("quxJMTBar"), "qux_j_m_t_bar")
 
   def test_namespace_contains_builtins(self):
     self.assertIn("for", namespace.Namespace())

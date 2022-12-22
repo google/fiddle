@@ -24,13 +24,28 @@ import dataclasses
 import itertools
 import keyword
 import re
-from typing import Set
+from typing import Optional, Set
+
+_CAMEL_TO_SNAKE_RE = re.compile(r"(?<=.)([A-Z])")
+_PY_VAR_NAME_INVALID_RE = re.compile(r"[^a-z_0-9]+")
+_PY_VAR_NAME_RE = re.compile(r"[a-z][a-z_0-9]+")
 
 
-def _camel_to_snake(name: str) -> str:
+def camel_to_snake(name: str) -> str:
   """Converts a camel or studly-caps name to a snake_case name."""
-  return re.sub(r"(?<=.)([A-Z])", lambda m: "_" + m.group(0).lower(),
-                name).lower()
+  return _CAMEL_TO_SNAKE_RE.sub(lambda m: "_" + m.group(0), name).lower()
+
+
+def valid_name_chars(name: str) -> str:
+  """Removes invalid characters such as whitespace, parenthesis, etc."""
+  return _PY_VAR_NAME_INVALID_RE.sub("", name)
+
+
+def py_var_name(name: str) -> Optional[str]:
+  """Returns a sanitized, lower-case version of `name` for py variables."""
+  name = valid_name_chars(camel_to_snake(name))
+  match = _PY_VAR_NAME_RE.search(name)
+  return match.group(0) if match else None
 
 
 @dataclasses.dataclass
@@ -84,7 +99,7 @@ class Namespace:
       A new unique name.
     """
 
-    name = prefix + _camel_to_snake(base_name)
+    name = prefix + camel_to_snake(base_name)
     if name not in self.names:
       return self.add(name)
     for i in itertools.count(start=2):
