@@ -255,6 +255,24 @@ def _import_dotted_name(name: str) -> Any:
   raise ModuleNotFoundError(f'No module named {name_pieces[0]!r}')
 
 
+def parse_value(value: str, path: str) -> Any:
+  """Parses a string `value` (e.g. from the command line) to a Python type."""
+
+  # Apply a few rules that are unambiguous and would otherwise just cause
+  # spurious failures (e.g. `--fdl_set=use_cached=false`).
+  if value.lower() == 'false':
+    return False
+  elif value.lower() == 'true':
+    return True
+
+  try:
+    return ast.literal_eval(value)
+  except Exception as e:
+    raise ValueError(
+        f'Could not parse literal value "{value}" while trying to set '
+        f'"{path}". Does a string need to be quoted?') from e
+
+
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
   for flag in _FDL_SET.value:
@@ -266,12 +284,8 @@ def apply_overrides_to(cfg: config.Buildable):
         walk = parent(walk)
     except Exception as e:
       raise ValueError(f'Invalid path "{path}".') from e
-    try:
-      literal_value = ast.literal_eval(value)
-    except Exception as e:
-      raise ValueError(
-          f'Could not parse literal value "{value}" while trying to set '
-          f'"{path}". Does a string need to be quoted?') from e
+
+    literal_value = parse_value(value=value, path=path)
     try:
       last.update(walk, literal_value)
     except Exception as e:
@@ -351,7 +365,8 @@ def set_tags(cfg: config.Buildable):
           '`fdl.Tag` and using 2 instances with the same module and name '
           'in the configuration.')
     selectors.select(
-        cfg, tag=matching_tags[0]).replace(value=ast.literal_eval(value))
+        cfg, tag=matching_tags[0]).replace(
+            value=parse_value(value=value, path=str(matching_tags[0])))
 
 
 def apply_fiddlers_to(cfg: config.Buildable,
