@@ -8,7 +8,7 @@ code.
 
 Additional details can be found in the [documentation].
 
-[documentation]: https://github.com/google/fiddle/tree/main/docs/index.md
+[documentation]: https://fiddle.readthedocs.io
 
 
 ### Setup
