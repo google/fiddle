@@ -45,7 +45,7 @@ def field(
     metadata: Optional[Mapping[Any, Any]] = None,
     configurable_factory: bool = False,
     **kwargs,
-) -> Union[dataclasses.Field[Any], Any]:
+) -> Union[dataclasses.Field, Any]:  # pylint: disable=g-bare-generic
   """A wrapper around dataclasses.field to add optional Fiddle metadata.
 
   Args:
@@ -101,7 +101,7 @@ def field(
 
 
 def field_has_tag(
-    dc_field: dataclasses.Field[Any],
+    dc_field: dataclasses.Field,  # pylint: disable=g-bare-generic
     tag: tag_type.TagType,
 ) -> bool:
   """Returns True if buildables will attach `tag` to the corresponding arg.
