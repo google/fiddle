@@ -38,10 +38,6 @@ class FieldMetadata:
   # TODO(saeta): Add additional metadata here (e.g. value validation rules).
 
 
-def field_metadata(
-    field_object: dataclasses.Field  # pylint: disable=g-bare-generic
-) -> Optional[FieldMetadata]:
+def field_metadata(field: dataclasses.Field[Any]) -> Optional[FieldMetadata]:
   """Retrieves the Fiddle-specific metadata (if present) on `field`."""
-  # Note: `field_object` is named as such, and not `field` to avoid shadowing
-  # the `field` symbol (function) defined above.
-  return field_object.metadata.get(_FIDDLE_DATACLASS_METADATA_KEY)
+  return field.metadata.get(_FIDDLE_DATACLASS_METADATA_KEY)

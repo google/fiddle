@@ -41,10 +41,11 @@ FieldMetadata = field_metadata.FieldMetadata
 def field(
     *,
     default_factory: Any = dataclasses.MISSING,
-    tags: Optional[TagOrTags] = tuple(),
+    tags: TagOrTags = (),
     metadata: Optional[Mapping[Any, Any]] = None,
     configurable_factory: bool = False,
-    **kwargs) -> Union[dataclasses.Field, Any]:  # pylint: disable=g-bare-generic
+    **kwargs,
+) -> Union[dataclasses.Field[Any], Any]:
   """A wrapper around dataclasses.field to add optional Fiddle metadata.
 
   Args:
@@ -99,7 +100,10 @@ def field(
       default_factory=default_factory, metadata=metadata, **kwargs)
 
 
-def field_has_tag(dc_field: dataclasses.Field, tag: tag_type.TagType) -> bool:  # pylint: disable=g-bare-generic
+def field_has_tag(
+    dc_field: dataclasses.Field[Any],
+    tag: tag_type.TagType,
+) -> bool:
   """Returns True if buildables will attach `tag` to the corresponding arg.
 
   In particular, `field_has_tag(field(..., tags=tags), tag)` is True if
