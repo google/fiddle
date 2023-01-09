@@ -229,13 +229,13 @@ def select(
 ) -> Selection:
   """Selects sub-buildables or fields within a configuration DAG.
 
-  Example configuring attention classes:
+  Example configuring attention classes::
 
-  select(my_config, MyDenseAttention).set(num_heads=12, head_dim=512)
+    select(my_config, MyDenseAttention).set(num_heads=12, head_dim=512)
 
-  Example configuring all activation dtypes:
+  Example configuring all activation dtypes::
 
-  select(my_config, tag=DType).set(value=jnp.float32)
+    select(my_config, tag=DType).set(value=jnp.float32)
 
   Args:
     cfg: Configuraiton to traverse.
