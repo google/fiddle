@@ -23,6 +23,8 @@ dataclasses system to add some additional metadata to control behavior in the
 rest of Fiddle.
 """
 
+from __future__ import annotations
+
 import dataclasses
 import types
 from typing import Any, Collection, Mapping, Optional, Union

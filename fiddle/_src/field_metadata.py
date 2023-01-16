@@ -15,6 +15,8 @@
 
 """Fiddle-specific metadata associated with dataclass fields."""
 
+from __future__ import annotations
+
 import dataclasses
 from typing import Any, Callable, Collection, Optional
 
