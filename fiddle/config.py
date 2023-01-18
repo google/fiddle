@@ -145,7 +145,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       param = signature.parameters[name]
       if param.kind == param.VAR_POSITIONAL:
         # TODO(b/197367863): Add *args support.
-        err_msg = 'Variable positional arguments (aka `*args`) not supported.'
+        err_msg = (
+            'Variable positional arguments (aka `*args`) not supported. '
+            f'Found param `{name}` in `{fn_or_cls}`.'
+        )
         raise NotImplementedError(err_msg)
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
