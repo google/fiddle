@@ -4,6 +4,8 @@ build
 dist
 fiddle.egg-info
 
+# Ignore virtualenv's.
+venv
 
 # Typical editor spam.
 *~
