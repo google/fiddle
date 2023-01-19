@@ -31,6 +31,7 @@ from fiddle import arg_factory
 from fiddle import daglish
 from fiddle import history
 from fiddle import tag_type
+from fiddle._src import autofill
 from fiddle._src import field_metadata
 from fiddle._src import signatures
 
@@ -172,6 +173,15 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     for name, value in arguments.items():
       setattr(self, name, value)
+
+    for arg_name, arg_type in autofill.parameters_to_autofill(
+        fn_or_cls, signature
+    ).items():
+      if arg_name not in arguments:
+        buildable_type = Config
+        if isinstance(self, (Partial, ArgFactory)):
+          buildable_type = ArgFactory
+        setattr(self, arg_name, buildable_type(arg_type))
 
   def __init_subclass__(cls):
     daglish.register_node_traverser(
