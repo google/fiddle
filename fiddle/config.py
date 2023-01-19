@@ -67,28 +67,30 @@ class BuildableTraverserMetadata(NamedTuple):
 
   This separate class is used for DAG traversals.
   """
+
   fn_or_cls: Callable[..., Any]
   argument_names: Tuple[str, ...]
   argument_tags: Dict[str, FrozenSet[tag_type.TagType]]
   argument_history: Mapping[str, Tuple[history.HistoryEntry, ...]] = (
-      types.MappingProxyType({}))
+      types.MappingProxyType({})
+  )
 
   def without_history(self) -> BuildableTraverserMetadata:
     return self._replace(argument_history={})
 
   def arguments(self, values: Iterable[Any]) -> Dict[str, Any]:
-    """Returns a dictionary combining ``self.argument_names`` with ``values``.
-    """
+    """Returns a dictionary combining ``self.argument_names`` with ``values``."""
     return dict(zip(self.argument_names, values))
 
   def tags(self) -> Dict[str, set[tag_type.TagType]]:
     return collections.defaultdict(
-        set, {name: set(tags) for name, tags in self.argument_tags.items()})
+        set, {name: set(tags) for name, tags in self.argument_tags.items()}
+    )
 
   def history(self) -> history.History:
-    return history.History({
-        name: list(entries) for name, entries in self.argument_history.items()
-    })
+    return history.History(
+        {name: list(entries) for name, entries in self.argument_history.items()}
+    )
 
 
 class Buildable(Generic[T], metaclass=abc.ABCMeta):
@@ -108,8 +110,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   __argument_tags__: Dict[str, Set[tag_type.TagType]]
   _has_var_keyword: bool
 
-  def __init__(self, fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
-               *args, **kwargs):
+  def __init__(
+      self,
+      fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
+      *args,
+      **kwargs,
+  ):
     """Initialize for ``fn_or_cls``, optionally specifying parameters.
 
     Args:
@@ -122,7 +128,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
           'Using the Buildable constructor to convert a buildable to a new '
           'type or to override arguments is forbidden; please use either '
           '`fdl.cast(new_type, buildable)` (for casting) or '
-          '`fdl.copy_with(buildable, **kwargs)` (for overriding arguments).')
+          '`fdl.copy_with(buildable, **kwargs)` (for overriding arguments).'
+      )
 
     # Using `super().__setattr__` here because assigning directly would trigger
     # our `__setattr__` override. Using `super().__setattr__` instead of special
@@ -132,8 +139,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__arguments__', {})
     signature = signatures.get_signature(fn_or_cls)
     super().__setattr__('__signature__', signature)
-    has_var_keyword = any(param.kind == param.VAR_KEYWORD
-                          for param in signature.parameters.values())
+    has_var_keyword = any(
+        param.kind == param.VAR_KEYWORD
+        for param in signature.parameters.values()
+    )
     arg_history = history.History()
     arg_history.add_new_value('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__argument_history__', arg_history)
@@ -192,13 +201,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         fn_or_cls=self.__fn_or_cls__,
         argument_names=keys,
         argument_tags=tags,
-        argument_history=argument_history)
+        argument_history=argument_history,
+    )
     return values, metadata
 
   @classmethod
-  def __unflatten__(cls, values: Iterable[Any],
-                    metadata: BuildableTraverserMetadata):
-
+  def __unflatten__(
+      cls, values: Iterable[Any], metadata: BuildableTraverserMetadata
+  ):
     rebuilt = cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
     object.__setattr__(rebuilt, '__argument_tags__', metadata.tags())
     object.__setattr__(rebuilt, '__argument_history__', metadata.history())
@@ -217,11 +227,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     if value is not _UNSET_SENTINEL:
       return value
-    if (dataclasses.is_dataclass(self.__fn_or_cls__) and
-        _field_uses_default_factory(self.__fn_or_cls__, name)):
-      raise ValueError("Can't get default value for dataclass field " +
-                       f'{self.__fn_or_cls__.__qualname__}.{name} ' +
-                       'since it uses a default_factory.')
+    if dataclasses.is_dataclass(
+        self.__fn_or_cls__
+    ) and _field_uses_default_factory(self.__fn_or_cls__, name):
+      raise ValueError(
+          "Can't get default value for dataclass field "
+          + f'{self.__fn_or_cls__.__qualname__}.{name} '
+          + 'since it uses a default_factory.'
+      )
     param = self.__signature__.parameters.get(name)
     if param is not None and param.default is not param.empty:
       return param.default
@@ -229,12 +242,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     # TODO(b/219988937): Implement an edit distance function and display valid
     # attributes that are close to `name`.
     if hasattr(self.__fn_or_cls__, name):
-      msg += (f' Note: {self.__fn_or_cls__.__module__}.'
-              f'{self.__fn_or_cls__.__qualname__} has an attribute/method with '
-              'this name, so this could be caused by using a '
-              f'fdl.{self.__class__.__qualname__} in '
-              'place of the actual function or class being configured. Did you '
-              'forget to call `fdl.build(...)`?')
+      msg += (
+          f' Note: {self.__fn_or_cls__.__module__}.'
+          f'{self.__fn_or_cls__.__qualname__} has an attribute/method with '
+          'this name, so this could be caused by using a '
+          f'fdl.{self.__class__.__qualname__} in '
+          'place of the actual function or class being configured. Did you '
+          'forget to call `fdl.build(...)`?'
+      )
     raise AttributeError(msg)
 
   def __validate_param_name__(self, name) -> None:
@@ -246,7 +261,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         # TODO(b/197367863): Add positional-only arg support.
         raise NotImplementedError(
             'Positional only arguments not supported. '
-            f'Tried to set {name!r} on {self.__fn_or_cls__}')
+            f'Tried to set {name!r} on {self.__fn_or_cls__}'
+        )
       elif param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
         # Just pretend it doesn't correspond to a valid parameter name... below
         # a TypeError will be thrown unless there is a **kwargs parameter.
@@ -254,14 +270,18 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     if param is None and not self._has_var_keyword:
       if name in self.__signature__.parameters:
-        err_msg = (f'Variadic arguments (e.g. *{name}) are not supported.')
+        err_msg = f'Variadic arguments (e.g. *{name}) are not supported.'
       else:
         valid_parameter_names = (
-            name for name, param in self.__signature__.parameters.items()
-            if param.kind not in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL))
-        err_msg = (f"No parameter named '{name}' exists for "
-                   f'{self.__fn_or_cls__}; valid parameter names: '
-                   f"{', '.join(valid_parameter_names)}.")
+            name
+            for name, param in self.__signature__.parameters.items()
+            if param.kind not in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL)
+        )
+        err_msg = (
+            f"No parameter named '{name}' exists for "
+            f'{self.__fn_or_cls__}; valid parameter names: '
+            f"{', '.join(valid_parameter_names)}."
+        )
       raise TypeError(err_msg)
 
   def __setattr__(self, name: str, value: Any):
@@ -300,7 +320,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       A list of useful attribute names corresponding to set or unset parameters.
     """
     valid_param_names = {
-        name for name, param in self.__signature__.parameters.items()
+        name
+        for name, param in self.__signature__.parameters.items()
         if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
     }
     set_argument_names = self.__arguments__.keys()
@@ -315,11 +336,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     formatted_params = []
     # Show parameters from signature first (in signature order) followed by
     # **varkwarg parameters (in the order they were set).
-    param_names = (
-        list(self.__signature__.parameters) + [
-            name for name in self.__arguments__
-            if name not in self.__signature__.parameters
-        ])
+    param_names = list(self.__signature__.parameters) + [
+        name
+        for name in self.__arguments__
+        if name not in self.__signature__.parameters
+    ]
 
     for name in param_names:
       tags = self.__argument_tags__.get(name, ())
@@ -336,9 +357,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     formatted_params_no_linebreak = ', '.join(formatted_params)
     # An arbitrary threshold to determine whether to add linebreaks to args.
-    if len(formatted_params_no_linebreak) + len(name) + len(
-        formatted_fn_or_cls) > 80:
-
+    if (
+        len(formatted_params_no_linebreak)
+        + len(name)
+        + len(formatted_fn_or_cls)
+        > 80
+    ):
       def indent(s):
         return '\n'.join(['  ' + x for x in s.split('\n')])
 
@@ -398,7 +422,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       return False
     assert self._has_var_keyword == other._has_var_keyword, (
         'Internal invariant violated: has_var_keyword should be the same if '
-        "__fn_or_cls__'s are the same.")
+        "__fn_or_cls__'s are the same."
+    )
 
     missing = object()
     for key in set(self.__arguments__) | set(other.__arguments__):
@@ -433,8 +458,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """
     self.__dict__.update(state)  # Support unpickle.
     if '__signature__' not in self.__dict__:
-      object.__setattr__(self, '__signature__',
-                         signatures.get_signature(self.__fn_or_cls__))
+      object.__setattr__(
+          self, '__signature__', signatures.get_signature(self.__fn_or_cls__)
+      )
 
 
 def _add_dataclass_tags(buildable, fields):
@@ -586,21 +612,26 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
     if not (metadata and metadata.buildable_initializer):
       continue
     field_config = metadata.buildable_initializer()
-    if daglish.MemoizedTraversal.run(contains_partial_that_contains_config,
-                                     field_config):
-      cls_name = getattr(buildable.__fn_or_cls__, '__qualname__',
-                         repr(buildable.__fn_or_cls__))
+    if daglish.MemoizedTraversal.run(
+        contains_partial_that_contains_config, field_config
+    ):
+      cls_name = getattr(
+          buildable.__fn_or_cls__, '__qualname__', repr(buildable.__fn_or_cls__)
+      )
       raise ValueError(
           f'Unable to safely replace {cls_name}.{field.name} with '
           'a `fdl.Buildable`, because its default factory contains a '
           '`fdl.Partial` that contains a `fdl.Config`.  This makes it '
           'difficult for Fiddle to describe the correct instance-sharing '
           'pattern. If you believe that you have a valid use-case for this, '
-          'please contact the Fiddle team.')
-    if (isinstance(field_config, Config) and isinstance(buildable,
-                                                        (Partial, ArgFactory))):
-      field_config = daglish.MemoizedTraversal.run(convert_to_arg_factory,
-                                                   field_config)
+          'please contact the Fiddle team.'
+      )
+    if isinstance(field_config, Config) and isinstance(
+        buildable, (Partial, ArgFactory)
+    ):
+      field_config = daglish.MemoizedTraversal.run(
+          convert_to_arg_factory, field_config
+      )
     arguments[field.name] = field_config
 
 
@@ -695,6 +726,7 @@ class TiedValue(Generic[T], Config[T]):
   field attribute, but please use ``experimental/tied_value.py`` for the public
   API.
   """
+
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT
   __signature__: inspect.Signature
@@ -709,6 +741,7 @@ class _BuiltArgFactory:
   This wrapper is returned by ``ArgFactory.__build__``, and then consumed by the
   ``__build__`` method of the containing ``Partial`` or ``ArgFactory`` object.
   """
+
   factory: Callable[..., Any]
 
 
@@ -751,7 +784,8 @@ def _invoke_arg_factories(value: Any) -> Any:
       subtraversal = state.flattened_map_children(node)
       old_vals, _ = subtraversal.node_traverser.flatten(node)
       no_child_changed = all(
-          [old is new for (old, new) in zip(old_vals, subtraversal.values)])
+          [old is new for (old, new) in zip(old_vals, subtraversal.values)]
+      )
       return node if no_child_changed else subtraversal.unflatten()
     else:
       return node
@@ -781,8 +815,9 @@ def _promote_arg_factory(arg: Any) -> Any:
     return _BuiltArgFactory(functools.partial(_invoke_arg_factories, arg))
 
 
-def _build_partial(fn: Callable[..., Any], args: Tuple[Any],
-                   kwargs: Dict[str, Any]) -> functools.partial:
+def _build_partial(
+    fn: Callable[..., Any], args: Tuple[Any], kwargs: Dict[str, Any]
+) -> functools.partial:
   """Returns `functools.partial` or `arg_factory.partial` for `fn`.
 
   If `args` or `kwargs` contain any `ArgFactory` instances, then return
@@ -919,6 +954,7 @@ class ArgFactory(Generic[T], Buildable[T]):
   ``ArgFactory`` should *not* be used as a top-level configuration object, or
   as the argument to a ``fdl.Config``.
   """
+
   # TODO(fiddle-team): Update build to raise an exception if ArgFactory is built
   # in an inappropriate context.
 
@@ -940,8 +976,9 @@ def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
   return False
 
 
-def update_callable(buildable: Buildable,
-                    new_callable: TypeOrCallableProducingT):
+def update_callable(
+    buildable: Buildable, new_callable: TypeOrCallableProducingT
+):
   """Updates ``config`` to build ``new_callable`` instead.
 
   When extending a base configuration, it can often be useful to swap one class
@@ -968,20 +1005,26 @@ def update_callable(buildable: Buildable,
 
   original_args = buildable.__arguments__
   signature = signatures.get_signature(new_callable)
-  if any(param.kind == param.VAR_POSITIONAL
-         for param in signature.parameters.values()):
+  if any(
+      param.kind == param.VAR_POSITIONAL
+      for param in signature.parameters.values()
+  ):
     raise NotImplementedError(
-        'Variable positional arguments (aka `*args`) not supported.')
-  has_var_keyword = any(param.kind == param.VAR_KEYWORD
-                        for param in signature.parameters.values())
+        'Variable positional arguments (aka `*args`) not supported.'
+    )
+  has_var_keyword = any(
+      param.kind == param.VAR_KEYWORD for param in signature.parameters.values()
+  )
   if not has_var_keyword:
     invalid_args = [
         arg for arg in original_args.keys() if arg not in signature.parameters
     ]
     if invalid_args:
-      raise TypeError(f'Cannot switch to {new_callable} (from '
-                      f'{buildable.__fn_or_cls__}) because the Buildable would '
-                      f'have invalid arguments {invalid_args}.')
+      raise TypeError(
+          f'Cannot switch to {new_callable} (from '
+          f'{buildable.__fn_or_cls__}) because the Buildable would '
+          f'have invalid arguments {invalid_args}.'
+      )
 
   object.__setattr__(buildable, '__fn_or_cls__', new_callable)
   object.__setattr__(buildable, '__signature__', signature)
@@ -991,8 +1034,9 @@ def update_callable(buildable: Buildable,
   if dataclasses.is_dataclass(buildable.__fn_or_cls__):
     fields = dataclasses.fields(buildable.__fn_or_cls__)
     _add_dataclass_tags(buildable, fields)
-    _expand_dataclass_default_factories(buildable, fields,
-                                        buildable.__arguments__)
+    _expand_dataclass_default_factories(
+        buildable, fields, buildable.__arguments__
+    )
 
 
 def assign(buildable: Buildable, **kwargs):
@@ -1056,12 +1100,14 @@ def get_callable(buildable: Buildable[T]) -> Union[Callable[..., T], Type[T]]:
   return buildable.__fn_or_cls__
 
 
-def ordered_arguments(buildable: Buildable,
-                      *,
-                      include_var_keyword: bool = True,
-                      include_defaults: bool = False,
-                      include_unset: bool = False,
-                      exclude_equal_to_default: bool = False) -> Dict[str, Any]:
+def ordered_arguments(
+    buildable: Buildable,
+    *,
+    include_var_keyword: bool = True,
+    include_defaults: bool = False,
+    include_unset: bool = False,
+    exclude_equal_to_default: bool = False,
+) -> Dict[str, Any]:
   """Returns arguments of a Buildable, ordered by the signature.
 
   Args:
@@ -1083,7 +1129,8 @@ def ordered_arguments(buildable: Buildable,
   """
   if exclude_equal_to_default and include_defaults:
     raise ValueError(
-        'exclude_equal_to_default and include_defaults are mutually exclusive.')
+        'exclude_equal_to_default and include_defaults are mutually exclusive.'
+    )
   result = {}
   for name, param in buildable.__signature__.parameters.items():
     if param.kind != param.VAR_KEYWORD:
@@ -1109,31 +1156,37 @@ def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].add(tag)
   buildable.__argument_history__.add_updated_tags(
-      argument, buildable.__argument_tags__[argument])
+      argument, buildable.__argument_tags__[argument]
+  )
 
 
-def set_tags(buildable: Buildable, argument: str,
-             tags: Collection[tag_type.TagType]) -> None:
+def set_tags(
+    buildable: Buildable, argument: str, tags: Collection[tag_type.TagType]
+) -> None:
   """Sets tags for a parameter in `buildable`, overriding existing tags."""
   clear_tags(buildable, argument)
   for tag in tags:
     add_tag(buildable, argument, tag)
   buildable.__argument_history__.add_updated_tags(
-      argument, buildable.__argument_tags__[argument])
+      argument, buildable.__argument_tags__[argument]
+  )
 
 
-def remove_tag(buildable: Buildable, argument: str,
-               tag: tag_type.TagType) -> None:
+def remove_tag(
+    buildable: Buildable, argument: str, tag: tag_type.TagType
+) -> None:
   """Removes a given tag from a named argument of a Buildable."""
   buildable.__validate_param_name__(argument)
   field_tag_set = buildable.__argument_tags__[argument]
   if tag not in field_tag_set:
     raise ValueError(
-        f'{tag} not set on {argument}; current tags: {field_tag_set}.')
+        f'{tag} not set on {argument}; current tags: {field_tag_set}.'
+    )
   # TODO(saeta): Track in history?
   field_tag_set.remove(tag)
   buildable.__argument_history__.add_updated_tags(
-      argument, buildable.__argument_tags__[argument])
+      argument, buildable.__argument_tags__[argument]
+  )
 
 
 def clear_tags(buildable: Buildable, argument: str) -> None:
@@ -1141,11 +1194,13 @@ def clear_tags(buildable: Buildable, argument: str) -> None:
   buildable.__validate_param_name__(argument)
   buildable.__argument_tags__[argument].clear()
   buildable.__argument_history__.add_updated_tags(
-      argument, buildable.__argument_tags__[argument])
+      argument, buildable.__argument_tags__[argument]
+  )
 
 
-def get_tags(buildable: Buildable,
-             argument: str) -> FrozenSet[tag_type.TagType]:
+def get_tags(
+    buildable: Buildable, argument: str
+) -> FrozenSet[tag_type.TagType]:
   return frozenset(buildable.__argument_tags__[argument])
 
 
@@ -1166,14 +1221,20 @@ def cast(new_type: Type[BuildableT], buildable: Buildable) -> BuildableT:
   if not isinstance(buildable, Buildable):
     raise TypeError(f'Expected `buildable` to be a Buildable, got {buildable}')
   if not isinstance(new_type, type) and issubclass(new_type, Buildable):
-    raise TypeError('Expected `new_type` to be a subclass of Buildable, '
-                    f'got {buildable}')
+    raise TypeError(
+        f'Expected `new_type` to be a subclass of Buildable, got {buildable}'
+    )
   src_type = type(buildable)
   if (src_type, new_type) not in _SUPPORTED_CASTS:
     logging.warning(
-        'Conversion from %s to %s has not been marked as '
-        'officially supported.  If you think this conversion '
-        'should be supported, contact the Fiddle team.', src_type, new_type)
+        (
+            'Conversion from %s to %s has not been marked as '
+            'officially supported.  If you think this conversion '
+            'should be supported, contact the Fiddle team.'
+        ),
+        src_type,
+        new_type,
+    )
   return new_type.__unflatten__(*buildable.__flatten__())
 
 
@@ -1181,6 +1242,7 @@ def register_supported_cast(src_type, dst_type):
   _SUPPORTED_CASTS.add((src_type, dst_type))
 
 
-for _src_type, _dst_type in itertools.product([Config, Partial, ArgFactory],
-                                              repeat=2):
+for _src_type, _dst_type in itertools.product(
+    [Config, Partial, ArgFactory], repeat=2
+):
   register_supported_cast(_src_type, _dst_type)
