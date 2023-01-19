@@ -26,6 +26,8 @@ import typing_extensions
 
 
 # TODO(b/265850310): Mark as kw_only when available (Py3.10).
+# TODO(b/266030644): Upgrade sphinx and enable section headings.
+#                    see also: https://github.com/sphinx-doc/sphinx/pull/10919.
 @dataclasses.dataclass(frozen=True)
 class Autofill:
   """Annotation of an argument parameter to enable deep configurability.
@@ -33,8 +35,7 @@ class Autofill:
   Sample usage: ``my_arg: typing.Annotated[UnderlyingType, fdl.Autofill]``. Read
   on for more context.
 
-  Complete Example
-  ----------------
+  **Complete Example**
 
   While Fiddle Configs support arbitrary nesting of objects, building up the
   full tree of `fdl.Config`'s can be somewhat tedious. The extension in this
@@ -96,8 +97,7 @@ class Autofill:
 
   Once the annotations are added, the ``with_autofill`` example will work.
 
-  Customizing the factory
-  -----------------------
+  **Customizing the factory**
 
   If a library author would like to use a custom function to initialize the
   ``fdl.Buildable`` for a particular argument, they can provide the ``factory``
@@ -121,8 +121,7 @@ class Autofill:
   > Note: you can use a non-auto_config (aka plain Python) function as well, so
   > long as it returns a ``fdl.Buildable`` instance.
 
-  Sharing / Aliasing
-  ~~~~~~~~~~~~~~~~~~
+  **Sharing / Aliasing**
 
   By default, each parameter gets its own ``fdl.Config`` instance; there is no
   aliasing in the constructed tree of ``fdl.Config``'s. If it's important to
@@ -147,8 +146,7 @@ class Autofill:
     model = fdl.build(config)
     assert model.encoder_decoder.encoder is model.encoder_decoder.decoder
 
-  Custom Buildable Type
-  ---------------------
+  **Custom Buildable Type**
 
   Highly sophisticated Fiddle users might extend ``fdl.Config`` (e.g. to
   facilitate adopting Fiddle in a codebase with non-Fiddle design patterns) with

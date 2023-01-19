@@ -9,6 +9,7 @@ API Reference
     tagging
     select
     autoconfig
+    autofill
     daglish
 
 ..  materialize
