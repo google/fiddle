@@ -174,14 +174,22 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     for name, value in arguments.items():
       setattr(self, name, value)
 
-    for arg_name, arg_type in autofill.parameters_to_autofill(
+    for arg_name, autofill_metadata in autofill.parameters_to_autofill(
         fn_or_cls, signature
     ).items():
       if arg_name not in arguments:
-        buildable_type = Config
-        if isinstance(self, (Partial, ArgFactory)):
-          buildable_type = ArgFactory
-        setattr(self, arg_name, buildable_type(arg_type))
+        factory = autofill_metadata.factory
+        if factory:
+          autofill_buildable = factory()
+        else:
+          default_buildable_type = Config
+          if isinstance(self, (Partial, ArgFactory)):
+            default_buildable_type = ArgFactory
+          buildable_type = (
+              autofill_metadata.buildable_type or default_buildable_type
+          )
+          autofill_buildable = buildable_type(autofill_metadata.underlying_type)
+        setattr(self, arg_name, autofill_buildable)
 
   def __init_subclass__(cls):
     daglish.register_node_traverser(

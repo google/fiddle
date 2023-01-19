@@ -23,6 +23,7 @@ from absl.testing import absltest
 import fiddle as fdl
 from fiddle._src import autofill as autofill_impl
 from fiddle._src import autofill_test_helper as helper
+from fiddle.experimental import auto_config
 from fiddle.experimental import autofill as autofill_api
 import typing_extensions
 
@@ -81,21 +82,36 @@ class AutofillTest(absltest.TestCase):
     ):  # pylint: disable=unused-argument
       pass
 
-    expected_parameters = {'yes_me': int}
+    expected_parameters = {
+        'yes_me': autofill_impl.ParameterMetadata(
+            autofill_annotation=None, underlying_type=int
+        )
+    }
     actual_parameters = autofill_impl.parameters_to_autofill(
         simple_function, inspect.signature(simple_function)
     )
     self.assertEqual(expected_parameters, actual_parameters)
 
   def test_autofill_parameters_toplevel_class(self):
-    expected_parameters = {'higher': HigherOrderClass, 'simple': SimpleClass}
+    expected_parameters = {
+        'higher': autofill_impl.ParameterMetadata(
+            autofill_annotation=None, underlying_type=HigherOrderClass
+        ),
+        'simple': autofill_impl.ParameterMetadata(
+            autofill_annotation=None, underlying_type=SimpleClass
+        ),
+    }
     actual_parameters = autofill_impl.parameters_to_autofill(
         TopLevelClass, inspect.signature(TopLevelClass)
     )
     self.assertEqual(expected_parameters, actual_parameters)
 
   def test_autofill_parameters_higherorder_class(self):
-    expected_parameters = {'field_one': SimpleClass}
+    expected_parameters = {
+        'field_one': autofill_impl.ParameterMetadata(
+            autofill_annotation=None, underlying_type=SimpleClass
+        )
+    }
     actual_parameters = autofill_impl.parameters_to_autofill(
         HigherOrderClass, inspect.signature(HigherOrderClass)
     )
@@ -109,7 +125,11 @@ class AutofillTest(absltest.TestCase):
     ):  # pylint: disable=unused-argument
       pass
 
-    expected_parameters = {'yes_me': int}
+    expected_parameters = {
+        'yes_me': autofill_impl.ParameterMetadata(
+            autofill_annotation=None, underlying_type=int
+        )
+    }
     actual_parameters = autofill_impl.parameters_to_autofill(
         simple_function, inspect.signature(simple_function)
     )
@@ -134,11 +154,48 @@ class AutofillTest(absltest.TestCase):
       ):
         self.mcu = mcu
 
-    expected_parameters = {'mcu': MetaclassUser}
+    expected_parameters = {
+        'mcu': autofill_impl.ParameterMetadata(
+            autofill_annotation=None, underlying_type=MetaclassUser
+        )
+    }
     actual_parameters = autofill_impl.parameters_to_autofill(
         EndUser, inspect.signature(EndUser)
     )
     self.assertEqual(expected_parameters, actual_parameters)
+
+  def test_factory_initializer(self):
+    @auto_config.auto_config
+    def custom_init():
+      return SimpleClass(x=42, y='customized')
+
+    @dataclasses.dataclass
+    class CustomInitUser:
+      simple: typing_extensions.Annotated[SimpleClass, autofill_api.Autofill]
+      customized: typing_extensions.Annotated[
+          SimpleClass, autofill_api.Autofill(factory=custom_init)
+      ]
+
+    config = fdl.Config(CustomInitUser)
+
+    self.assertEqual(config.customized.x, 42)
+    self.assertEqual(config.customized.y, 'customized')
+    self.assertEqual(config.simple.y, 'hello')
+
+  def test_multiple_autofill_annotations(self):
+    def sample_function(
+        x: typing_extensions.Annotated[
+            int,
+            autofill_api.Autofill,
+            autofill_api.Autofill(factory=lambda: fdl.Config(SimpleClass)),
+        ]
+    ):
+      return x  # use x.
+
+    with self.assertRaises(TypeError):
+      autofill_impl.parameters_to_autofill(
+          sample_function, inspect.signature(sample_function)
+      )
 
   def test_future_annotations(self):
     config = fdl.Config(helper.TopLevel)
