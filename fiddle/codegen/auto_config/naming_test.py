@@ -16,6 +16,7 @@
 """Tests for naming."""
 
 import dataclasses
+from typing import Dict
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -33,7 +34,7 @@ class Qux:
 @dataclasses.dataclass(frozen=True)
 class Foo:
   a: int = 0
-  bar: dict[str, Qux] = dataclasses.field(default_factory=dict)
+  bar: Dict[str, Qux] = dataclasses.field(default_factory=dict)
 
 
 def new_path_first_namer():
