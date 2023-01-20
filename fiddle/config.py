@@ -124,7 +124,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       *args: Any positional arguments to configure for ``fn_or_cls``.
       **kwargs: Any keyword arguments to configure for ``fn_or_cls``.
     """
-    if isinstance(fn_or_cls, Buildable):
+    raise RuntimeError('Me should fail on GitHub actions; no really.')  # pylint: disable=g-doc-exception
+    if isinstance(fn_or_cls, Buildable):  # pylint: disable=unreachable
       raise ValueError(
           'Using the Buildable constructor to convert a buildable to a new '
           'type or to override arguments is forbidden; please use either '
