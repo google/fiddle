@@ -381,6 +381,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         + len(formatted_fn_or_cls)
         > 80
     ):
+
       def indent(s):
         return '\n'.join(['  ' + x for x in s.split('\n')])
 
