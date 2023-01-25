@@ -15,6 +15,7 @@
 
 """Tests for partial_with_arg_factory."""
 
+import copy
 import dataclasses
 import functools
 import inspect
@@ -425,7 +426,7 @@ class DefaultFactoryTest(parameterized.TestCase):
     def g(x, noise=arg_factory.default_factory(random.random)):
       return x * x + noise
 
-    with self.assertRaisesRegex(ValueError, expected_error):
+    with self.assertRaisesRegex(AttributeError, expected_error):
       f(5)
     with self.assertRaisesRegex(ValueError, expected_error):
       g(5)
@@ -445,6 +446,17 @@ class DefaultFactoryTest(parameterized.TestCase):
       return x
 
     self.assertEqual(f(), [])
+
+  def test_arg_factory_equal(self):
+    list_factory = arg_factory.ArgFactory(list)
+    dict_factory = arg_factory.ArgFactory(dict)
+    self.assertEqual(list_factory, arg_factory.ArgFactory(list))
+    self.assertNotEqual(list_factory, dict_factory)
+
+  def test_arg_factory_copy_and_deepcopy(self):
+    factory = arg_factory.ArgFactory(list)
+    self.assertEqual(factory, copy.copy(factory))
+    self.assertEqual(factory, copy.deepcopy(factory))
 
 
 if __name__ == '__main__':
