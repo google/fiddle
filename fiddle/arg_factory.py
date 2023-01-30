@@ -18,7 +18,7 @@
 The `arg_factory` package provides two function wrappers that can be used
 to generate parameter values each time a wrapped function is called:
 
-  * `@arg_factory.default_factory_for` is a decorator that defines a "default
+  * `@arg_factory.supply_defaults` is a decorator that defines a "default
     factory" for one or more parameters.  Each time the decorated function
     is called, any missing parameter with a default factory has its value
     filled in by calling the factory.  For example, this can be used to define
@@ -30,7 +30,7 @@ to generate parameter values each time a wrapped function is called:
     are used to compute the parameter values each time the partial function
     is called.
 
-## Differences between `default_factory_for` and `partial`
+## Differences between `supply_defaults` and `partial`
 
 These two wrappers have similar behavior for keyword arguments, but differ in
 how they handle factories for positional arguments:
@@ -39,7 +39,7 @@ how they handle factories for positional arguments:
     removed from the signature.  I.e., the wrapper function no longer expects
     that argument.
 
-  * In contrast, `@arg_factory.default_factory_for` does not remove any
+  * In contrast, `@arg_factory.supply_defaults` does not remove any
     arguments from the signature of the wrapped function.
 
 The wrappers also differ in their restrictions for positional-only
@@ -47,16 +47,16 @@ arguments.  Consider a function with signature `f(x, y, /)`:
 
   * `arg_factory.partial` may be used to define a factory for
     `x` without defining one for `y` (and doing so will "consume" the argument
-    `x`); but `@arg_factory.default_factory_for` can not (since non-default
+    `x`); but `@arg_factory.supply_defaults` can not (since non-default
     arguments may not follow default arguments).
 
-  * Conversely, `@arg_factory.default_factory_for` may be used to define a
+  * Conversely, `@arg_factory.supply_defaults` may be used to define a
     factory for `y` without defining one for `x` (and doing so will make `y`
     an optional argument); but `arg_factory.partial` can not (since `y` is a
     positional-only argument, so there's no way to bind it without also binding
     `x`).
 
-A final difference is that `@arg_factory.default_factory_for` may only be used
+A final difference is that `@arg_factory.supply_defaults` may only be used
 to provide default factories for positional and keyword parameters in the
 wrapped function's signature; it may not be used to add factories for functions
 with var-positional (`*args`) or var-keyword (**kwargs`) parameters. But
@@ -69,12 +69,15 @@ var-keyword argument.  E.g.:
 >>> p(y=3)
 {'x': [], y: 3}
 """
+
+from __future__ import annotations
+
 # TODO(fiddle-team): Move this file out of Fiddle, into its own library.
 
 import dataclasses
 import functools
 import inspect
-from typing import Any, Callable, Dict, Generic, TypeVar
+from typing import Any, Callable, TypeVar, overload
 
 T = TypeVar('T')
 
@@ -122,8 +125,8 @@ def partial(*args, **kwargs):
     A `functools.partial` object.
   """
   func, *args = args
-  args = [_ArgFactory(arg) for arg in args]
-  kwargs = {name: _ArgFactory(arg) for name, arg in kwargs.items()}
+  args = [ArgFactory(arg) for arg in args]
+  kwargs = {name: ArgFactory(arg) for name, arg in kwargs.items()}
   return functools.partial(_InvokeArgFactoryWrapper(func), *args, **kwargs)
 
 
@@ -145,28 +148,66 @@ def partialmethod(*args, **kwargs):
     A `functools.partialmethod` object.
   """
   func, *args = args
-  args = [_ArgFactory(arg) for arg in args]
-  kwargs = {name: _ArgFactory(arg) for name, arg in kwargs.items()}
+  args = [ArgFactory(arg) for arg in args]
+  kwargs = {name: ArgFactory(arg) for name, arg in kwargs.items()}
   return functools.partialmethod(
       _InvokeArgFactoryWrapper(func), *args, **kwargs)
 
 
-class _ArgFactory:
+def _raise_unsupported_op_error(factory, op_type):
+  """Raises a ValueError for an ArgFactory operation that is not supported."""
+  name = getattr(
+      factory, '__qualname__', getattr(factory, '__name__', repr(factory))
+  )
+  raise ValueError(
+      f'arg_factory.default_factory({name}) does not support {op_type}.\n'
+      '`arg_factory.default_factory(...)` should only be used as a default '
+      'value for a function wrapped with `arg_factory.supply_defaults`; or as '
+      'an argument to `arg_factory.partial`.\n'
+      'Did you forget to apply the `@arg_factory.supply_defaults` decorator?'
+  )
+
+
+def _unsupported(op_type):
+  """Returns a function that calls _raise_unsupported_op_error."""
+
+  def unsupported_op_handler(arg_factory, *args, **kwargs):
+    del args, kwargs  # unused
+    factory = arg_factory._factory  # pylint: disable=protected-access
+    _raise_unsupported_op_error(factory, op_type)
+
+  return unsupported_op_handler
+
+
+class ArgFactory:
   """A wrapper indicating that an argument should be computed with a factory.
 
   This wrapper is used by `arg_factory.partial` to define arguments whose
   value should should be built each time the partial is called.  It is also
   used in as the default value in the signatures for `arg_factory.partial`
-  and `arg_factory.CallableWithDefaultFactories`.
+  and `arg_factory.supply_defaults`.
   """
-  _factory: Callable[[], Any]
+
+  _factory: Callable[..., Any]
+
+  # Type overload to make sure pytype is happy for expressions such as
+  # `def fn(x: list = ArgFactory(list)): ...`, where the actual return type
+  # or `ArgFactory(list)` is `ArgFactory`, but the declared type is `list`.
+  # (Without the overload, we'd get an annotation-type-mismatch error.)
+  @overload
+  def __new__(cls, factory: Callable[..., T]) -> T:
+    ...
+
+  def __new__(cls, factory: Callable[..., Any]):
+    del factory  # Unused
+    return super().__new__(cls)
 
   def __init__(self, factory: Callable[..., Any]):
     if not callable(factory):
       raise TypeError(
           'Expected arguments to `arg_factory.partial` to be callable. '
           f'Got {factory!r}.')
-    self._factory = factory
+    super().__setattr__('_factory', factory)
 
   factory = property(lambda self: self._factory)
 
@@ -174,6 +215,93 @@ class _ArgFactory:
     name = getattr(self._factory, '__qualname__',
                    getattr(self._factory, '__name__', repr(self._factory)))
     return f'<built by: {name}()>'
+
+  # The following overrides are intended to provide useful error messages if
+  # the user uses `default_factory` but forgets to use the `@supply_defaults`
+  # decorator.  In that case, the function will be called with an `ArgFactory`
+  # object (rather than the result of calling the factory).
+  #
+  # We override math operations, attribute operations, container operations,
+  # and the calling operation to raise an exception with a helpful error
+  # message. We intentionally do *not* override __eq__ or __hash__, because we
+  # don't want to break code that handles function signatures generically.
+  __ge__ = _unsupported('math operations')
+  __gt__ = _unsupported('math operations')
+  __le__ = _unsupported('math operations')
+  __lt__ = _unsupported('math operations')
+  __add__ = _unsupported('math operations')
+  __and__ = _unsupported('math operations')
+  __divmod__ = _unsupported('math operations')
+  __floordiv__ = _unsupported('math operations')
+  __lshift__ = _unsupported('math operations')
+  __matmul__ = _unsupported('math operations')
+  __mod__ = _unsupported('math operations')
+  __mul__ = _unsupported('math operations')
+  __or__ = _unsupported('math operations')
+  __pow__ = _unsupported('math operations')
+  __rshift__ = _unsupported('math operations')
+  __sub__ = _unsupported('math operations')
+  __truediv__ = _unsupported('math operations')
+  __xor__ = _unsupported('math operations')
+  __radd__ = _unsupported('math operations')
+  __rand__ = _unsupported('math operations')
+  __rdiv__ = _unsupported('math operations')
+  __rdivmod__ = _unsupported('math operations')
+  __rfloordiv__ = _unsupported('math operations')
+  __rlshift__ = _unsupported('math operations')
+  __rmatmul__ = _unsupported('math operations')
+  __rmod__ = _unsupported('math operations')
+  __rmul__ = _unsupported('math operations')
+  __ror__ = _unsupported('math operations')
+  __rpow__ = _unsupported('math operations')
+  __rrshift__ = _unsupported('math operations')
+  __rsub__ = _unsupported('math operations')
+  __rtruediv__ = _unsupported('math operations')
+  __rxor__ = _unsupported('math operations')
+  __iadd__ = _unsupported('math operations')
+  __iand__ = _unsupported('math operations')
+  __ifloordiv__ = _unsupported('math operations')
+  __ilshift__ = _unsupported('math operations')
+  __imatmul__ = _unsupported('math operations')
+  __imod__ = _unsupported('math operations')
+  __imul__ = _unsupported('math operations')
+  __ior__ = _unsupported('math operations')
+  __ipow__ = _unsupported('math operations')
+  __irshift__ = _unsupported('math operations')
+  __isub__ = _unsupported('math operations')
+  __itruediv__ = _unsupported('math operations')
+  __ixor__ = _unsupported('math operations')
+  __abs__ = _unsupported('math operations')
+  __neg__ = _unsupported('math operations')
+  __pos__ = _unsupported('math operations')
+  __invert__ = _unsupported('math operations')
+  __trunc__ = _unsupported('math operations')
+  __floor__ = _unsupported('math operations')
+  __ceil__ = _unsupported('math operations')
+  __round__ = _unsupported('math operations')
+  __int__ = _unsupported('math operations')
+  __bool__ = _unsupported('math operations')
+  __nonzero__ = _unsupported('math operations')
+  __complex__ = _unsupported('math operations')
+  __float__ = _unsupported('math operations')
+  __iter__ = _unsupported('iteration')
+  __next__ = _unsupported('iteration')
+  __len__ = _unsupported('len')
+  __reversed__ = _unsupported('reversed')
+  __contains__ = _unsupported('contains')
+  __call__ = _unsupported('calling')
+  __getitem__ = _unsupported('getitem')
+  __setitem__ = _unsupported('setitem')
+  __delitem__ = _unsupported('delitem')
+
+  def __getattr__(self, name):
+    _raise_unsupported_op_error(self._factory, f'the attribute {name}')
+
+  def __setattr__(self, name, value):
+    _raise_unsupported_op_error(self._factory, 'setting attributes')
+
+  def __delattr__(self, name):
+    _raise_unsupported_op_error(self._factory, f'the attribute {name}')
 
 
 def is_arg_factory_partial(partial_fn):
@@ -205,207 +333,82 @@ class _InvokeArgFactoryWrapper:
 
 
 def _arg_factory_value(value):
-  return value.factory() if isinstance(value, _ArgFactory) else value
+  return value.factory() if isinstance(value, ArgFactory) else value
 
 
-class CallableWithDefaultFactories(Generic[T]):
-  """A function wrapper that uses default factories for function parameters.
-
-  Each time the wrapper is called, any missing parameter with a default factory
-  has its value filled in by calling the factory.
-
-  `arg_factory.CallableWithDefaultFactories` is often created by the
-  `@arg_factory.default_factory_for` decorator.  But it can also be useful to
-  construct `CallableWithDefaultFactories` directly.  In the following example,
-  `CallableWithDefaultFactories` is used to create a factory function for a
-  `dataclass` that overrides the `default_factory` for one of its fields:
-
-  >>> @dataclasses.dataclass
-  ... class Engine:
-  ...   capacity: float = 2.0
-  >>> @dataclasses.dataclass
-  ... class Car:
-  ...   engine: Engine = dataclasses.field(default_factory=Engine)
-  >>> @dataclasses.dataclass
-  ... class HybridEngine(Engine):
-  ...   torque: float = 300
-  >>> HybridCar = arg_factory.CallableWithDefaultFactories(
-  ...     Car, engine=HybridEngine)
-  >>> HybridCar()
-  Car(engine=HybridEngine(capacity=2.0, torque=300))
-
-  This wrapper does *not* automatically copy attributes such as `__name__` and
-  `__doc__` from the wrapped `func`; if you want to have these attributes
-  copied, then you can use `functools.update_wrapper`.
-  """
-  _func: Callable[..., T]
-  _default_factories: Dict[str, Callable[..., Any]]
-  __signature__: inspect.Signature
-
-  def __init__(self, *args: Callable[..., T],
-               **default_factories: Callable[..., Any]):
-    """Constructs a `CallableWithDefaultFactories`.
-
-    Args:
-      *args: Only one argument `func`, the function that should be wrapped.
-      **default_factories: Default factories for the wrapped function's
-        parameters.  Keys may be the names of positional-only parameters,
-        keyword-only parameters, or positional-or-keyword parameters.
-
-    Raises:
-      TypeError: If `func` or any values of `default_factories` are not
-        callable.
-      ValueError: If any key of `default_factories` is not a positional
-        or keyword parameter to `func`.
-    """
-    # Mimic `__init__(self, func, /, ...)` without using positional args.
-    func, = args
-    if isinstance(func, CallableWithDefaultFactories):
-      default_factories = {**func.default_factories, **default_factories}
-      func = func.func
-
-    # Validate constructor arguments.
-    if not callable(func):
-      raise TypeError(f'func={func!r} is not callable.')
-    signature = inspect.signature(func)
-    for name, factory in default_factories.items():
-      if name not in signature.parameters:
-        raise ValueError(f'{name!r} is not a parameter for {func}')
-      if signature.parameters[name].kind == inspect.Parameter.VAR_POSITIONAL:
-        raise ValueError(
-            f'default factory not supported for varargs parameter *{name!r}')
-      if signature.parameters[name].kind == inspect.Parameter.VAR_KEYWORD:
-        raise ValueError(
-            f'default factory not supported for varkwargs parameter **{name!r}')
-      if not callable(factory):
-        raise TypeError(
-            f'Default factory {name!r}={factory!r} is not callable.')
-
-    # Copy the __signature__ from `func`, but set the default value for
-    # each default factory argument.
-    self.__signature__ = _signature_for_callable_with_default_factories(
-        signature, default_factories)
-
-    self._func = func
-    self._default_factories = default_factories
-
-  @property
-  def func(self):
-    """The function wrapped by this CallableWithDefaultFactories."""
-    return self._func
-
-  @property
-  def default_factories(self) -> Dict[str, Callable[..., Any]]:
-    """Default factories for the wrapped function's parameters."""
-    return self._default_factories
-
-  def __repr__(self):
-    func_name = getattr(self._func, '__qualname__',
-                        getattr(self._func, '__name__', repr(self._func)))
-    return f'<{type(self).__qualname__} {func_name}{self.__signature__}>'
-
-  def __call__(self, *args, **kwargs) -> T:
-    signature = self.__signature__
-    bound_args = signature.bind_partial(*args, **kwargs)
-    for name, factory in self._default_factories.items():
-      if name not in bound_args.arguments:
-        bound_args.arguments[name] = factory()
-    return self._func(*bound_args.args, **bound_args.kwargs)
-
-
-def _signature_for_callable_with_default_factories(
-    func_signature: inspect.Signature,
-    default_factories: Dict[str, Callable[..., Any]]) -> inspect.Signature:
-  """Returns the signature for a callable with default factories.
-
-  * Updates Parameter.default for any parameters with default factories.
-  * Changes Parameter.kind from POSITIONAL_OR_KEYWORD to KEYWORD_ONLY as
-    necessary, to ensure that any parameter without a default that follows
-    a parameter with a default is KEYWORD_ONLY.
-
-  Args:
-    func_signature: The signature of the wrapped function.
-    default_factories: The default factories.
-  """
-  parameters = []
-
-  # If we see a parameter with a default, followed by a parameter without a
-  # default, then the parameter without a default and all following parameters
-  # must be keyword-only.  `seen_default` is the name of the most recent
-  # parameter we've seen with a default value.
-  seen_default = None
-  keyword_only = False
-
-  for param in func_signature.parameters.values():
-    # Add the default factory for this parameter.
-    factory = default_factories.get(param.name)
-    if factory is not None:
-      param = param.replace(default=_ArgFactory(factory))
-
-    # Ensure that parameters without a default that follow parameters with
-    # a default have kind=KEYWORD_ONLY.
-    has_default = param.default is not inspect.Parameter.empty
-    if has_default:
-      seen_default = param.name
-    elif seen_default is not None:
-      keyword_only = True
-    if keyword_only and param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
-      param = param.replace(kind=inspect.Parameter.KEYWORD_ONLY)
-    if keyword_only and param.kind == inspect.Parameter.POSITIONAL_ONLY:
-      raise ValueError(
-          f'After adding default factories for {set(default_factories)}, '
-          f'the resulting function has a non-default parameter {param.name!r} '
-          f'that follows a default parameter {seen_default!r}.  Please either '
-          f'provide a default for {param.name!r} as well, or change '
-          f'{param.name!r} to a keyword parameter.')
-
-    parameters.append(param)
-  return func_signature.replace(parameters=parameters)
-
-
-def default_factory_for(
-    **param_factories
-) -> Callable[[Callable[..., T]], CallableWithDefaultFactories[T]]:
+def supply_defaults(wrapped_func):
   """Decorator that defines default factories for a function's parameters.
 
   Each time the decorated function is called, any missing parameter with a
-  default factory has its value filled in by calling the factory.  For example,
-  this can be used to define mutable default values for functions, that are
-  created each time the function is called:
+  default factory has its value filled in by calling the factory.  Default
+  factories are specified by setting the default value of a parameter to
+  `arg_factory.default_factory(<factory>)`.
 
-  >>> @arg_factory.default_factory_for(seq=list)
-  >>> def append(elt, seq: List[Any]):
+  For example, this can be used to define mutable default values for functions,
+  that are created each time the function is called:
+
+  >>> @arg_factory.supply_defaults
+  ... def append(elt, seq: list[Any] = arg_factory.default_factory(list)):
   ...   seq.append(elt)
   ...   return seq
 
   This decorator can also be used in other contexts where the default value
   for a parameter should be computed each time the function is called.  E.g.:
 
-  >>> @arg_factory.default_factory_for(noise=random.random)
-  >>> def add_noise(value, noise):
+  >>> @arg_factory.supply_defaults
+  ... def add_noise(value, noise = arg_factory.default_factory(random.random)):
   ...   return value + noise**2
 
-  This decorator uses `functools.update_wrapper` to copy fields such as
-  `__name__` and `__doc__` from the wrapped function to the wrapper function.
+  This decorator uses `functools.wraps` to copy fields such as `__name__` and
+  `__doc__` from the wrapped function to the wrapper function.
 
   Args:
-    **param_factories: Default factories for the wrapped function's parameters.
-      Keys may be the names of positional-only parameters, keyword-only
-      parameters, or positional-or-keyword parameters.
-
-  Raises:
-    TypeError: If the wrapped function or any values of `default_factories`
-      are not callable.
-    ValueError: If any key of `default_factories` is not a positional
-      or keyword parameter to the wrapped function.
+    wrapped_func: The function that should be decorated.
 
   Returns:
-    A decorator that returns a `CallableWithDefaultFactories`.
+    The decorated function.
   """
+  signature = inspect.signature(wrapped_func)
+  factories = {
+      param.name: param.default.factory
+      for param in signature.parameters.values()
+      if isinstance(param.default, ArgFactory)
+  }
+  if not factories:
+    raise ValueError(
+        '@supply_defaults expected at least one argument to '
+        'have a default value constructed with default_factory.'
+    )
 
-  def decorator(func):
-    result = CallableWithDefaultFactories(func, **param_factories)
-    functools.update_wrapper(result, func)
-    return result
+  @functools.wraps(wrapped_func)
+  def wrapper(*args, **kwargs):
+    bound_args = signature.bind(*args, **kwargs)
+    for name, factory in factories.items():
+      if name not in bound_args.arguments:
+        bound_args.arguments[name] = factory()
+    return wrapped_func(*bound_args.args, **bound_args.kwargs)
 
-  return decorator
+  return wrapper
+
+
+# Type overload to make sure pytype is happy for expressions such as
+# `x: list = default_factory(list)`, where the actual return type of
+# `default_factory` is `ArgFactory`, but the declared type is `list`.
+# (Without the overload, we'd get an annotation-type-mismatch error.)
+@overload
+def default_factory(factory: Callable[..., T]) -> T:
+  ...
+
+
+def default_factory(factory: Callable[..., Any]) -> ArgFactory:
+  """Returns a value used to declare the default factory for a parameter.
+
+  `default_factory` should be used in conjuction with the `@supply_defaults`
+  decorator to declare default factories for a function's parameters.  See
+  the documentation for `supply_defaults` for more information.
+
+  Args:
+    factory: The factory that should be used to construct the value for a
+      parameter.  This factory is called each time the function is called.
+  """
+  return ArgFactory(factory)

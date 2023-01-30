@@ -19,6 +19,7 @@ import dataclasses
 import functools
 import inspect
 import itertools
+import random
 from typing import List, Any
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -39,8 +40,9 @@ class Parent:
 
   new_child = arg_factory.partialmethod(add_child, Child)
 
-  new_child_2 = functools.partialmethod(
-      arg_factory.CallableWithDefaultFactories(add_child, child=Child))
+  @arg_factory.supply_defaults
+  def new_child_2(self, child=arg_factory.default_factory(Child)):
+    self.add_child(child)
 
 
 def sample_fn(arg1, arg2, kwarg1=0, kwarg2=None):
@@ -236,7 +238,13 @@ class ArgFactoryPartialTest(parameterized.TestCase):
 class DefaultFactoryTest(parameterized.TestCase):
 
   def test_factory_arg(self):
-    p = arg_factory.CallableWithDefaultFactories(sample_fn, arg2=Counter())
+
+    @arg_factory.supply_defaults
+    def p(
+        arg1, arg2=arg_factory.default_factory(Counter()), kwarg1=0, kwarg2=None
+    ):
+      return (arg1, arg2, kwarg1, kwarg2)
+
     self.assertEqual(p(arg1=5), (5, 'counter_1', 0, None))
     self.assertEqual(p(arg1=5), (5, 'counter_2', 0, None))
     self.assertEqual(p(arg1=2, kwarg2=3), (2, 'counter_3', 0, 3))
@@ -244,13 +252,25 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertEqual(p(arg1=5), (5, 'counter_4', 0, None))
 
   def test_factory_kwarg(self):
-    p = arg_factory.CallableWithDefaultFactories(sample_fn, kwarg1=Counter())
+
+    @arg_factory.supply_defaults
+    def p(
+        arg1, arg2, kwarg1=arg_factory.default_factory(Counter()), kwarg2=None
+    ):
+      return (arg1, arg2, kwarg1, kwarg2)
+
     self.assertEqual(p(1, 2), (1, 2, 'counter_1', None))
     self.assertEqual(p(1, 2), (1, 2, 'counter_2', None))
     self.assertEqual(p(1, 2, kwarg2='x'), (1, 2, 'counter_3', 'x'))
 
   def test_factory_is_not_run_when_overridden(self):
-    p = arg_factory.CallableWithDefaultFactories(sample_fn, arg2=Counter())
+
+    @arg_factory.supply_defaults
+    def p(
+        arg1, arg2=arg_factory.default_factory(Counter()), kwarg1=0, kwarg2=None
+    ):
+      return (arg1, arg2, kwarg1, kwarg2)
+
     self.assertEqual(p(arg1=5), (5, 'counter_1', 0, None))
 
     # On the following line, arg2 is overriden, so the factory does not
@@ -259,11 +279,16 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertEqual(p(arg1=5), (5, 'counter_2', 0, None))
 
   def test_multiple_factories(self):
-    p = arg_factory.CallableWithDefaultFactories(
-        sample_fn,
-        arg1=Counter('arg1'),
-        arg2=Counter('arg2'),
-        kwarg2=Counter('kwarg2'))
+
+    @arg_factory.supply_defaults
+    def p(
+        arg1=arg_factory.default_factory(Counter('arg1')),
+        arg2=arg_factory.default_factory(Counter('arg2')),
+        kwarg1=0,
+        kwarg2=arg_factory.default_factory(Counter('kwarg2')),
+    ):
+      return (arg1, arg2, kwarg1, kwarg2)
+
     self.assertEqual(p(), ('arg1_1', 'arg2_1', 0, 'kwarg2_1'))
     self.assertEqual(p(arg1=5), (5, 'arg2_2', 0, 'kwarg2_2'))
     self.assertEqual(p(arg1=5, arg2=6), (5, 6, 0, 'kwarg2_3'))
@@ -272,68 +297,56 @@ class DefaultFactoryTest(parameterized.TestCase):
 
   def test_reused_factory(self):
     factory = Counter()
-    p = arg_factory.CallableWithDefaultFactories(
-        sample_fn, arg1=factory, arg2=factory)
+
+    @arg_factory.supply_defaults
+    def p(
+        arg1=arg_factory.default_factory(factory),
+        arg2=arg_factory.default_factory(factory),
+        kwarg1=0,
+        kwarg2=None,
+    ):
+      return (arg1, arg2, kwarg1, kwarg2)
+
     self.assertEqual(p(), ('counter_1', 'counter_2', 0, None))
     self.assertEqual(p(), ('counter_3', 'counter_4', 0, None))
 
   def test_list_factory(self):
 
-    def f(name, children):
+    @arg_factory.supply_defaults
+    def f(name, children=arg_factory.default_factory(list)):
       return {'name': name, 'children': children}
 
-    p = arg_factory.CallableWithDefaultFactories(f, children=list)
-    joe = p('joe')
-    sue = p('sue')
+    joe = f('joe')
+    sue = f('sue')
 
     self.assertEqual(joe, dict(name='joe', children=[]))
     self.assertEqual(sue, dict(name='sue', children=[]))
     self.assertIsNot(joe['children'], sue['children'])  # children not shared
 
   def test_itertools_count_factory(self):
-    double = lambda x: x * 2
-    p = arg_factory.CallableWithDefaultFactories(
-        double, x=itertools.count().__next__)
+
+    @arg_factory.supply_defaults
+    def p(x=arg_factory.default_factory(itertools.count().__next__)):
+      return x * 2
+
     self.assertEqual(p(), 0)
     self.assertEqual(p(), 2)
     self.assertEqual(p(), 4)
 
   def test_customized_dataclass_default_factory(self):
-    parent_factory = arg_factory.CallableWithDefaultFactories(
-        Parent, children=lambda: [Child(3)])
+
+    @arg_factory.supply_defaults
+    def parent_factory(
+        children=arg_factory.default_factory(lambda: [Child(3)]),
+    ):
+      return Parent(children)
+
     a = parent_factory()
     b = parent_factory()
     self.assertEqual(a, Parent([Child(3)]))
     self.assertEqual(b, Parent([Child(3)]))
     self.assertIsNot(a.children, b.children)  # child list is not shared
     self.assertIsNot(a.children[0], b.children[0])  # child not shared
-
-  @absltest.skip('Enable this after dropping pyhon 3.7 support')
-  def test_no_multiple_value_errors(self):
-    # Check that all parameter names are supported, including names such
-    # as `self` and `func` that are used in the signature of the constructor
-    # or the __call__ method.  The reason that these tests pass is that the
-    # parameters in question are declared as positional-only or
-    # vararg/varkwarg.
-    def f(self, func, args, kwargs):
-      return self + func + args + kwargs
-
-    p = arg_factory.CallableWithDefaultFactories(  # pytype: disable=duplicate-keyword-argument
-        f,
-        self=lambda: 1,
-        func=lambda: 10)
-    self.assertEqual(p(args=100, kwargs=1000), 1111)
-    self.assertEqual(p(self=4, func=30, args=200, kwargs=1000), 1234)  # pytype: disable=duplicate-keyword-argument
-
-  def test_param_named_func(self):
-    # Note: this test succeeds because CallableWithDefaultFactories declares
-    # `func` as a positional-only parameter.  Otherwise, it would fail with
-    # "multiple values for argument 'func'".
-    def f(func):
-      return func
-
-    p = arg_factory.CallableWithDefaultFactories(f, func=lambda: 1)
-    self.assertEqual(p(), 1)
 
   def test_partialmethod(self):
     parent = Parent()
@@ -343,48 +356,20 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertIsNot(parent.children[0], parent.children[1])
 
   def test_posonly(self):
-    p = arg_factory.CallableWithDefaultFactories(posonly_fn, c=list)
+
+    @arg_factory.supply_defaults
+    def p(a, b, c=arg_factory.default_factory(list), /):
+      return (a, b, c)
+
     x = p(1, 2)
     y = p(1, 2)
     self.assertEqual(x, (1, 2, []))
     self.assertEqual(x, y)
     self.assertIsNot(x[2], y[2])  # child list not shared
 
-  @parameterized.parameters([
-      # Add a default:
-      (arg_factory.CallableWithDefaultFactories(sample_fn, arg2=Child),
-       '(arg1, arg2=<built by: Child()>, kwarg1=0, kwarg2=None)'),
-      # Add two defaults:
-      (arg_factory.CallableWithDefaultFactories(
-          sample_fn, arg1=list,
-          arg2=list), '(arg1=<built by: list()>, arg2=<built by: list()>, ' +
-       'kwarg1=0, kwarg2=None)'),
-      # Override a default:
-      (arg_factory.CallableWithDefaultFactories(
-          sample_fn, arg2=Parent,
-          kwarg2=list), '(arg1, arg2=<built by: Parent()>, ' +
-       'kwarg1=0, kwarg2=<built by: list()>)'),
-      # Add a default before an arg w/o a deault.
-      # All arguments after arg1 get converted to KEYWORD_ONLY.
-      (arg_factory.CallableWithDefaultFactories(sample_fn, arg1=Child),
-       '(arg1=<built by: Child()>, *, arg2, kwarg1=0, kwarg2=None)'),
-      # positional-only args
-      (arg_factory.CallableWithDefaultFactories(posonly_fn, b=list, c=list),
-       '(a, b=<built by: list()>, c=<built by: list()>, /)'),
-  ])
-  def test_signature(self, p, signature):
-    self.assertEqual(str(inspect.signature(p)), signature)
-
-  def test_signature_arg_before_pos_only_arg_without_default(self):
-    with self.assertRaisesRegex(
-        ValueError, '.*the resulting function has a non-default parameter '
-        "'c' that follows a default parameter 'b'.*"):
-      arg_factory.CallableWithDefaultFactories(posonly_fn, b=list)
-
-  def test_default_factory_for(self):
-
-    @arg_factory.default_factory_for(seq=list)
-    def append(elt, seq: List[Any]):
+  def test_supply_defaults(self):
+    @arg_factory.supply_defaults
+    def append(elt, seq: List[Any] = arg_factory.default_factory(list)):
       """Docstring."""
       seq.append(elt)
       return seq
@@ -403,16 +388,10 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertEqual(append.__qualname__, append.__wrapped__.__qualname__)  # pytype: disable=attribute-error
     self.assertEqual(append.__module__, append.__wrapped__.__module__)  # pytype: disable=attribute-error
 
-  def test_repr(self):
-    p1 = arg_factory.CallableWithDefaultFactories(sample_fn, arg2=Child)
-    self.assertEqual(
-        repr(p1), '<CallableWithDefaultFactories sample_fn(arg1, '
-        'arg2=<built by: Child()>, kwarg1=0, kwarg2=None)>')
-
   def test_default_for_keyword_only_param(self):
 
-    @arg_factory.default_factory_for(y=list)
-    def f(x, *, y=None):
+    @arg_factory.supply_defaults
+    def f(x, *, y=arg_factory.default_factory(list)):
       return (x, y)
 
     self.assertEqual(f(1), (1, []))
@@ -420,31 +399,52 @@ class DefaultFactoryTest(parameterized.TestCase):
 
   def test_default_for_positional_only_param(self):
 
-    @arg_factory.default_factory_for(y=list)
-    def f(x, y=None, /):
+    @arg_factory.supply_defaults
+    def f(x, y=arg_factory.default_factory(list), /):
       return (x, y)
 
     self.assertEqual(f(1), (1, []))
     self.assertEqual(f(1, 2), (1, 2))
 
-  def test_no_defaults_for_varargs(self):
-    with self.assertRaisesRegex(ValueError,
-                                r'too many values to unpack \(expected 1'):
-      arg_factory.CallableWithDefaultFactories(varargs_fn, list)  # pytype: disable=wrong-arg-count
-
-  def test_no_defaults_for_var_kwargs(self):
-    with self.assertRaisesRegex(ValueError, "'x' is not a parameter for"):
-      arg_factory.CallableWithDefaultFactories(varargs_fn, x=list)
-
-  def test_no_defaults_for_varargs_param(self):
+  def test_supply_defaults_with_no_default_factory(self):
     with self.assertRaisesRegex(
-        ValueError, 'default factory not supported for varargs parameter'):
-      arg_factory.CallableWithDefaultFactories(varargs_fn, args=list)
+        ValueError, 'expected at least one argument to have'
+    ):
+      arg_factory.supply_defaults(lambda x, y: (x, y))
 
-  def test_no_defaults_for_var_kwargs_param(self):
-    with self.assertRaisesRegex(
-        ValueError, 'default factory not supported for varkwargs parameter'):
-      arg_factory.CallableWithDefaultFactories(varargs_fn, kwargs=list)
+  def test_missing_decorator_error(self):
+    expected_error = (
+        r'arg_factory\.default_factory\(.*\) does not support.*\n.*\nDid '
+        r'you forget to apply the `@arg_factory\.supply_defaults` decorator\?'
+    )
+
+    def f(x, lst=arg_factory.default_factory(list)):
+      lst.append(x)
+      return lst
+
+    def g(x, noise=arg_factory.default_factory(random.random)):
+      return x * x + noise
+
+    with self.assertRaisesRegex(ValueError, expected_error):
+      f(5)
+    with self.assertRaisesRegex(ValueError, expected_error):
+      g(5)
+
+  def test_default_factory_type_override(self):
+    # Make sure we don't get a pytype annotation-type-mismatch error.
+    @arg_factory.supply_defaults
+    def f(x: List[Any] = arg_factory.default_factory(list)):
+      return x
+
+    self.assertEqual(f(), [])
+
+  def test_arg_factory_type_override(self):
+    # Make sure we don't get a pytype annotation-type-mismatch error.
+    @arg_factory.supply_defaults
+    def f(x: List[Any] = arg_factory.ArgFactory(list)):
+      return x
+
+    self.assertEqual(f(), [])
 
 
 if __name__ == '__main__':
