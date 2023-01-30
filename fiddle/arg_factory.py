@@ -154,12 +154,12 @@ def partialmethod(*args, **kwargs):
       _InvokeArgFactoryWrapper(func), *args, **kwargs)
 
 
-def _raise_unsupported_op_error(factory, op_type):
+def _raise_unsupported_op_error(factory, op_type, error_type=ValueError):
   """Raises a ValueError for an ArgFactory operation that is not supported."""
   name = getattr(
       factory, '__qualname__', getattr(factory, '__name__', repr(factory))
   )
-  raise ValueError(
+  raise error_type(
       f'arg_factory.default_factory({name}) does not support {op_type}.\n'
       '`arg_factory.default_factory(...)` should only be used as a default '
       'value for a function wrapped with `arg_factory.supply_defaults`; or as '
@@ -192,14 +192,14 @@ class ArgFactory:
 
   # Type overload to make sure pytype is happy for expressions such as
   # `def fn(x: list = ArgFactory(list)): ...`, where the actual return type
-  # or `ArgFactory(list)` is `ArgFactory`, but the declared type is `list`.
+  # of `ArgFactory(list)` is `ArgFactory`, but the declared type is `list`.
   # (Without the overload, we'd get an annotation-type-mismatch error.)
   @overload
   def __new__(cls, factory: Callable[..., T]) -> T:
     ...
 
-  def __new__(cls, factory: Callable[..., Any]):
-    del factory  # Unused
+  def __new__(cls, *args, **kwargs):
+    del args, kwargs  # Unused
     return super().__new__(cls)
 
   def __init__(self, factory: Callable[..., Any]):
@@ -215,6 +215,12 @@ class ArgFactory:
     name = getattr(self._factory, '__qualname__',
                    getattr(self._factory, '__name__', repr(self._factory)))
     return f'<built by: {name}()>'
+
+  def __eq__(self, other):
+    return isinstance(other, ArgFactory) and self._factory == other._factory
+
+  def __hash__(self):
+    return hash(self._factory)
 
   # The following overrides are intended to provide useful error messages if
   # the user uses `default_factory` but forgets to use the `@supply_defaults`
@@ -295,7 +301,11 @@ class ArgFactory:
   __delitem__ = _unsupported('delitem')
 
   def __getattr__(self, name):
-    _raise_unsupported_op_error(self._factory, f'the attribute {name}')
+    # self._factory may not exist yet when handling copy.deepcopy.
+    factory = Ellipsis if name == '_factory' else self._factory
+    _raise_unsupported_op_error(
+        factory, f'the attribute {name}', AttributeError
+    )
 
   def __setattr__(self, name, value):
     _raise_unsupported_op_error(self._factory, 'setting attributes')
