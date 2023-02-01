@@ -26,6 +26,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 import fiddle as fdl
+from fiddle import arg_factory
 from fiddle.experimental import auto_config
 from fiddle.experimental import auto_config_policy
 from fiddle.experimental import autobuilders as ab
@@ -111,6 +112,90 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       return functools.partial(basic_fn, 1, 'kwarg')
 
     self.assertEqual(expected_config, test_fn_config.as_buildable())
+
+  def test_nested_functools_partial(self):
+    expected_config = fdl.Partial(fn_with_kwargs, a=1, b=2)
+
+    @auto_config.auto_config
+    def test_fn_config():
+      return functools.partial(functools.partial(fn_with_kwargs, a=1), b=2)
+
+    self.assertEqual(expected_config, test_fn_config.as_buildable())
+    self.assertEqual(test_fn_config()(), {'kwargs': {'a': 1, 'b': 2}})
+    self.assertEqual(
+        fdl.build(test_fn_config.as_buildable())(), {'kwargs': {'a': 1, 'b': 2}}
+    )
+
+  def test_nested_functools_partial_unsupported_positional_args(self):
+    @auto_config.auto_config
+    def test_fn_config():
+      return functools.partial(functools.partial(SampleClass, 1), 2)
+
+    with self.assertRaisesRegex(
+        ValueError, 'chained.*partial.*calls.*only.*keyword'
+    ):
+      test_fn_config.as_buildable()
+
+  def test_create_basic_arg_factory(self):
+    expected_config = fdl.Partial(
+        basic_fn, fdl.ArgFactory(fn_with_kwargs, a='b')
+    )
+
+    @auto_config.auto_config
+    def test_fn_config():
+      return arg_factory.partial(
+          basic_fn, functools.partial(fn_with_kwargs, a='b')
+      )
+
+    self.assertEqual(expected_config, test_fn_config.as_buildable())
+
+  def test_arg_factory_counter(self):
+    counter = {'count': 0}
+
+    def count():
+      counter['count'] += 1
+      return counter['count']
+
+    @auto_config.auto_config
+    def test_fn_config():
+      return arg_factory.partial(basic_fn, count)
+
+    py_callable = test_fn_config()
+    self.assertEqual(py_callable(), {'arg': 1, 'kwarg': 'test'})
+    self.assertEqual(py_callable(), {'arg': 2, 'kwarg': 'test'})
+    self.assertEqual(py_callable(), {'arg': 3, 'kwarg': 'test'})
+    built_from_config = fdl.build(test_fn_config.as_buildable())
+    self.assertEqual(built_from_config(), {'arg': 4, 'kwarg': 'test'})
+    self.assertEqual(built_from_config(), {'arg': 5, 'kwarg': 'test'})
+    self.assertEqual(built_from_config(), {'arg': 6, 'kwarg': 'test'})
+
+  def test_arg_factory_functools_partial_alternation(self):
+    expected_config = fdl.Partial(
+        fn_with_kwargs, a=fdl.Config(basic_fn, 1), b=fdl.ArgFactory(basic_fn, 2)
+    )
+
+    @auto_config.auto_config
+    def test_fn_config_1():
+      return arg_factory.partial(
+          functools.partial(
+              fn_with_kwargs,
+              a=basic_fn(1),
+          ),
+          b=functools.partial(basic_fn, 2),
+      )
+
+    @auto_config.auto_config
+    def test_fn_config_2():
+      return functools.partial(
+          arg_factory.partial(
+              fn_with_kwargs,
+              b=functools.partial(basic_fn, 2),
+          ),
+          a=basic_fn(1),
+      )
+
+    self.assertEqual(expected_config, test_fn_config_1.as_buildable())
+    self.assertEqual(expected_config, test_fn_config_2.as_buildable())
 
   def test_create_config_with_args(self):
     expected_config = fdl.Config(SampleClass, 'positional', arg2='default')
@@ -818,6 +903,26 @@ class AutoUnconfigTest(absltest.TestCase):
     expected = fdl.Config(SampleClass, arg1=fdl.Config(simple, 42), arg2=5)
 
     self.assertEqual(expected, parent.as_buildable())
+
+  def test_arg_factory_counter(self):
+    counter = {'count': 0}
+
+    def count():
+      counter['count'] += 1
+      return counter['count']
+
+    @auto_config.auto_unconfig
+    def test_fn_config():
+      return fdl.Partial(basic_fn, fdl.ArgFactory(count))
+
+    py_callable = test_fn_config()
+    self.assertEqual(py_callable(), {'arg': 1, 'kwarg': 'test'})
+    self.assertEqual(py_callable(), {'arg': 2, 'kwarg': 'test'})
+    self.assertEqual(py_callable(), {'arg': 3, 'kwarg': 'test'})
+    built_from_config = fdl.build(test_fn_config.as_buildable())
+    self.assertEqual(built_from_config(), {'arg': 4, 'kwarg': 'test'})
+    self.assertEqual(built_from_config(), {'arg': 5, 'kwarg': 'test'})
+    self.assertEqual(built_from_config(), {'arg': 6, 'kwarg': 'test'})
 
   def test_python_execution(self):
 

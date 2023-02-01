@@ -32,6 +32,7 @@ import textwrap
 import types
 from typing import Any, Callable, cast, Optional
 
+from fiddle import arg_factory
 from fiddle import building
 from fiddle import config
 from fiddle._src import mutate_buildable
@@ -381,6 +382,75 @@ def _make_closure_cell(contents):
     return cell_type(contents)
 
 
+def _convert_callable_to_fiddle_arg_factory(arg):
+  """Converts an argument of an arg_factory partial() to Fiddle buildables.
+
+  In normal Python, one expresses arg factories like,
+
+  my_fn = arg_factory.partial(fn, foo=foo_factory, bar=bar_factory)
+
+  where `foo_factory` produces a `foo` and `bar_factory` produces a `bar`. These
+  are called each time `my_fn` is called.
+
+  The Fiddle configuration for `my_fn`, on the other hand, looks like,
+
+  my_fn_config = fdl.Partial(fn, foo=fdl.ArgFactory(foo_factory),
+                             bar=fdl.ArgFactory(bar_factory))
+
+  Therefore, we need to wrap `foo_factory` and `bar_factory` in
+  `config.ArgFactory`. Or, if they are already callable sub-configs, then we
+  wrap them in ArgFactory.
+
+  If `foo_factory` or `bar_factory` is not a callable or fdl.Partial, then we
+  raise an error. It's techincally possible to pass `foo_factory` as a
+  fdl.Config object that, when called, returns another fucntion, but this is
+  most likely a mistake in configuration, so we don't allow it.
+
+  Args:
+    arg: Intermediate value passed to `arg_factory.partial`.
+
+  Returns:
+    ArgFactory version of a configuration or callable.
+  """
+  if isinstance(arg, config.Partial):
+    return config.cast(config.ArgFactory, arg)
+  elif callable(arg):
+    return config.ArgFactory(arg)
+  else:
+    raise ValueError(
+        "Couldn't figure out how to handle arg_factory argument; please "
+        f'bind any constant args with a nested functools.partial. Arg: {arg!r}'
+    )
+
+
+def _make_partial(buildable_or_callable, *args, **kwargs):
+  """Makes a fdl Partial, but calling appropriate APIs if casting is required.
+
+  Args:
+    buildable_or_callable: Callable or existing configuration object to update.
+    *args: Positional arguments, only supported when `config_or_callable` is a
+      Partial already.
+    **kwargs: Keyword arguments.
+
+  Returns:
+    New callable.
+  """
+  if isinstance(buildable_or_callable, config.Partial):
+    if args:
+      # Note: this can cause an issue even in when not chained, if the built
+      # functools.partial object is called with arguments. We may later choose
+      # to raise exceptions in those cases. For this case however, it's hard to
+      # define any reasonable behavior, so we always error.
+      raise ValueError(
+          'For chained functools.partial calls inside auto_config, e.g. '
+          'functools.partial(functools.partial(foo, ...), ...), only keyword '
+          f'arguments can be supplied to the outer call. Got: {args!r}'
+      )
+    return config.copy_with(buildable_or_callable, **kwargs)
+  else:
+    return config.Partial(buildable_or_callable, *args, **kwargs)
+
+
 def auto_config(
     fn=None,
     *,
@@ -507,7 +577,16 @@ def auto_config(
       return fn_or_cls.as_buildable(*args, **kwargs)
 
     if fn_or_cls is functools.partial:
-      return config.Partial(args[0], *args[1:], **kwargs)
+      return _make_partial(args[0], *args[1:], **kwargs)
+    elif fn_or_cls is arg_factory.partial:
+      return _make_partial(
+          args[0],
+          *[_convert_callable_to_fiddle_arg_factory(arg) for arg in args[1:]],
+          **{
+              name: _convert_callable_to_fiddle_arg_factory(arg)
+              for name, arg in kwargs.items()
+          },
+      )
 
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
