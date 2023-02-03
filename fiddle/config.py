@@ -166,10 +166,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if hasattr(fn_or_cls, '__fiddle_init__'):
       fn_or_cls.__fiddle_init__(self)
 
-    if dataclasses.is_dataclass(self.__fn_or_cls__):
-      fields = dataclasses.fields(self.__fn_or_cls__)
-      _add_dataclass_tags(self, fields)
-      _expand_dataclass_default_factories(self, fields, arguments)
+    _add_dataclass_tags(self)
+    _expand_default_factories(self, arguments)
 
     for name, value in arguments.items():
       setattr(self, name, value)
@@ -482,7 +480,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
 
 
-def _add_dataclass_tags(buildable, fields):
+def _add_dataclass_tags(buildable):
   """Adds tags to arguments as indicated by dataclass fields.
 
   If any dataclass field in ``fields`` has metadata indicating that the field
@@ -491,17 +489,17 @@ def _add_dataclass_tags(buildable, fields):
 
   Args:
     buildable: The buildable that should be updated.
-    fields: The dataclass fields for buildable.__fn_or_cls__.
   """
-  for field in fields:
-    metadata = field_metadata.field_metadata(field)
-    if metadata:
-      for tag in metadata.tags:
-        add_tag(buildable, field.name, tag)
+  if dataclasses.is_dataclass(buildable.__fn_or_cls__):
+    for field in dataclasses.fields(buildable.__fn_or_cls__):
+      metadata = field_metadata.field_metadata(field)
+      if metadata:
+        for tag in metadata.tags:
+          add_tag(buildable, field.name, tag)
 
 
-def _expand_dataclass_default_factories(buildable, fields, arguments):
-  """Expand default-valued args for dataclass fields with default-factories.
+def _expand_default_factories(buildable, arguments):
+  """Expand default-valued args with default-factories.
 
   If an argument has no value supplied when initializing a dataclass, but the
   corresponding field has a default factory, then that factory will be used to
@@ -599,7 +597,6 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
 
   Args:
     buildable: The buildable that should be updated.
-    fields: The dataclass fields for ``buildable.__fn_or_cls__``.
     arguments: The arguments that are being used to construct this
       ``Buildable``. If any argument has no value, and the corresponding field
       has a default factory, then the argument will be expanded into an
@@ -624,13 +621,30 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
     else:
       return False
 
-  for field in fields:
-    if field.name in arguments:
-      continue  # We have an explicit value for this argument.
-    metadata = field_metadata.field_metadata(field)
-    if not (metadata and metadata.buildable_initializer):
-      continue
-    field_config = metadata.buildable_initializer()
+  factory_field_configs = {}
+  if dataclasses.is_dataclass(buildable.__fn_or_cls__):
+    fields = dataclasses.fields(buildable.__fn_or_cls__)
+    for field in fields:
+      if field.name not in arguments:
+        metadata = field_metadata.field_metadata(field)
+        if metadata and metadata.buildable_initializer:
+          factory_field_configs[field.name] = metadata.buildable_initializer()
+
+  else:
+    for param in buildable.__signature__.parameters.values():
+      if isinstance(param.default, arg_factory.ArgFactory):
+        factory = param.default.factory
+        # We don't use `auto_config.is_auto_config` here to avoid introducing
+        # a circular dependency:
+        if hasattr(factory, 'as_buildable'):
+          factory_field_configs[param.name] = factory.as_buildable()
+        else:
+          # Should we make the field configurable if it's not
+          # auto_config?  Possibly use a type annotation Annotated tag to let
+          # fiddle know whether it should be expanded?
+          factory_field_configs[param.name] = Config(factory)
+
+  for field_name, field_config in factory_field_configs.items():
     if daglish.MemoizedTraversal.run(
         contains_partial_that_contains_config, field_config
     ):
@@ -638,7 +652,7 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
           buildable.__fn_or_cls__, '__qualname__', repr(buildable.__fn_or_cls__)
       )
       raise ValueError(
-          f'Unable to safely replace {cls_name}.{field.name} with '
+          f'Unable to safely replace {cls_name}.{field_name} with '
           'a `fdl.Buildable`, because its default factory contains a '
           '`fdl.Partial` that contains a `fdl.Config`.  This makes it '
           'difficult for Fiddle to describe the correct instance-sharing '
@@ -651,7 +665,7 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
       field_config = daglish.MemoizedTraversal.run(
           convert_to_arg_factory, field_config
       )
-    arguments[field.name] = field_config
+    arguments[field_name] = field_config
 
 
 class Config(Generic[T], Buildable[T]):
@@ -1050,12 +1064,8 @@ def update_callable(
   object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
   buildable.__argument_history__.add_new_value('__fn_or_cls__', new_callable)
 
-  if dataclasses.is_dataclass(buildable.__fn_or_cls__):
-    fields = dataclasses.fields(buildable.__fn_or_cls__)
-    _add_dataclass_tags(buildable, fields)
-    _expand_dataclass_default_factories(
-        buildable, fields, buildable.__arguments__
-    )
+  _add_dataclass_tags(buildable)
+  _expand_default_factories(buildable, buildable.__arguments__)
 
 
 def assign(buildable: Buildable, **kwargs):

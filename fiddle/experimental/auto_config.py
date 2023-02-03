@@ -458,6 +458,7 @@ def auto_config(
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
     experimental_config_cls=config.Config,
+    experimental_result_must_contain_buildable: bool = True,
 ) -> Any:  # TODO(saeta): More precise return type.
   """Rewrites the given function to make it generate a ``Config``.
 
@@ -542,6 +543,9 @@ def auto_config(
       this is just ``fdl.Config``, but projects with custom ``Config``
       subclasses can use this to override the default. This is experimental and
       may be removed in the future.
+    experimental_result_must_contain_buildable: If true, then raise an error if
+      `fn.as_buildable` returns a result that does not contain any `Buildable`
+      values -- e.g., if it returns an empty dict.
 
   Returns:
     A wrapped version of ``fn``, but with an additional ``as_buildable``
@@ -656,17 +660,23 @@ def auto_config(
 
     # Finally we wrap the rewritten function to perform additional error
     # checking and enforce that the output contains a `fdl.Buildable`.
-    @functools.wraps(auto_config_fn)
-    def as_buildable(*args, **kwargs):
-      output = auto_config_fn(*args, **kwargs)  # pylint: disable=not-callable
-      if not _contains_buildable(output):
-        raise TypeError(
-            f'The `auto_config` rewritten version of `{fn.__qualname__}` '
-            f'returned a `{type(output).__name__}`, which is not (or did not '
-            'contain) a `fdl.Buildable`. Please ensure this function returns '
-            'the result of an `auto_config`-eligible call expression, or a '
-            'supported container (list, tuple, dict) containing one.')
-      return output
+    if experimental_result_must_contain_buildable:
+
+      @functools.wraps(auto_config_fn)
+      def as_buildable(*args, **kwargs):
+        output = auto_config_fn(*args, **kwargs)  # pylint: disable=not-callable
+        if not _contains_buildable(output):
+          raise TypeError(
+              f'The `auto_config` rewritten version of `{fn.__qualname__}` '
+              f'returned a `{type(output).__name__}`, which is not (or did not '
+              'contain) a `fdl.Buildable`. Please ensure this function returns '
+              'the result of an `auto_config`-eligible call expression, or a '
+              'supported container (list, tuple, dict) containing one.'
+          )
+        return output
+
+    else:
+      as_buildable = auto_config_fn
 
     if method_type:
       fn = method_type(fn)
