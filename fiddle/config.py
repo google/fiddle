@@ -482,6 +482,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
 
 
+def _get_field_name(field):
+  return field.metadata.get('init_name', field.name)
+
+
 def _add_dataclass_tags(buildable, fields):
   """Adds tags to arguments as indicated by dataclass fields.
 
@@ -497,7 +501,7 @@ def _add_dataclass_tags(buildable, fields):
     metadata = field_metadata.field_metadata(field)
     if metadata:
       for tag in metadata.tags:
-        add_tag(buildable, field.name, tag)
+        add_tag(buildable, _get_field_name(field), tag)
 
 
 def _expand_dataclass_default_factories(buildable, fields, arguments):
@@ -625,7 +629,7 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
       return False
 
   for field in fields:
-    if field.name in arguments:
+    if _get_field_name(field) in arguments:
       continue  # We have an explicit value for this argument.
     metadata = field_metadata.field_metadata(field)
     if not (metadata and metadata.buildable_initializer):
@@ -651,7 +655,7 @@ def _expand_dataclass_default_factories(buildable, fields, arguments):
       field_config = daglish.MemoizedTraversal.run(
           convert_to_arg_factory, field_config
       )
-    arguments[field.name] = field_config
+    arguments[_get_field_name(field)] = field_config
 
 
 class Config(Generic[T], Buildable[T]):
@@ -990,7 +994,7 @@ class ArgFactory(Generic[T], Buildable[T]):
 def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
   """Returns true if <dataclass_type>.<field_name> uses a default_factory."""
   for field in dataclasses.fields(dataclass_type):
-    if field.name == field_name:
+    if _get_field_name(field) == field_name:
       return field.default_factory != dataclasses.MISSING
   return False
 
