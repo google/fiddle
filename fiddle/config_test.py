@@ -29,6 +29,7 @@ from fiddle import arg_factory
 from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import history
+from fiddle.experimental import auto_config
 from fiddle.experimental import daglish_legacy
 
 import pytype_extensions
@@ -1453,6 +1454,75 @@ class ArgFactoryTest(absltest.TestCase):
     # functools.partial to be different even if they have the same function
     # and args.
     self.assertEqual(repr(x), repr(y))
+
+
+class DefaultFactoryTest(absltest.TestCase):
+  """Tests involving arg_factory.default_factory."""
+
+  def test_configurable_factory(self):
+    def zeros(length=2):
+      return [0] * length
+
+    @arg_factory.supply_defaults
+    def fn(
+        x=arg_factory.default_factory(zeros),
+        y=arg_factory.default_factory(dict),
+    ):
+      return (x, y)
+
+    cfg = fdl.Config(fn)
+    expected = fdl.Config(fn, x=fdl.Config(zeros), y=fdl.Config(dict))
+    self.assertEqual(cfg, expected)
+    v1 = fdl.build(cfg)
+    v2 = fdl.build(cfg)
+    self.assertEqual(v1, ([0, 0], {}))
+    self.assertEqual(v2, ([0, 0], {}))
+    self.assertIsNot(v1[0], v2[0])
+    self.assertIsNot(v1[1], v2[1])
+
+    cfg.x.length = 3
+    cfg.y.foo = 'bar'
+    v3 = fdl.build(cfg)
+    self.assertEqual(v3, ([0, 0, 0], {'foo': 'bar'}))
+
+  def test_autoconfig_factory(self):
+    @auto_config.auto_config
+    def make_x():
+      return DataclassParent(DataclassChild(5))
+
+    @arg_factory.supply_defaults
+    def fn(x=arg_factory.default_factory(make_x)):
+      return x
+
+    cfg = fdl.Config(fn)
+    expected = fdl.Config(
+        fn, fdl.Config(DataclassParent, fdl.Config(DataclassChild, 5))
+    )
+    self.assertEqual(cfg, expected)
+    v1 = fdl.build(cfg)
+    v2 = fdl.build(cfg)
+    self.assertEqual(v1, DataclassParent(DataclassChild(5)))
+    self.assertEqual(v2, DataclassParent(DataclassChild(5)))
+    self.assertIsNot(v1, v2)
+    self.assertIsNot(v1.child, v2.child)
+
+  def test_autoconfig_dict_factory(self):
+    @auto_config.auto_config(experimental_result_must_contain_buildable=False)
+    def make_dict():
+      return {}
+
+    @arg_factory.supply_defaults
+    def fn(x=arg_factory.default_factory(make_dict)):
+      return x
+
+    cfg = fdl.Config(fn)
+    expected = fdl.Config(fn, {})
+    self.assertEqual(cfg, expected)
+    v1 = fdl.build(cfg)
+    v2 = fdl.build(cfg)
+    self.assertEqual(v1, {})
+    self.assertEqual(v2, {})
+    self.assertIsNot(v1, v2)
 
 
 if __name__ == '__main__':
