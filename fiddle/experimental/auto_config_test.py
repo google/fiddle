@@ -866,6 +866,22 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertDagEqual(x0.as_buildable(10), fdl.Config(basic_fn, 20))
     self.assertDagEqual(x1.as_buildable(10), fdl.Config(basic_fn, 30))
 
+  def test_experimental_result_must_contain_buildable(self):
+    @auto_config.auto_config(
+        experimental_result_must_contain_buildable=False,
+        experimental_allow_control_flow=True,
+    )
+    def make_dict(keys):
+      # This function's result may or may not contain any buildable, depending
+      # on the value of `keys`.
+      return {key: basic_fn(key) for key in keys}
+
+    cfg = make_dict.as_buildable(['foo'])
+    self.assertEqual(fdl.build(cfg), {'foo': basic_fn('foo')})
+
+    cfg = make_dict.as_buildable([])
+    self.assertEqual(fdl.build(cfg), {})
+
 
 class AutoUnconfigTest(absltest.TestCase):
 
