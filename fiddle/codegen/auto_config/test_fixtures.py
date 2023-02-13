@@ -33,7 +33,7 @@ def simple_ir() -> code_ir.CodegenTask:
   """
   config = fdl.Config(foo, x=4)
   fn = code_ir.FixtureFunction(
-      name=code_ir.Name("simple_ir_fixture"),
+      name=code_ir.Name("simple_ir_fixture", is_generated=False),
       parameters=[],
       variables=[],
       output_value=config,
@@ -41,7 +41,7 @@ def simple_ir() -> code_ir.CodegenTask:
   call_instance = code_ir.CallInstance(
       fn, parent=None, children={}, parameter_values={}, output_value=config
   )
-  return code_ir.CodegenTask(config, call_instance)
+  return code_ir.CodegenTask(config, top_level_call=call_instance)
 
 
 def simple_shared_variable_ir() -> code_ir.CodegenTask:
@@ -69,7 +69,7 @@ def simple_shared_variable_ir() -> code_ir.CodegenTask:
   call_instance = code_ir.CallInstance(
       fn, parent=None, children={}, parameter_values={}, output_value=config
   )
-  return code_ir.CodegenTask(config, call_instance)
+  return code_ir.CodegenTask(config, top_level_call=call_instance)
 
 
 def parameters_for_testcases():

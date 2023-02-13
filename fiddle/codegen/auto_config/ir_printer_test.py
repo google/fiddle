@@ -72,7 +72,7 @@ class IrPrinterTest(absltest.TestCase):
 
   def test_format_simple_ir(self):
     task = test_fixtures.simple_ir()
-    code = "\n".join(ir_printer.format_fn(task.top_level_fn.fn))
+    code = "\n".join(ir_printer.format_fn(task.top_level_call.fn))
     self.assertEqual(
         code,
         textwrap.dedent(
@@ -85,7 +85,7 @@ class IrPrinterTest(absltest.TestCase):
 
   def test_format_simple_shared_variable_ir(self):
     task = test_fixtures.simple_shared_variable_ir()
-    code = "\n".join(ir_printer.format_fn(task.top_level_fn.fn))
+    code = "\n".join(ir_printer.format_fn(task.top_level_call.fn))
     self.assertEqual(
         code,
         textwrap.dedent(

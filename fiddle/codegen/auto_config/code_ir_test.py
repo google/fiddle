@@ -65,7 +65,7 @@ class CodegenNodeTest(parameterized.TestCase):
 
   @parameterized.named_parameters(test_fixtures.parameters_for_testcases())
   def test_smoke_traverse_fixtures(self, task: code_ir.CodegenTask):
-    functions = task.top_level_fn.all_fixture_functions()
+    functions = task.top_level_call.all_fixture_functions()
     self.assertNotEmpty(functions)
     for fn in functions:
       list(daglish.iterate(fn))

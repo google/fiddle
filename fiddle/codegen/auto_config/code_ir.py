@@ -27,6 +27,8 @@ from typing import Any, Dict, List, Optional, Type
 
 from fiddle import arg_factory
 from fiddle import daglish
+from fiddle.codegen import import_manager as import_manager_lib
+from fiddle.codegen import namespace as namespace_lib
 
 
 @dataclasses.dataclass
@@ -97,9 +99,29 @@ class VariableReference(CodegenNode):
 
 
 @dataclasses.dataclass
+class SymbolReference(CodegenNode):
+  """Reference to a library symbol, like MyEncoderLayer."""
+
+  expression: str
+
+
+@dataclasses.dataclass
 class Call(CodegenNode):
   name: Name
   arg_expressions: Dict[Name, Any]  # Value that can involve VariableReference's
+
+
+@dataclasses.dataclass
+class SymbolCall(CodegenNode):
+  """Reference to a call of a library symbol, like MyEncoderLayer()."""
+
+  symbol_expression: str
+  arg_expressions: Dict[str, Any]  # Value that can involve VariableReference's
+
+
+@dataclasses.dataclass
+class FunctoolsPartialCall(SymbolCall):
+  pass
 
 
 @dataclasses.dataclass
@@ -125,6 +147,12 @@ class FixtureFunction(CodegenNode):
   def __hash__(self):
     return id(self)
 
+  def replace_with(self, other: FixtureFunction) -> None:
+    self.name = other.name
+    self.parameters = other.parameters
+    self.variables = other.variables
+    self.output_value = other.output_value
+
 
 @dataclasses.dataclass
 class CallInstance:
@@ -149,8 +177,8 @@ class CallInstance:
     result = [self]
     while current.parent is not None:
       current = current.parent
-      result.insert(0, current)
-    return result
+      result.append(current)
+    return list(reversed(result))
 
   @arg_factory.supply_defaults
   def all_fixture_functions(
@@ -162,6 +190,10 @@ class CallInstance:
     return result
 
 
+def _init_import_manager() -> import_manager_lib.ImportManager:
+  return import_manager_lib.ImportManager(namespace=namespace_lib.Namespace())
+
+
 @dataclasses.dataclass
 class CodegenTask:
   """Encapsulates an entire task of code generation.
@@ -170,4 +202,11 @@ class CodegenTask:
   """
 
   original_config: Any
-  top_level_fn: Optional[CallInstance] = None
+  top_level_call: CallInstance
+  import_manager: import_manager_lib.ImportManager = dataclasses.field(
+      default_factory=_init_import_manager
+  )
+
+  @property
+  def global_namespace(self) -> namespace_lib.Namespace:
+    return self.import_manager.namespace
