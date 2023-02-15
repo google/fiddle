@@ -117,7 +117,9 @@ class SymbolCall(CodegenNode):
   """Reference to a call of a library symbol, like MyEncoderLayer()."""
 
   symbol_expression: str
-  arg_expressions: Dict[str, Any]  # Value that can involve VariableReference's
+  # Values for args can involve VariableReference's, Calls, etc.
+  positional_arg_expressions: List[Any]
+  arg_expressions: Dict[str, Any]
 
 
 @dataclasses.dataclass

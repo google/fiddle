@@ -18,6 +18,7 @@
 from absl.testing import absltest
 from fiddle.codegen.auto_config import code_ir
 from fiddle.codegen.auto_config import init_task
+from fiddle.codegen.auto_config import ir_to_cst
 from fiddle.codegen.auto_config import make_symbolic_references
 from fiddle.codegen.auto_config import test_fixtures
 
@@ -58,10 +59,34 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
             variables=[],
             output_value=code_ir.SymbolCall(
                 symbol_expression='test_fixtures.foo',
+                positional_arg_expressions=[],
                 arg_expressions={'x': 4},
             ),
         ),
     )
+
+  def test_replaces_arg_factory_partial(self):
+    # This test goes from auto_config to a config object and back again.
+
+    config = test_fixtures.auto_config_arg_factory_fn.as_buildable()
+    task = init_task.init_task(config=config)
+    make_symbolic_references.import_symbols(task)
+    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    code = ir_to_cst.code_for_task(task).code
+
+    expected = """
+    from fiddle import arg_factory
+    from fiddle.codegen.auto_config import test_fixtures
+    from fiddle.experimental import auto_config
+    import functools
+
+
+    @auto_config.auto_config
+    def config_fixture():
+        return functools.partial(arg_factory.partial(test_fixtures.SharedType,
+            x=functools.partial(test_fixtures.count, increment=3)), z=4.7)
+    """
+    self.assertEqual(code.split(), expected.split(), msg=code)
 
 
 if __name__ == '__main__':

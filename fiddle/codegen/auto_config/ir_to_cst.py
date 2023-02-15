@@ -63,6 +63,9 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
     elif isinstance(value, code_ir.SymbolCall):
       attr = daglish.Attr("arg_expressions")
       args = []
+      for i, arg_value in enumerate(value.positional_arg_expressions):
+        arg_value = state.call(arg_value, attr, daglish.Key(i))
+        args.append(cst.Arg(arg_value))
       for arg_name, arg_value in value.arg_expressions.items():
         arg_value = state.call(arg_value, attr, daglish.Key(arg_name))
         args.append(
@@ -79,13 +82,20 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
           cst.parse_expression(value.symbol_expression),
           args=args,
       )
+    elif isinstance(value, code_ir.SymbolReference):
+      return cst.parse_expression(value.expression)
     elif state.is_traversable(value):
       raise NotImplementedError(
           f"Expression generation is not implemented for {value!r}"
       )
     else:
       # Convert primitives with existing logic.
-      return py_val_to_cst_converter.convert_py_val_to_cst(value)
+      try:
+        return py_val_to_cst_converter.convert_py_val_to_cst(value)
+      except:
+        print(f"\n\nERROR CONVERTING: {value!r}")
+        print(f"\n\nTYPE: {type(value)}")
+        raise
 
   return daglish.MemoizedTraversal.run(traverse, expr)
 

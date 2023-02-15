@@ -16,14 +16,42 @@
 """Some manually-generated code intermediate representations for testing."""
 
 import dataclasses
+import functools
 
 import fiddle as fdl
+from fiddle import arg_factory
 from fiddle.codegen.auto_config import code_ir
 from fiddle.codegen.auto_config import init_task
+from fiddle.experimental import auto_config
 
 
 def foo(x):
   return x
+
+
+@dataclasses.dataclass
+class SharedType:
+  x: int
+  z: float
+
+
+global_counter = {"count": 0}
+
+
+def count(increment: int):
+  global_counter["count"] += increment
+  return global_counter["count"]
+
+
+@auto_config.auto_config
+def auto_config_arg_factory_fn():
+  return arg_factory.partial(
+      functools.partial(
+          SharedType,
+          z=4.7,
+      ),
+      x=functools.partial(count, increment=3),
+  )
 
 
 def simple_ir() -> code_ir.CodegenTask:
@@ -73,12 +101,6 @@ def simple_shared_variable_ir() -> code_ir.CodegenTask:
       fn, parent=None, children={}, parameter_values={}, output_value=config
   )
   return code_ir.CodegenTask(config, top_level_call=call_instance)
-
-
-@dataclasses.dataclass
-class SharedType:
-  x: int
-  z: float
 
 
 def unprocessed_shared_config() -> code_ir.CodegenTask:
