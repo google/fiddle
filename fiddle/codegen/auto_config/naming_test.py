@@ -41,6 +41,10 @@ def new_path_first_namer():
   return naming.PathFirstNamer(namespace_lib.Namespace())
 
 
+def new_type_first_namer():
+  return naming.TypeFirstNamer(namespace_lib.Namespace())
+
+
 class NamingTest(absltest.TestCase):
 
   def test_suffix_is_short_for_large_configs(self):
@@ -135,6 +139,93 @@ class PathFirstNamerTest(absltest.TestCase):
           daglish.Index(0),
           daglish.Key(1),
       )])
+    with self.assertRaises(ValueError):
+      namer.name_for(config[0], [(daglish.Index(0),)])
+    self.assertEqual(namer.name_for(config, [()]), "root")
+
+
+class TypeFirstNamerTest(absltest.TestCase):
+
+  def test_name_for_doesnt_add_root_unnecessarily(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    namer = new_type_first_namer()
+    self.assertEqual(namer.name_for(config, []), "fake_encoder_decoder")
+    # The logic that adds "root" is kind of internal, but if it had been added,
+    # then that name would have been preferred to the "_2" suffixed version.
+    # See below for a case that has multiple candidate names and falls back on
+    # them before adding suffixes.
+    self.assertEqual(namer.name_for(config, []), "fake_encoder_decoder_2")
+
+  def test_name_for_falls_back_to_another_path(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    namer = new_type_first_namer()
+    paths = [
+        (daglish.Attr("foo"), daglish.Attr("Bar")),
+        (daglish.Attr("baz"), daglish.Attr("qux")),
+    ]
+    # N.B. CHANGE FROM PATH FIRST: This will try the `fake_encoder_decoder` name
+    # first.
+    self.assertEqual(namer.name_for(config, paths), "fake_encoder_decoder")
+    self.assertEqual(namer.name_for(config, paths), "bar")
+    self.assertEqual(namer.name_for(config, paths), "qux")
+
+    # When we run out of candidates, the first/preferred candidate gets suffixes
+    # appended.
+    self.assertEqual(namer.name_for(config, paths), "fake_encoder_decoder_2")
+
+  def test_name_for_falls_back_to_root(self):
+    config = [{"hi": 3}]
+    namer = new_type_first_namer()
+    self.assertEqual(namer.name_for(config, []), "root")
+    self.assertEqual(namer.name_for(config, []), "root_2")
+
+  def test_name_for_encoder(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    namer = new_type_first_namer()
+    name = namer.name_for(
+        config.encoder.embedders["tokens"],
+        [(
+            daglish.Attr("encoder"),
+            daglish.Attr("embedders"),
+            daglish.Key("tokens"),
+        )],
+    )
+    # N.B. Change from path-first namer.
+    self.assertEqual(name, "token_embedder")
+
+  def test_can_get_names_for_every_element(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    namer = new_type_first_namer()
+    name_set = set()
+    num_values = 0
+    for value, path in daglish.iterate(config):
+      name_set.add(namer.name_for(value, [path]))
+      num_values += 1
+    self.assertLen(name_set, num_values)
+
+  def test_names_as_documented_example_1(self):
+    config = fdl.Config(Foo, bar={"qux": fdl.Config(Qux)})
+    namer = new_type_first_namer()
+    names = {
+        daglish.path_str(path): namer.name_for(value, [path])
+        for value, path in daglish.iterate(config)
+    }
+    # N.B. Change from path-first namer: .bar['qux'] is 'qux' not 'bar_qux'.
+    self.assertDictEqual(
+        names, {"": "foo", ".bar": "bar", ".bar['qux']": "qux"}
+    )
+
+  def test_names_as_documented_example_2(self):
+    config = [{1: "hi"}]
+    namer = new_type_first_namer()
+    with self.assertRaises(ValueError):
+      namer.name_for(
+          config[0][1],
+          [(
+              daglish.Index(0),
+              daglish.Key(1),
+          )],
+      )
     with self.assertRaises(ValueError):
       namer.name_for(config[0], [(daglish.Index(0),)])
     self.assertEqual(namer.name_for(config, [()]), "root")

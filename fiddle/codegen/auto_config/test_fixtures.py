@@ -15,8 +15,11 @@
 
 """Some manually-generated code intermediate representations for testing."""
 
+import dataclasses
+
 import fiddle as fdl
 from fiddle.codegen.auto_config import code_ir
+from fiddle.codegen.auto_config import init_task
 
 
 def foo(x):
@@ -70,6 +73,30 @@ def simple_shared_variable_ir() -> code_ir.CodegenTask:
       fn, parent=None, children={}, parameter_values={}, output_value=config
   )
   return code_ir.CodegenTask(config, top_level_call=call_instance)
+
+
+@dataclasses.dataclass
+class SharedType:
+  x: int
+  z: float
+
+
+def unprocessed_shared_config() -> code_ir.CodegenTask:
+  """Returns a single fixture bound to a config.
+
+  There's no exact code representation of this, before we extract shared
+  variables.
+
+  def unprocessed_shared_config_fixture():
+    # *actually* a shared value.
+    return [SharedType(foo(3), 7.0), SharedType(foo(3), 7.0)]
+  """
+  foo_call = fdl.Config(foo, 3)
+  shared = fdl.Config(SharedType, foo_call, 7.0)
+  config = [shared, shared]
+  return init_task.init_task(
+      config, top_level_fixture_name="unprocessed_shared_config_fixture"
+  )
 
 
 def parameters_for_testcases():

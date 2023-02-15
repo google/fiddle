@@ -34,6 +34,11 @@ class Namer(metaclass=abc.ABCMeta):
 
   def name_from_candidates(self, candidates: List[str]) -> str:
 
+    # Go through all candidates, and see if one can be used without having to
+    # append "_2" kinds of suffixes to it. If so, add and return that one.
+    # TODO(b/269464743): Make this more customizable. Sometimes, the user might
+    # prefer e.g. path names to type names, and would rather have some suffixes
+    # than a worse base name.
     for candidate in candidates:
       if candidate not in self.namespace:
         return self.namespace.add(candidate)
@@ -123,4 +128,50 @@ class PathFirstNamer(Namer):
       raise ValueError(
           f"Could not generate any candidate names for {value!r} with "
           f"paths {paths!r}")
+    return self.name_from_candidates(candidates)
+
+
+@dataclasses.dataclass
+class TypeFirstNamer(Namer):
+  """Namer that chooses type names over path names.
+
+  See PathFirstNamer
+
+  Example 2:
+    Config: [{1: "hi"}]
+    An exception will be thrown when trying to get a name for `config[0]` and
+    `config[0][1]`, and `config` will be named "root".
+  """
+
+  def name_for(self, value: Any, paths: List[daglish.Path]) -> str:
+    """See base class."""
+    candidates = []
+
+    if isinstance(value, config_lib.Buildable):
+      fn_or_cls = config_lib.get_callable(value)
+      try:
+        cls_name = fn_or_cls.__name__
+      except AttributeError:
+        # This can happen on edge cases where we have
+        # `fdl.Config(some_callable)`, where `some_callable` is an instance of
+        # a class that has a `__call__` method. These cases generally aren't
+        # serializable and certainly against our style guidelines/preferences,
+        # but we still support them in the core API.
+        pass
+      else:
+        candidates.append(_camel_to_snake(cls_name))
+
+    paths = [path for path in paths if path]  # remove empty/root paths
+    for path in paths:
+      name = suffix_first_path(path)
+      if name:
+        candidates.append(name)
+
+    if not candidates and not paths:
+      candidates.append("root")
+    if not candidates:
+      raise ValueError(
+          f"Could not generate any candidate names for {value!r} with "
+          f"paths {paths!r}"
+      )
     return self.name_from_candidates(candidates)

@@ -26,6 +26,7 @@ from typing import Any, List
 import fiddle as fdl
 from fiddle import daglish
 from fiddle.codegen.auto_config import code_ir
+import libcst as cst
 
 # Values from the `typing` module. This probably pulls in too much stuff, but
 # we don't have to be 100% precise in this module, it's just for debug printing.
@@ -119,3 +120,14 @@ def format_fn(fn: code_ir.FixtureFunction) -> List[str]:
     )
   result.append(f"  return {format_expr(fn.output_value)}")
   return result
+
+
+def format_task(task: code_ir.CodegenTask) -> str:
+  """Returns a string representation of a codegen task."""
+  import_lines = cst.Module(body=task.import_manager.sorted_import_lines()).code
+  if import_lines:
+    import_lines += "\n\n"
+  return import_lines + "\n\n".join(
+      "\n".join(format_fn(fn))
+      for fn in task.top_level_call.all_fixture_functions()
+  )
