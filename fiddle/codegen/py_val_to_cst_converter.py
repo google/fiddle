@@ -233,14 +233,14 @@ def kwarg_to_cst(name: str, value: Any) -> cst.Arg:
 def _convert_int(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a constant int to CST."""
   del conversion_fn  # Not used.
-  return cst.Integer(repr(value))
+  return cst.parse_expression(repr(value))
 
 
 @register_py_val_to_cst_converter(float)
 def _convert_float(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a constant float to CST."""
   del conversion_fn  # Not used.
-  return cst.Float(repr(value))
+  return cst.parse_expression(repr(value))
 
 
 @register_py_val_to_cst_converter([bool, type(None)])

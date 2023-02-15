@@ -61,6 +61,8 @@ class PyValToCstConverterTest(parameterized.TestCase):
       # Builtin value types:
       (5, '5'),
       (2.0, '2.0'),
+      (-5, '-5'),
+      (-2.0, '-2.0'),
       (2 + 3j, '(2.0+3.0j)'),
       (3j, '3j'),
       (True, 'True'),
@@ -76,17 +78,20 @@ class PyValToCstConverterTest(parameterized.TestCase):
       (dict(a=8), "{'a': 8}"),
       ({}, '{}'),
       # Nested containers:
-      ([1, (2, {3}), {
-          4: 5,
-          6: [7]
-      }], '[1, (2, {3}), {4: 5, 6: [7]}]'),
+      ([1, (2, {3}), {4: 5, 6: [7]}], '[1, (2, {3}), {4: 5, 6: [7]}]'),
       # Fiddle types:
-      (fdl.Config(SampleNamedTuple,
-                  3), 'fiddle.config.Config(SampleNamedTuple, x=3)'),
-      (fdl.Partial(SampleNamedTuple,
-                   [4]), 'fiddle.config.Partial(SampleNamedTuple, x=[4])'),
-      (fdl.Config(re.match,
-                  'a|b'), "fiddle.config.Config(re.match, pattern='a|b')"),
+      (
+          fdl.Config(SampleNamedTuple, 3),
+          'fiddle.config.Config(SampleNamedTuple, x=3)',
+      ),
+      (
+          fdl.Partial(SampleNamedTuple, [4]),
+          'fiddle.config.Partial(SampleNamedTuple, x=[4])',
+      ),
+      (
+          fdl.Config(re.match, 'a|b'),
+          "fiddle.config.Config(re.match, pattern='a|b')",
+      ),
       (SampleTag.new(123), 'SampleTag.new(123)'),
       # NamedTuples:
       (SampleNamedTuple(1, 2), 'SampleNamedTuple(x=1, y=2)'),
@@ -103,8 +108,10 @@ class PyValToCstConverterTest(parameterized.TestCase):
       (slice, 'slice'),
       # Partials:
       (functools.partial(sample_fn), 'functools.partial(sample_fn)'),
-      (functools.partial(sample_fn, 3,
-                         z=4), 'functools.partial(sample_fn, 3, z=4)'),
+      (
+          functools.partial(sample_fn, 3, z=4),
+          'functools.partial(sample_fn, 3, z=4)',
+      ),
   ])
   def test_convert(self, pyval, expected):
     cst_expr = py_val_to_cst_converter.convert_py_val_to_cst(pyval)
