@@ -99,6 +99,24 @@ def unprocessed_shared_config() -> code_ir.CodegenTask:
   )
 
 
+def unprocessed_two_shared_config() -> code_ir.CodegenTask:
+  """Returns a single fixture bound to a config.
+
+  There's no exact code representation of this, before we extract shared
+  variables.
+
+  def unprocessed_two_shared_fixture():
+    # *actually* shared values.
+    return [SharedType(foo(3), 7.0), SharedType(foo(3), 7.0), foo(3)]
+  """
+  foo_call = fdl.Config(foo, 3)
+  shared = fdl.Config(SharedType, foo_call, 7.0)
+  config = [shared, shared, foo_call]
+  return init_task.init_task(
+      config, top_level_fixture_name="unprocessed_two_shared_fixture"
+  )
+
+
 def parameters_for_testcases():
   """Returns parameters for absl's parameterized test cases."""
   return [

@@ -29,6 +29,7 @@ from fiddle import arg_factory
 from fiddle import daglish
 from fiddle.codegen import import_manager as import_manager_lib
 from fiddle.codegen import namespace as namespace_lib
+from fiddle.experimental import auto_config
 
 
 @dataclasses.dataclass
@@ -206,6 +207,7 @@ class CodegenTask:
   import_manager: import_manager_lib.ImportManager = dataclasses.field(
       default_factory=_init_import_manager
   )
+  auto_config_fn: Any = auto_config.auto_config
 
   @property
   def global_namespace(self) -> namespace_lib.Namespace:

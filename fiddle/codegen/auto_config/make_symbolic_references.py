@@ -21,7 +21,6 @@ from typing import Any
 from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle.codegen.auto_config import code_ir
-from fiddle.experimental import auto_config
 
 
 def is_plain_symbol(value: Any) -> bool:
@@ -36,9 +35,7 @@ def is_plain_symbol(value: Any) -> bool:
     return False
 
 
-def import_symbols(
-    task: code_ir.CodegenTask, *, auto_config_fn=auto_config.auto_config
-) -> None:
+def import_symbols(task: code_ir.CodegenTask) -> None:
   """Pass that just adds imports for symbols.
 
   It can be useful to run this pass early, so that other naming passes don't
@@ -46,11 +43,9 @@ def import_symbols(
 
   Args:
     task: Codegen task.
-    auto_config_fn: Function to use as the auto_config decorator. (Usually, do
-      not override this.)
   """
 
-  task.import_manager.add(auto_config_fn)
+  task.import_manager.add(task.auto_config_fn)
   for value, _ in daglish.iterate(task.top_level_call.all_fixture_functions()):
     if isinstance(value, config_lib.Buildable):
       task.import_manager.add(config_lib.get_callable(value))

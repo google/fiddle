@@ -16,9 +16,7 @@
 """Tests for shared_to_variables."""
 
 from absl.testing import absltest
-import fiddle as fdl
 from fiddle.codegen.auto_config import code_ir
-from fiddle.codegen.auto_config import init_task
 from fiddle.codegen.auto_config import ir_printer
 from fiddle.codegen.auto_config import make_symbolic_references
 from fiddle.codegen.auto_config import shared_to_variables
@@ -42,12 +40,7 @@ class SharedToVariablesTest(absltest.TestCase):
     self.assertLen(task.top_level_call.fn.variables, 1)
 
   def test_works_on_toy_example_two_vars(self):
-    foo_call = fdl.Config(test_fixtures.foo, 3)
-    shared = fdl.Config(test_fixtures.SharedType, foo_call, 7.0)
-    config = [shared, shared, foo_call]
-    task = init_task.init_task(
-        config, top_level_fixture_name="unprocessed_shared_config_fixture"
-    )
+    task = test_fixtures.unprocessed_two_shared_config()
     shared_to_variables.move_shared_nodes_to_variables(task)
     self.assertLen(task.top_level_call.fn.variables, 2)
 
