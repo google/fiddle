@@ -16,13 +16,28 @@
 """Moves shared nodes to variables."""
 
 import copy
-from typing import Any, Callable
+from typing import Any, Callable, List
 
 from fiddle import daglish
 from fiddle.codegen import namespace as namespace_lib
 from fiddle.codegen.auto_config import code_ir
 from fiddle.codegen.auto_config import naming
 from fiddle.codegen.auto_config import parents_first_traversal
+
+
+def _strip_paths(
+    paths: List[daglish.Path], depth: int = 1
+) -> List[daglish.Path]:
+  """Strips prefixes from paths."""
+  seen = set()
+  cleaned_paths = []
+  for path in paths:
+    if len(path) > depth:
+      path = path[depth:]
+      if path not in seen:
+        seen.add(path)
+        cleaned_paths.append(path)
+  return cleaned_paths
 
 
 def move_shared_nodes_to_variables(
@@ -74,6 +89,7 @@ def move_shared_nodes_to_variables(
 
     def traverse(value, state: daglish.State):
       """Actually moves shared values to variables."""
+      original_value_id = id(value)
       value = state.map_children(value)
 
       all_paths = state.get_all_paths()
@@ -88,8 +104,8 @@ def move_shared_nodes_to_variables(
       #
       # The latter check is an over-generalization, but should not catch any
       # undesired cases.
-      if id(value) in to_extract_ids or len(last_path_elts) > 1:
-        name = namer.name_for(value, state.get_all_paths())
+      if original_value_id in to_extract_ids or len(last_path_elts) > 1:
+        name = namer.name_for(value, _strip_paths(state.get_all_paths()))
         name = code_ir.Name(name, is_generated=True)
         new_variables.append(code_ir.VariableDeclaration(name, value))
         return code_ir.VariableReference(name)

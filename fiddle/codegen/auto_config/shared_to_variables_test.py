@@ -17,10 +17,12 @@
 
 from absl.testing import absltest
 from fiddle.codegen.auto_config import code_ir
+from fiddle.codegen.auto_config import init_task
 from fiddle.codegen.auto_config import ir_printer
 from fiddle.codegen.auto_config import make_symbolic_references
 from fiddle.codegen.auto_config import shared_to_variables
 from fiddle.codegen.auto_config import test_fixtures
+from fiddle.testing.example import fake_encoder_decoder
 
 
 class SharedToVariablesTest(absltest.TestCase):
@@ -28,16 +30,18 @@ class SharedToVariablesTest(absltest.TestCase):
   def test_works_on_toy_example(self):
     task = test_fixtures.unprocessed_shared_config()
     make_symbolic_references.import_symbols(task)
-    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
     shared_to_variables.move_shared_nodes_to_variables(task)
+    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
     self.assertLen(task.top_level_call.fn.variables, 1)
 
-  def test_works_on_toy_example_symbolic_refs_later(self):
-    task = test_fixtures.unprocessed_shared_config()
-    shared_to_variables.move_shared_nodes_to_variables(task)
-    make_symbolic_references.import_symbols(task)
-    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
-    self.assertLen(task.top_level_call.fn.variables, 1)
+  def test_fails_on_unnameable_example(self):
+    shared = {"a": 7}
+    config = [shared, shared]
+    task = init_task.init_task(config)
+    with self.assertRaisesRegex(
+        ValueError, r"Could not generate any candidate names for \{'a': 7\}"
+    ):
+      shared_to_variables.move_shared_nodes_to_variables(task)
 
   def test_works_on_toy_example_two_vars(self):
     task = test_fixtures.unprocessed_two_shared_config()
@@ -48,6 +52,11 @@ class SharedToVariablesTest(absltest.TestCase):
     self.assertIn("foo = ", intermediate_code)
     self.assertIn("shared_type = ", intermediate_code)
     self.assertIn("return [shared_type, shared_type, foo]", intermediate_code)
+
+  def test_fake_encoder_decoder(self):
+    task = init_task.init_task(fake_encoder_decoder.fixture.as_buildable())
+    shared_to_variables.move_shared_nodes_to_variables(task)
+    self.assertLen(task.top_level_call.fn.variables, 1)
 
   def test_avoids_name_collisions(self):
     task = test_fixtures.unprocessed_shared_config()
