@@ -17,7 +17,7 @@
 
 import collections
 import dataclasses
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Tuple
 
 from fiddle import config as config_lib
 from fiddle import daglish
@@ -104,10 +104,12 @@ class SharedBuildableManager:
   import_manager: ImportManager
   instances: List[mini_ast.CodegenNode] = dataclasses.field(
       default_factory=list)
-  instance_names_by_id: Dict[int, str] = dataclasses.field(default_factory=dict)
+  instances_and_names_by_id: Dict[int, Tuple[config_lib.Buildable, str]] = (
+      dataclasses.field(default_factory=dict)
+  )
 
   def __contains__(self, buildable: config_lib.Buildable):
-    return id(buildable) in self.instance_names_by_id
+    return id(buildable) in self.instances_and_names_by_id
 
   def add(self, name: str, buildable: config_lib.Buildable,
           decl: mini_ast.CodegenNode) -> None:
@@ -120,7 +122,7 @@ class SharedBuildableManager:
       decl: Code declaration for this instance.
     """
     self.instances.append(decl)
-    self.instance_names_by_id[id(buildable)] = name
+    self.instances_and_names_by_id[id(buildable)] = (buildable, name)
 
   def assign(self, lhs_var: str, lhs_path: Sequence[daglish.PathElement],
              attr_value: Any) -> mini_ast.CodegenNode:
@@ -153,7 +155,7 @@ class SharedBuildableManager:
       nonlocal used_not_implemented
       state = state or daglish.BasicTraversal.begin(traverse, child)
       if child in self:
-        return _VarReference(self.instance_names_by_id[id(child)])
+        return _VarReference(self.instances_and_names_by_id[id(child)][1])
       elif isinstance(child, config_lib.Buildable):
         used_not_implemented = True
         return _VarReference("NotImplemented")
@@ -213,7 +215,10 @@ def _configure_shared_objects(
       shared_manager.add(name, child, mini_ast.ImmediateAttrsBlock(nodes))
 
   traverser = daglish.MemoizedTraversal(
-      traverse, shared_objects, memo=shared_manager.instance_names_by_id.copy())
+      traverse,
+      shared_objects,
+      memo=shared_manager.instances_and_names_by_id.copy(),
+  )
   traverse(shared_objects, traverser.initial_state())
 
 

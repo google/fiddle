@@ -513,5 +513,29 @@ class IterateTest(absltest.TestCase):
         ])
 
 
+class MemoizedTraversalTest(absltest.TestCase):
+
+  def test_unique_traversals_for_different_ids(self):
+    # This test generates a bunch of new objects during traversal, which if
+    # cached incorrectly will result in false positive cache hits. (This is
+    # because the Python interpreter will garbage collect and reuse the
+    # memory IDs.)
+
+    def traverse(value, state: daglish.State):
+      if isinstance(value, fdl.Buildable):
+        return value.bar
+      elif isinstance(value, list):
+        result = 0
+        for i in value:
+          to_visit = fdl.Config(Foo, bar=i + 1, baz=2 * i + 1)
+          result += state.call(to_visit, daglish.Key(i))  # pytype: disable=unsupported-operands
+        return result
+      else:
+        raise AssertionError("Should not be reached, got " + str(value))
+
+    result = daglish.MemoizedTraversal.run(traverse, list(range(10_000)))
+    self.assertEqual(result, 50_005_000)
+
+
 if __name__ == "__main__":
   absltest.main()

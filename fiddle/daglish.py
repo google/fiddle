@@ -610,10 +610,22 @@ class BasicTraversal(Traversal):
 
 @dataclasses.dataclass
 class MemoizedTraversal(BasicTraversal):
-  """Traversal that memoizes results."""
+  """Traversal that memoizes results.
+
+  Attributes:
+    memoize_internables: Whether to memoize applications of the function on
+      internable (typically, immutable) values. For example, if "4" is a common
+      leaf value, by default the traversal will only visit it once, and reuse
+      the results. However, if you are writing a traversal that cares about
+      paths to the value "4", you might want to set this to False so it is
+      visited multiple times.
+    memo: Memoization dictionary mapping `id(value)` to the tuple `(value,
+      result)`, where `value` is a traversed node and `result` is the value
+      returned by `apply` for `value`.
+  """
 
   memoize_internables: bool = True
-  memo: Dict[int, Any] = dataclasses.field(default_factory=dict)
+  memo: Dict[int, Tuple[Any, Any]] = dataclasses.field(default_factory=dict)
 
   @classmethod
   def begin(cls,
@@ -643,9 +655,10 @@ class MemoizedTraversal(BasicTraversal):
     if not self.memoize_internables and is_internable(value):
       return self.traversal_fn(value, state)
     elif id(value) in self.memo:
-      return self.memo[id(value)]
+      return self.memo[id(value)][1]
     else:
-      result = self.memo[id(value)] = self.traversal_fn(value, state)
+      result = self.traversal_fn(value, state)
+      self.memo[id(value)] = (value, result)
       return result
 
 
