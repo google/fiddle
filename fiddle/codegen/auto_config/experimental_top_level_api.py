@@ -21,6 +21,7 @@ Do NOT depend on these interfaces for non-experimental code.
 from typing import Any, Callable, Dict, Optional
 
 from fiddle.codegen import namespace as namespace_lib
+from fiddle.codegen.auto_config import complex_to_variables
 from fiddle.codegen.auto_config import init_task
 from fiddle.codegen.auto_config import ir_printer
 from fiddle.codegen.auto_config import ir_to_cst
@@ -34,7 +35,7 @@ def auto_config_codegen(
     *,
     top_level_fixture_name: str = "config_fixture",
     fixtures: Optional[Dict[str, Any]] = None,
-    max_expression_complexity: int = 16,
+    max_expression_complexity: Optional[int] = None,
     variable_namer: Callable[
         [namespace_lib.Namespace], naming.Namer
     ] = naming.PathFirstNamer,
@@ -43,28 +44,40 @@ def auto_config_codegen(
   """Generates code for an auto_config fixture."""
   if fixtures:
     raise NotImplementedError()
-  if max_expression_complexity != 16:
-    raise NotImplementedError()
 
   task = init_task.init_task(
       config, top_level_fixture_name=top_level_fixture_name
   )
   if debug_print:
-    print("\n\nAfter init:", ir_printer.format_task(task), sep="\n")
+    print("\n\nAfter initializing:", ir_printer.format_task(task), sep="\n")
   make_symbolic_references.import_symbols(task)
   shared_to_variables.move_shared_nodes_to_variables(
       task, make_namer=variable_namer
   )
   if debug_print:
     print(
-        "\n\nAfter move shared to variables:",
+        "\n\nAfter moving shared nodes to variables:",
         ir_printer.format_task(task),
         sep="\n",
     )
+  if max_expression_complexity is not None:
+    complex_to_variables.move_complex_nodes_to_variables(
+        task,
+        is_complex=complex_to_variables.more_complex_than(
+            max_expression_complexity
+        ),
+        make_namer=variable_namer,
+    )
+    if debug_print:
+      print(
+          "\n\nAfter moving complex sub-expressions to variables:",
+          ir_printer.format_task(task),
+          sep="\n",
+      )
   make_symbolic_references.replace_callables_and_configs_with_symbols(task)
   if debug_print:
     print(
-        "\n\nAfter replace callables with symbols:",
+        "\n\nAfter replacing callables with symbols:",
         ir_printer.format_task(task),
         sep="\n",
     )

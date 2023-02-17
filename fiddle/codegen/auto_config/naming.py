@@ -26,6 +26,10 @@ from fiddle.codegen import namespace as namespace_lib
 _camel_to_snake = namespace_lib.camel_to_snake  # pylint: disable=protected-access
 
 
+class NameGenerationError(ValueError):
+  """Error thrown when a namer cannot deduce a name for a value."""
+
+
 @dataclasses.dataclass
 class Namer(metaclass=abc.ABCMeta):
   """Assigns names to objects in a config."""
@@ -125,9 +129,10 @@ class PathFirstNamer(Namer):
     if not candidates and not paths:
       candidates.append("root")
     if not candidates:
-      raise ValueError(
+      raise NameGenerationError(
           f"Could not generate any candidate names for {value!r} with "
-          f"paths {paths!r}")
+          f"paths {paths!r}"
+      )
     return self.name_from_candidates(candidates)
 
 
@@ -170,7 +175,7 @@ class TypeFirstNamer(Namer):
     if not candidates and not paths:
       candidates.append("root")
     if not candidates:
-      raise ValueError(
+      raise NameGenerationError(
           f"Could not generate any candidate names for {value!r} with "
           f"paths {paths!r}"
       )
