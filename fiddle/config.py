@@ -115,6 +115,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       self,
       fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
       *args,
+      __skip_default_init__=False,
       **kwargs,
   ):
     """Initialize for ``fn_or_cls``, optionally specifying parameters.
@@ -122,6 +123,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Args:
       fn_or_cls: The function or class to configure, or a ``Buildable`` to copy.
       *args: Any positional arguments to configure for ``fn_or_cls``.
+      __skip_default_init__: Private setting to skip initializing default
+        values.
       **kwargs: Any keyword arguments to configure for ``fn_or_cls``.
     """
     if isinstance(fn_or_cls, Buildable):
@@ -163,13 +166,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
 
-    if hasattr(fn_or_cls, '__fiddle_init__'):
-      fn_or_cls.__fiddle_init__(self)
+    if not __skip_default_init__:
+      if hasattr(fn_or_cls, '__fiddle_init__'):
+        fn_or_cls.__fiddle_init__(self)
 
-    if dataclasses.is_dataclass(self.__fn_or_cls__):
-      fields = dataclasses.fields(self.__fn_or_cls__)
-      _add_dataclass_tags(self, fields)
-      _expand_dataclass_default_factories(self, fields, arguments)
+      if dataclasses.is_dataclass(self.__fn_or_cls__):
+        fields = dataclasses.fields(self.__fn_or_cls__)
+        _add_dataclass_tags(self, fields)
+        _expand_dataclass_default_factories(self, fields, arguments)
 
     for name, value in arguments.items():
       setattr(self, name, value)
@@ -227,7 +231,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __unflatten__(
       cls, values: Iterable[Any], metadata: BuildableTraverserMetadata
   ):
-    rebuilt = cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
+    # pytype: disable=not-instantiable
+    rebuilt = cls(
+        metadata.fn_or_cls,
+        __skip_default_init__=True,
+        **metadata.arguments(values),
+    )
+    # pytype: enable=not-instantiable
     object.__setattr__(rebuilt, '__argument_tags__', metadata.tags())
     object.__setattr__(rebuilt, '__argument_history__', metadata.history())
     return rebuilt
