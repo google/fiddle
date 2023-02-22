@@ -17,6 +17,7 @@
 
 import abc
 import collections
+import colorsys
 import copy
 import dataclasses
 import functools
@@ -138,6 +139,14 @@ InstanceColorFunc = Callable[[Any], Tuple[str, str]]
 InstanceColorsType = Optional[Union[List[str], InstanceColorFunc]]
 
 
+def _darken(rgb_str: str, luminance_factor=0.8) -> str:
+  """Adjust luminance by luminance_factor."""
+  rgb = [int(rgb_str[i : i + 2], 16) for i in range(1, len(rgb_str), 2)]
+  h, l, s = colorsys.rgb_to_hls(*rgb)
+  rgb = colorsys.hls_to_rgb(h, l * luminance_factor, s)
+  return '#' + ''.join(['%x' % int(c) for c in rgb])
+
+
 class _GraphvizRenderer:
   """Encapsulates state maintained while rendering a `Config` to Graphviz."""
 
@@ -211,7 +220,10 @@ class _GraphvizRenderer:
     if callable(self._instance_colors):
       return self._instance_colors(value)[1]
     else:
-      return _DEFAULT_EDGE_COLOR
+      node_id = self._node_id_by_value_id[id(value)]
+      node_color = self._instance_colors[node_id % len(self._instance_colors)]
+      darkened_edge_color = _darken(node_color)
+      return f'{darkened_edge_color}80'  # Node color with transparency.
 
   def tag(self, tag: str, **kwargs) -> Callable[[Any], str]:
     """Returns a function that creates HTML tags of type `tag`.
@@ -471,10 +483,7 @@ class _GraphvizRenderer:
     # determines the order in which the graph is layed out when using the
     # default "dot" layout engine, so putting the parent value first lays the
     # graph out from root to children.
-    if callable(self._instance_colors):
-      edge_attrs = dict(color=self._edge_color(value))
-    else:
-      edge_attrs = {}
+    edge_attrs = dict(color=self._edge_color(value))
     self._dot.edge(f'{self._current_id}:{port}:c', f'{node_id}:c', **edge_attrs)
 
     # Return a table with a single colored cell, using the port name from above.
