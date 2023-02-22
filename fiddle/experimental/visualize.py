@@ -22,7 +22,7 @@ can be valuable.
 """
 import copy
 import inspect
-from typing import Any, Dict, Iterable, List, TypeVar
+from typing import Any, Dict, Iterable, List, Optional, TypeVar
 
 from fiddle import config as config_lib
 from fiddle import daglish
@@ -181,5 +181,51 @@ def structure(config: _T) -> _T:
         return result.unflatten()
       else:
         return _any_value
+
+  return daglish.MemoizedTraversal.run(traverse, config)
+
+
+def trim_fields_to(
+    config: _T,
+    top_level_fields: Optional[List[str]] = None,
+    *,
+    fields_by_config_id: Optional[Dict[int, List[str]]] = None,
+) -> _T:
+  """Trims fields to a list of desired fields.
+
+  Args:
+    config: Configuration object.
+    top_level_fields: Fields on the top-level configuration object to keep.
+    fields_by_config_id: Fields to keep, indexed by id(sub_config).
+
+  Returns:
+    Deep copy of configuration object, with defaults trimmed.
+  """
+
+  fields_by_id = copy.copy(fields_by_config_id) if fields_by_config_id else {}
+  for key, value in fields_by_id.items():
+    if not isinstance(key, int):
+      raise TypeError(
+          f'fields_by_config_id should have integer keys, found {key}'
+      )
+    if not isinstance(value, (list, tuple)):
+      raise TypeError(
+          'Expected fields_by_config_id values to be lists or tuples.'
+      )
+  if top_level_fields is not None:
+    if not isinstance(top_level_fields, (list, tuple)):
+      raise TypeError('Expected top_level_fields to be a list or tuple.')
+    fields_by_id[id(config)] = top_level_fields
+
+  if not fields_by_id:
+    return copy.deepcopy(config)
+
+  def traverse(value, state: daglish.State):
+    if isinstance(value, config_lib.Buildable) and id(value) in fields_by_id:
+      to_keep = fields_by_id[id(value)]
+      value = copy.copy(value)  # Shallow copy to avoid mutating original.
+      for argument in set(config_lib.ordered_arguments(value)) - set(to_keep):
+        setattr(value, argument, Trimmed())
+    return state.map_children(value)
 
   return daglish.MemoizedTraversal.run(traverse, config)
