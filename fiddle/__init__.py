@@ -23,7 +23,9 @@ from fiddle.config import Buildable
 from fiddle.config import cast
 from fiddle.config import clear_tags
 from fiddle.config import Config
+from fiddle.config import copy_into
 from fiddle.config import copy_with
+from fiddle.config import deepcopy_into
 from fiddle.config import deepcopy_with
 from fiddle.config import get_callable
 from fiddle.config import get_tags
