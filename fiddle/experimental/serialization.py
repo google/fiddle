@@ -535,18 +535,26 @@ class Serialization:
 
   def _pyref(self, value, current_path: daglish.Path):
     """Creates a reference to an importable Python value."""
-    module = inspect.getmodule(value).__name__
+    module = inspect.getmodule(value)
+    if module is None:
+      msg = (
+          f"Couldn't find the module for {value!r}; Are you wrapping the"
+          ' function or using a test mock?'
+      )
+      raise UnserializableValueError(msg)
+    module_name = module.__name__
     symbol = value.__qualname__
     # Check to make sure we can import the symbol.
-    if value is not import_symbol(self._pyref_policy, module, symbol):
+    if value is not import_symbol(self._pyref_policy, module_name, symbol):
       msg = (
-          f"Couldn't create a pyref for {value!r}; the same value was not "
-          f'obtained by importing {symbol!r} from {module!r}. Error occurred '
-          f'at path {path_str(current_path)!r}.')
+          f"Couldn't create a pyref for {value!r}; the same value was not"
+          f' obtained by importing {symbol!r} from {module_name!r}. Error'
+          f' occurred at path {path_str(current_path)!r}.'
+      )
       raise UnserializableValueError(msg)
     return {
         _TYPE_KEY: _PYREF_TYPE,
-        _MODULE_KEY: module,
+        _MODULE_KEY: module_name,
         _NAME_KEY: symbol,
     }
 
