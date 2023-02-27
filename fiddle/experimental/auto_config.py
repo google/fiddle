@@ -790,7 +790,7 @@ def inline(buildable: config.Config):
   Example::
 
     # shared/input_pipelines.py
-    @auto_config(experimental_api_boundary=True)
+    @auto_config(experimental_always_inline=False)
     def make_input_pipeline(name: str, batch_size: int) -> InputPipeline:
       file_path = '/base_path/'+name
       augmentation = 'my_augmentation_routine'
