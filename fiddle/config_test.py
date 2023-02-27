@@ -1075,6 +1075,48 @@ class ConfigTest(parameterized.TestCase):
     with self.assertRaisesRegex(TypeError, 'not_there'):
       fdl.assign(cfg, arg1=1, not_there=2)
 
+  def test_copy_into(self):
+    cfg1 = fdl.Config(basic_fn, 1, 2)
+    cfg2 = fdl.Config(SampleClass, 4, 5, kwarg1=fdl.Config(SampleClass, 'foo'))
+
+    fdl.copy_into(dst=cfg1, src=cfg2)
+
+    self.assertEqual(SampleClass, fdl.get_callable(cfg1))
+    self.assertEqual(4, cfg1.arg1)
+    self.assertEqual(5, cfg1.arg2)
+    self.assertEqual('foo', cfg1.kwarg1.arg1)
+    # Make sure the subconfigs are the same instance
+    self.assertEqual(
+        id(cfg1.kwarg1),
+        id(cfg2.kwarg1),
+        (
+            "The IDs of the two instances are different, that means we're"
+            ' making a deep copy of the subconfig which is not what we want.'
+        ),
+    )
+
+  def test_deepcopy_into(self):
+    cfg1 = fdl.Config(basic_fn, 1, 2)
+    cfg2 = fdl.Config(SampleClass, 4, 5, kwarg1=fdl.Config(SampleClass, 'foo'))
+
+    fdl.deepcopy_into(dst=cfg1, src=cfg2)
+
+    self.assertEqual(SampleClass, fdl.get_callable(cfg1))
+    self.assertEqual(4, cfg1.arg1)
+    self.assertEqual(5, cfg1.arg2)
+    self.assertEqual('foo', cfg1.kwarg1.arg1)
+    # Make sure the subconfigs are separate instances
+    self.assertNotEqual(
+        id(cfg1.kwarg1),
+        id(cfg2.kwarg1),
+        (
+            "The IDs of the two instances are the same, that means we're not"
+            ' making a deep copy of the arguments of `src` before copying them'
+            ' into `dst`. This will unintentionally cause `src` and `dst` to'
+            ' share the same subconfig.'
+        ),
+    )
+
   @parameterized.product(
       from_type=[fdl.Config, fdl.Partial, fdl.ArgFactory],
       to_type=[fdl.Config, fdl.Partial, fdl.ArgFactory],

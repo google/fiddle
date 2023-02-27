@@ -1085,6 +1085,40 @@ def assign(buildable: Buildable, **kwargs):
 BuildableT = TypeVar('BuildableT', bound=Buildable)
 
 
+def copy_into(*, dst: Buildable, src: Buildable) -> None:
+  """Shallow copy the arguments and callable of `src` into `dst`.
+
+  This is similar to `assign` but enables the user to pass in a `Buildable`
+  instead of a list of keyword arguments.
+
+  Args:
+    dst: the destination `Buildable`, this is the `Buildable` that will be
+      mutated in-place.
+    src: the source `Buildable`, the arguments and callable of this `Buildable`
+      will be copied into `dst`.
+  """
+  update_callable(dst, get_callable(src))
+  dst.__arguments__.clear()
+  assign(dst, **copy.copy(src).__arguments__)
+
+
+def deepcopy_into(*, dst: Buildable, src: Buildable) -> None:
+  """Deep copy the arguments and callable of `src` into `dst`.
+
+  This is similar to `assign` but enables the user to pass in a `Buildable`
+  instead of a list of keyword arguments.
+
+  Args:
+    dst: the destination `Buildable`, this is the `Buildable` that will be
+      mutated in-place.
+    src: the source `Buildable`, the arguments and callable of this `Buildable`
+      will be copied into `dst`.
+  """
+  update_callable(dst, get_callable(src))
+  dst.__arguments__.clear()
+  assign(dst, **copy.deepcopy(src).__arguments__)
+
+
 def copy_with(buildable: BuildableT, **kwargs) -> BuildableT:
   """Returns a shallow copy of ``buildable`` with updates to arguments.
 
