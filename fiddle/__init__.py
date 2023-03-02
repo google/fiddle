@@ -30,6 +30,7 @@ from fiddle.config import get_tags
 from fiddle.config import NO_VALUE
 from fiddle.config import ordered_arguments
 from fiddle.config import Partial
+from fiddle.config import register_supported_cast
 from fiddle.config import remove_tag
 from fiddle.config import set_tags
 from fiddle.config import update_callable
