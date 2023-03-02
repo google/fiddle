@@ -144,7 +144,7 @@ def _darken(rgb_str: str, luminance_factor=0.8) -> str:
   rgb = [int(rgb_str[i : i + 2], 16) for i in range(1, len(rgb_str), 2)]
   h, l, s = colorsys.rgb_to_hls(*rgb)
   rgb = colorsys.hls_to_rgb(h, l * luminance_factor, s)
-  return '#' + ''.join(['%x' % int(c) for c in rgb])
+  return '#' + ''.join(['{:02x}'.format(int(c)) for c in rgb])
 
 
 class _GraphvizRenderer:

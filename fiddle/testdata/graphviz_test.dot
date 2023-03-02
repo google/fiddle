@@ -15,7 +15,7 @@ graph {
 	4 [label=<<table border="0" cellspacing="0" cellborder="1" cellpadding="3"><tr><td colspan="2" bgcolor="#add8e6" style="solid"><font point-size="8">Config:</font>&nbsp;SampleClass</td></tr><tr><td align="right" bgcolor="#eeeeee">arg1</td><td align="left">1</td></tr><tr><td align="right" bgcolor="#eeeeee">arg2</td><td align="left">&#x27;slöth: 🦥&#x27;</td></tr></table>>]
 	0:7:c -- 4:c [color="#8aacb780"]
 	5 [label=<<table border="0" cellspacing="0" cellborder="1" cellpadding="3"><tr><td colspan="2" bgcolor="#ff8c00" style="solid"><font point-size="8">Config:</font>&nbsp;test_fn_with_kwargs</td></tr><tr><td colspan="2" bgcolor="#eeeeee" style="solid"><i>no arguments</i></td></tr></table>>]
-	0:8:c -- 5:c [color="#cb6f080"]
+	0:8:c -- 5:c [color="#cb6f0080"]
 	6 [label=<<table border="0" cellspacing="0" cellborder="1" cellpadding="3"><tr><td colspan="1" bgcolor="#8fbc8f" style="solid">SampleClass</td></tr><tr><td>SampleClass(arg1=1, arg2=2)</td></tr></table>>]
 	0:9:c -- 6:c [color="#72967280"]
 	0:10:c -- 6:c [color="#72967280"]
