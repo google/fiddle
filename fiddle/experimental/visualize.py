@@ -22,6 +22,7 @@ can be valuable.
 """
 import copy
 import inspect
+import textwrap
 from typing import Any, Dict, Iterable, List, Optional, TypeVar
 
 from fiddle import config as config_lib
@@ -226,6 +227,50 @@ def trim_fields_to(
       value = copy.copy(value)  # Shallow copy to avoid mutating original.
       for argument in set(config_lib.ordered_arguments(value)) - set(to_keep):
         setattr(value, argument, Trimmed())
+    return state.map_children(value)
+
+  return daglish.MemoizedTraversal.run(traverse, config)
+
+
+class _TruncatedRepr:
+  """Represent the truncated fields for visualization purpose only."""
+
+  def __init__(self, prefix: str):
+    self._prefix = prefix
+
+  def __repr__(self):
+    return self._prefix
+
+
+def trim_long_fields(
+    config: _T,
+    threshold: int = 60,
+) -> _T:
+  """Trims fields to a bounded length.
+
+  Args:
+    config: Configuration object.
+    threshold: Long fields will be trimmed to the threshold length.
+
+  Returns:
+    Deep copy of configuration object, with long fileds trimmed.
+  """
+
+  if not isinstance(threshold, int) or threshold <= 0:
+    raise ValueError(f'threshold must be a positive int, got {threshold}.')
+
+  def traverse(value, state: daglish.State):
+    if isinstance(value, config_lib.Buildable):
+      for argument in set(config_lib.ordered_arguments(value)):
+        field = getattr(value, argument)
+        if not isinstance(field, (config_lib.Buildable, list, tuple, dict)):
+          field_repr = repr(field)
+          if len(field_repr) > threshold:
+            s = textwrap.shorten(
+                repr(field), width=threshold, placeholder='...'
+            )
+            prefix = _TruncatedRepr(s)
+            setattr(value, argument, prefix)
     return state.map_children(value)
 
   return daglish.MemoizedTraversal.run(traverse, config)
