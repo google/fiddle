@@ -270,7 +270,10 @@ def parse_value(value: str, path: str) -> Any:
   except Exception as e:
     raise ValueError(
         f'Could not parse literal value "{value}" while trying to set '
-        f'"{path}". Does a string need to be quoted?') from e
+        f'"{path}". Does a string need to be quoted? For example, you might '
+        f"want to pass --fdl_set={path}='{value}' instead of "
+        f'--fdl_set={path}={value}.'
+    ) from e
 
 
 def apply_overrides_to(cfg: config.Buildable):
