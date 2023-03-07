@@ -170,13 +170,18 @@ class SelectionTest(absltest.TestCase):
       selectors.select(cfg, fn_or_cls=Attention, tag=ActivationDType)
     with self.assertRaises(NotImplementedError):
       selectors.select(cfg, tag=ActivationDType, match_subclasses=False)
+    with self.assertRaisesRegex(
+        ValueError, "At least one of `tag` and `fn_or_cls` must be specified."
+    ):
+      selectors.select(cfg)
 
 
 class NodeSelectionTest(absltest.TestCase):
 
   def test_matches_everything(self):
     cfg = encoder_decoder_config()
-    sel = typing.cast(selectors.NodeSelection, selectors.select(cfg))
+    sel = selectors.select(cfg, object, match_subclasses=True)
+    sel = typing.cast(selectors.NodeSelection, sel)
     self.assertTrue(sel._matches(cfg.encoder))
     self.assertTrue(sel._matches(cfg.encoder.attention))
     self.assertTrue(sel._matches(cfg.encoder.mlp))
