@@ -259,9 +259,11 @@ def select(
       raise NotImplementedError(
           "match_subclasses is ignored when selecting by tag.")
     return TagSelection(cfg, tag)
-  else:
+  elif fn_or_cls is not None:
     return NodeSelection(
         cfg,
         fn_or_cls,
         match_subclasses=match_subclasses,
         buildable_type=buildable_type)
+  else:
+    raise ValueError("At least one of `tag` and `fn_or_cls` must be specified.")
