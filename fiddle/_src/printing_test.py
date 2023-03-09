@@ -24,15 +24,14 @@ from typing import Union
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import daglish
-from fiddle import printing
-from fiddle import tagging
+from fiddle._src import printing
 
 
-class SampleTag(tagging.Tag):
+class SampleTag(fdl.Tag):
   """Sample tag for testing."""
 
 
-class SampleTag2(tagging.Tag):
+class SampleTag2(fdl.Tag):
   """Second tag, for fun & profit!"""
 
 
@@ -70,7 +69,7 @@ def annotated_kwargs_helper(**kwargs: int):  # pylint: disable=unused-argument
 
 # Sometimes the module of local symbols shows up differently, depending on how
 # this test is imported/run.
-_local_module_regex = r'(__main__|fiddle\.printing_test)'
+_local_module_regex = r'(__main__|fiddle\._src\.printing_test)'
 
 
 class PathStrTest(absltest.TestCase):
@@ -215,7 +214,7 @@ class AsStrFlattenedTests(absltest.TestCase):
         x = <[unset]> {SampleTag}
         y = 'abc' {SampleTag}""")
 
-    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
+    fdl.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
@@ -226,8 +225,9 @@ class AsStrFlattenedTests(absltest.TestCase):
   def test_tagged_values_multiple_tags(self):
     cfg = fdl.Config(
         fn_x_y,
-        x=tagging.TaggedValue(tags=(SampleTag, SampleTag2)),
-        y=tagging.TaggedValue(tags=(SampleTag, SampleTag2), default='abc'))
+        x=fdl.TaggedValue(tags=(SampleTag, SampleTag2)),
+        y=fdl.TaggedValue(tags=(SampleTag, SampleTag2), default='abc'),
+    )
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
@@ -235,7 +235,7 @@ class AsStrFlattenedTests(absltest.TestCase):
         x = <[unset]> {SampleTag} {SampleTag2}
         y = 'abc' {SampleTag} {SampleTag2}""")
 
-    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
+    fdl.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
@@ -246,8 +246,8 @@ class AsStrFlattenedTests(absltest.TestCase):
   def test_tagged_config(self):
     cfg = fdl.Config(
         fn_x_y,
-        x=tagging.TaggedValue(
-            tags=(SampleTag,), default=fdl.Config(SampleClass)))
+        x=fdl.TaggedValue(tags=(SampleTag,), default=fdl.Config(SampleClass)),
+    )
     output = printing.as_str_flattened(cfg)
     self.check_result(
         output, f"""\
@@ -265,7 +265,7 @@ class AsStrFlattenedTests(absltest.TestCase):
         x = <[unset]> {SampleTag}
         y = 'abc' {SampleTag}""")
 
-    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
+    fdl.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(
@@ -284,7 +284,7 @@ class AsStrFlattenedTests(absltest.TestCase):
         x = <[unset]> {SampleTag} {SampleTag2}
         y = 'abc' {SampleTag} {SampleTag2}""")
 
-    tagging.set_tagged(cfg, tag=SampleTag, value='cba')
+    fdl.set_tagged(cfg, tag=SampleTag, value='cba')
     output = printing.as_str_flattened(cfg)
 
     self.check_result(

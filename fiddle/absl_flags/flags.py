@@ -121,16 +121,15 @@ from typing import Any, List, Optional, Sequence, Union
 from absl import app
 from absl import flags
 from absl import logging
-
 from etils import epath
-
-from fiddle import config
-from fiddle import module_reflection
 from fiddle import printing
 from fiddle import selectors
-from fiddle import tagging
+from fiddle._src import config
+from fiddle._src import module_reflection
+from fiddle._src import tagging
 from fiddle.experimental import auto_config
 from fiddle.experimental import serialization
+
 
 _FDL_CONFIG = flags.DEFINE_string(
     'fdl_config',

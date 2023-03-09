@@ -17,7 +17,7 @@
 
 from typing import Any, TypeVar
 
-from fiddle import config as config_lib
+from fiddle._src import config as config_lib
 
 TiedValue = config_lib.TiedValue
 

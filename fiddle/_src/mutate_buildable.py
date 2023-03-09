@@ -15,7 +15,7 @@
 
 """Library for mutating Buildable instances."""
 
-from fiddle import config
+from fiddle._src import config
 
 _buildable_internals_keys = ('__fn_or_cls__', '__signature__', '__arguments__',
                              '_has_var_keyword', '__argument_tags__',

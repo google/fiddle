@@ -71,7 +71,7 @@ import dataclasses
 import inspect
 from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
 
-from fiddle import config as config_lib
+from fiddle._src import config as config_lib
 import typing_extensions
 
 S = TypeVar("S")

@@ -26,7 +26,6 @@ from absl.testing import parameterized
 
 import fiddle as fdl
 from fiddle.codegen import py_val_to_cst_converter
-import fiddle.config as fdl_config
 
 import libcst as cst
 
@@ -82,15 +81,15 @@ class PyValToCstConverterTest(parameterized.TestCase):
       # Fiddle types:
       (
           fdl.Config(SampleNamedTuple, 3),
-          'fiddle.config.Config(SampleNamedTuple, x=3)',
+          'fiddle._src.config.Config(SampleNamedTuple, x=3)',
       ),
       (
           fdl.Partial(SampleNamedTuple, [4]),
-          'fiddle.config.Partial(SampleNamedTuple, x=[4])',
+          'fiddle._src.config.Partial(SampleNamedTuple, x=[4])',
       ),
       (
           fdl.Config(re.match, 'a|b'),
-          "fiddle.config.Config(re.match, pattern='a|b')",
+          "fiddle._src.config.Config(re.match, pattern='a|b')",
       ),
       (SampleTag.new(123), 'SampleTag.new(123)'),
       # NamedTuples:
@@ -127,12 +126,13 @@ class PyValToCstConverterTest(parameterized.TestCase):
 
   def test_convert_new_tags(self):
     pyval = fdl.Config(SampleNamedTuple, x=1)
-    fdl_config.add_tag(pyval, 'x', SampleTag)
+    fdl.add_tag(pyval, 'x', SampleTag)
     cst_expr = py_val_to_cst_converter.convert_py_val_to_cst(pyval)
     cst_module = cst.Module([cst.SimpleStatementLine([cst.Expr(cst_expr)])])
     self.assertEqual(
         _get_cst_code(cst_module),
-        'fiddle.config.Config(SampleNamedTuple, x=SampleTag.new(1))\n')
+        'fiddle._src.config.Config(SampleNamedTuple, x=SampleTag.new(1))\n',
+    )
 
   def test_convert_empty_set(self):
     cst_expr = py_val_to_cst_converter.convert_py_val_to_cst(set())
@@ -172,7 +172,8 @@ class PyValToCstConverterTest(parameterized.TestCase):
     cst_module = cst.Module([cst.SimpleStatementLine([cst.Expr(cst_expr)])])
     self.assertEqual(
         _get_cst_code(cst_module),
-        "[1, {2: [1]}, fiddle.config.Config(re.match, pattern='a|b')]\n")
+        "[1, {2: [1]}, fiddle._src.config.Config(re.match, pattern='a|b')]\n",
+    )
 
 
 if __name__ == '__main__':

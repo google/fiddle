@@ -22,7 +22,7 @@ which are hard questions to answer well at the Fiddle library level.
 
 from typing import Any
 
-from fiddle import config as config_lib
+from fiddle._src import config as config_lib
 from fiddle.experimental import daglish_legacy
 
 

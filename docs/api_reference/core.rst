@@ -54,7 +54,7 @@ Advanced Functionality
 
 ArgFactory Internals
 ~~~~~~~~~~~~~~~~~~~~
-.. currentModule:: fiddle.config
+.. currentModule:: fiddle._src.config
 .. autoclass:: _BuiltArgFactory
 
 ``TiedValue``

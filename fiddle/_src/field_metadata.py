@@ -18,7 +18,7 @@
 import dataclasses
 from typing import Any, Callable, Collection, Optional
 
-from fiddle import tag_type
+from fiddle._src import tag_type
 
 _FIDDLE_DATACLASS_METADATA_KEY = object()
 

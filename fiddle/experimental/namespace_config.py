@@ -18,7 +18,7 @@
 import types
 from typing import Any, Iterable
 
-from fiddle import config
+from fiddle._src import config
 
 
 def _kwargs_to_namespace(**kwargs: Any) -> types.SimpleNamespace:

@@ -14,12 +14,13 @@
 # limitations under the License.
 
 """Provides utilities to generate and test nested values with Fiddle objects."""
+
 import random
 from typing import Any, List, Union
 
-from fiddle import config
 from fiddle import daglish
-from fiddle import tagging
+from fiddle._src import config
+from fiddle._src import tagging
 
 
 def kwargs_fn(**kwargs):

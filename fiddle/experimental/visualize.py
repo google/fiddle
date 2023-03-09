@@ -20,15 +20,16 @@ special handling. But some real-world configurations become gigantic, and so
 having a few helper functions for trimming them for interactive demos and such
 can be valuable.
 """
+
 import copy
 import inspect
 import textwrap
 from typing import Any, Dict, Iterable, List, Optional, TypeVar
 
-from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import diffing
 from fiddle import graphviz
+from fiddle._src import config as config_lib
 from fiddle.experimental import daglish_legacy
 
 

@@ -19,12 +19,13 @@ import collections
 import dataclasses
 from typing import Any, Dict, List, Sequence, Tuple
 
-from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle._src import config as config_lib
 from fiddle.codegen import import_manager as import_manager_lib
 from fiddle.codegen import mini_ast
 from fiddle.codegen import namespace as namespace_lib
 from fiddle.codegen import special_value_codegen
+
 
 Namespace = namespace_lib.Namespace
 ImportManager = import_manager_lib.ImportManager

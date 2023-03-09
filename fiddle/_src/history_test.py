@@ -16,16 +16,16 @@
 """Tests for history."""
 
 from absl.testing import absltest
-from fiddle import history
-from fiddle import tagging
+import fiddle as fdl
+from fiddle._src import history
 from fiddle.testing.example import fake_encoder_decoder
 
 
-class SampleTag(tagging.Tag):
+class SampleTag(fdl.Tag):
   """A sample tag."""
 
 
-class AdditionalTag(tagging.Tag):
+class AdditionalTag(fdl.Tag):
   """An extra tag."""
 
 

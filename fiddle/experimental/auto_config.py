@@ -32,9 +32,9 @@ import textwrap
 import types
 from typing import Any, Callable, cast, Optional
 
-from fiddle import arg_factory
-from fiddle import building
-from fiddle import config
+from fiddle._src import arg_factory
+from fiddle._src import building
+from fiddle._src import config
 from fiddle._src import mutate_buildable
 from fiddle.experimental import auto_config_policy
 from fiddle.experimental import daglish_legacy

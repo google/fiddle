@@ -55,7 +55,7 @@
         "buildable_traverser_metadata_1": {
             "type": {
                 "type": "pyref",
-                "module": "fiddle.config",
+                "module": "fiddle._src.config",
                 "name": "BuildableTraverserMetadata"
             },
             "items": [
@@ -91,14 +91,14 @@
             ],
             "metadata": {
                 "type": "pyref",
-                "module": "fiddle.config",
+                "module": "fiddle._src.config",
                 "name": "BuildableTraverserMetadata"
             }
         },
         "identity_fn_1": {
             "type": {
                 "type": "pyref",
-                "module": "fiddle.config",
+                "module": "fiddle._src.config",
                 "name": "Config"
             },
             "items": [

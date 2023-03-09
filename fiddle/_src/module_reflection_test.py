@@ -18,8 +18,8 @@
 import types
 
 from absl.testing import absltest
-from fiddle import module_reflection
-from fiddle import module_reflection_test_module as test_module
+from fiddle._src import module_reflection
+from fiddle._src import module_reflection_test_module as test_module
 from fiddle.experimental import auto_config
 
 

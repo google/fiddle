@@ -22,8 +22,8 @@ from unittest import mock
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import selectors
-from fiddle import tagging
-from fiddle import tagging_test_module as tst
+from fiddle._src import tagging
+from fiddle._src import tagging_test_module as tst
 
 
 @dataclasses.dataclass
@@ -55,16 +55,21 @@ class TaggingTest(absltest.TestCase):
 
   def test_tag_str(self):
     self.assertEqual(
-        str(tst.ParameterDType), "#fiddle.tagging_test_module.ParameterDType")
+        str(tst.ParameterDType),
+        "#fiddle._src.tagging_test_module.ParameterDType",
+    )
     self.assertEqual(
         str(tst.LinearParamDType),
-        "#fiddle.tagging_test_module.LinearParamDType")
+        "#fiddle._src.tagging_test_module.LinearParamDType",
+    )
     self.assertEqual(
         str(tst.MyModel.EncoderDType),
-        "#fiddle.tagging_test_module.MyModel.EncoderDType")
+        "#fiddle._src.tagging_test_module.MyModel.EncoderDType",
+    )
     self.assertEqual(
         str(tst.MyModel.DecoderDType),
-        "#fiddle.tagging_test_module.MyModel.DecoderDType")
+        "#fiddle._src.tagging_test_module.MyModel.DecoderDType",
+    )
 
   def test_tag_instantiation(self):
     with self.assertRaisesRegex(
@@ -72,7 +77,10 @@ class TaggingTest(absltest.TestCase):
       _ = tst.ParameterDType()
     with self.assertRaisesRegex(
         TypeError,
-        "trying to instantiate fiddle.tagging_test_module.MyModel.DecoderDType"
+        (
+            "trying to instantiate"
+            " fiddle._src.tagging_test_module.MyModel.DecoderDType"
+        ),
     ):
       _ = tst.MyModel.DecoderDType()
 
@@ -105,7 +113,8 @@ class TaggingTest(absltest.TestCase):
     cfg = tagging.TaggedValue(tags={tst.ParameterDType})
     with self.assertRaisesRegex(
         tagging.TaggedValueNotFilledError,
-        r"Unset tags: {fiddle.tagging_test_module.ParameterDType}"):
+        r"Unset tags: {fiddle._src.tagging_test_module.ParameterDType}",
+    ):
       fdl.build(cfg)
 
   def test_taggedvalue_default_none(self):
@@ -366,7 +375,7 @@ class TaggingTest(absltest.TestCase):
     self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
 
 
-# TODO(saeta): Test set_tagged that leverages tag inheritance.
+# TODO(b/272077830): Test set_tagged that leverages tag inheritance.
 
 
 class TestWithSelectorMock(TaggingTest):

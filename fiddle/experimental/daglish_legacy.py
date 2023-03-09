@@ -18,7 +18,7 @@
 import inspect
 from typing import Any, Callable, Dict, Generator, List
 
-from fiddle import daglish
+from fiddle._src import daglish
 
 
 def is_namedtuple_instance(value: Any):

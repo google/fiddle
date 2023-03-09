@@ -21,8 +21,8 @@ import inspect
 import types
 from typing import Any, Callable, Union, Type, List, Optional, NamedTuple, Sequence
 
-from fiddle import config as config_lib
-from fiddle import tagging
+from fiddle._src import config as config_lib
+from fiddle._src import tagging
 from fiddle.experimental import daglish_legacy
 
 import libcst as cst

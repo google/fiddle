@@ -33,7 +33,7 @@ import types
 import typing
 
 from fiddle import building
-from fiddle import config
+from fiddle._src import config
 from fiddle.experimental import autobuilders
 
 Policy = typing.Callable[[typing.Type[typing.Any]], bool]

@@ -33,7 +33,7 @@ import unittest
 from absl import flags
 from absl.testing import absltest
 from fiddle import building
-from fiddle import module_reflection
+from fiddle._src import module_reflection
 
 Module = Any
 # Note: although it's always a subclass of absltest.TestCase, we can't use

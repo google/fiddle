@@ -26,7 +26,7 @@ import functools
 import typing
 from typing import TypeVar, Union
 
-from fiddle import config as config_lib
+from fiddle._src import config as config_lib
 
 FunctionOrClassT = TypeVar("FunctionOrClassT")
 ValueT = TypeVar("ValueT")

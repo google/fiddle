@@ -17,8 +17,9 @@
 
 from typing import Any, Callable, Iterable, Optional, TypeVar, Union
 
-from fiddle import config
 from fiddle import daglish
+from fiddle._src import config
+
 
 # Any subclass of Buildable
 AnyBuildable = TypeVar(

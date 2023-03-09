@@ -19,9 +19,10 @@ import abc
 import dataclasses
 from typing import Any, List, Optional
 
-from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle._src import config as config_lib
 from fiddle.codegen import namespace as namespace_lib
+
 
 _camel_to_snake = namespace_lib.camel_to_snake  # pylint: disable=protected-access
 

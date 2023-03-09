@@ -22,7 +22,7 @@ from typing import Any, List
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle import selectors
+from fiddle._src import selectors
 from fiddle.experimental import auto_config
 from fiddle.testing.example import person_friend_toy
 

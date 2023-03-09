@@ -36,10 +36,11 @@ import sys
 import types
 from typing import Any, Dict, Iterable, List, Optional, Type
 
-from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle._src import config as config_lib
 from fiddle._src import reraised_exception
 from fiddle.experimental import daglish_legacy
+
 
 _VERSION = '0.0.1'
 

@@ -19,12 +19,13 @@ import copy
 import dataclasses
 import textwrap
 from typing import Any
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import fiddle as fdl
 from fiddle import daglish
-from fiddle import diffing
 from fiddle import testing
+from fiddle._src import diffing
 
 
 # Functions and classes that can be used to build Configs.
@@ -68,7 +69,7 @@ parse_path = testing.parse_path
 parse_reference = testing.parse_reference
 
 
-# TODO(fiddle-team): Get rid of this helper once there's a way to specify
+# TODO(b/272074309): Get rid of this helper once there's a way to specify
 # tags when constructing a Config.
 def config_with_tags(fdl_config, parameter_tags):
   """Updates `fdl_configs` to have the specified tags, and returns it."""

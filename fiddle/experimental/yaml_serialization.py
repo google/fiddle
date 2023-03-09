@@ -25,8 +25,8 @@ import collections
 import inspect
 from typing import Any
 
-from fiddle import config as config_lib
-from fiddle import tagging
+from fiddle._src import config as config_lib
+from fiddle._src import tagging
 from fiddle.experimental import fixture_node
 import yaml
 

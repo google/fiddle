@@ -21,14 +21,13 @@ import re
 import types
 from typing import Any, Callable, Dict, List, Set, Tuple
 
-from fiddle import config as config_lib
 from fiddle import daglish
 from fiddle import diffing
+from fiddle._src import config as config_lib
 from fiddle.codegen import import_manager as import_manager_lib
 from fiddle.codegen import namespace as namespace_lib
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.experimental import daglish_legacy
-
 import libcst as cst
 
 

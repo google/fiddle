@@ -21,8 +21,8 @@ source code formatters (pyformat, yapf, etc.).
 
 from typing import Any
 
-from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle._src import config as config_lib
 from fiddle.codegen import py_val_to_cst_converter
 from fiddle.codegen.auto_config import code_ir
 import libcst as cst

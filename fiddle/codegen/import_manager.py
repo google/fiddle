@@ -103,6 +103,9 @@ def get_full_module_name(node: AnyImport) -> str:
 _SPECIAL_IMPORT_ALIASES = {
     "fiddle.config": parse_import("import fiddle as fdl"),
     "fiddle": parse_import("import fiddle as fdl"),
+    "fiddle._src.config": parse_import("import fiddle as fdl"),
+    "fiddle._src.daglish": parse_import("from fiddle import daglish"),
+    "fiddle._src.arg_factory": parse_import("from fiddle import arg_factory"),
 }
 
 

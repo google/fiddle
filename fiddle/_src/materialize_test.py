@@ -17,7 +17,6 @@
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle import materialize
 
 
 class MaterializeTest(absltest.TestCase):
@@ -30,7 +29,7 @@ class MaterializeTest(absltest.TestCase):
     cfg = fdl.Config(test_defaulting_fn)
 
     self.assertEqual({}, cfg.__arguments__)
-    materialize.materialize_defaults(cfg)
+    fdl.materialize_defaults(cfg)
     self.assertEqual({'y': 3, 'z': 'abc'}, cfg.__arguments__)
 
   def test_materialize_defaults_recursive(self):
@@ -52,7 +51,7 @@ class MaterializeTest(absltest.TestCase):
     self.assertEqual({'a': 'a'}, cfg.y[0].__arguments__)
     self.assertEqual({}, cfg.y[1].__arguments__)
 
-    materialize.materialize_defaults(cfg)
+    fdl.materialize_defaults(cfg)
     self.assertEqual({'a': 'a', 'b': 'b'}, cfg.y[0].__arguments__)
     self.assertEqual({'b': 'b'}, cfg.y[1].__arguments__)
     self.assertEqual('abc', cfg.__arguments__['z'])

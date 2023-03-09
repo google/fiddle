@@ -27,11 +27,12 @@ import dataclasses
 import types
 from typing import Any, Collection, Mapping, Optional, Union
 
-from fiddle import config
-from fiddle import tag_type
+from fiddle._src import config
 from fiddle._src import field_metadata
 from fiddle._src import signatures
+from fiddle._src import tag_type
 from fiddle.experimental import auto_config
+
 
 TagOrTags = Union[tag_type.TagType, Collection[tag_type.TagType]]
 

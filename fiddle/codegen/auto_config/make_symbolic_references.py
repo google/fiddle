@@ -20,8 +20,8 @@ import inspect
 from typing import Any
 
 from fiddle import arg_factory
-from fiddle import config as config_lib
 from fiddle import daglish
+from fiddle._src import config as config_lib
 from fiddle.codegen.auto_config import code_ir
 
 
