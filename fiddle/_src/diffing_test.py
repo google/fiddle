@@ -263,6 +263,16 @@ class DiffAlignmentTest(absltest.TestCase):
             diffing.AlignedValues(old.first.z, new.second.arg2),
         ])
 
+  def test_align_heuristically_fails_if_roots_cant_be_aligned(self):
+    with self.assertRaisesRegex(ValueError, 'different types'):
+      diffing.align_heuristically([], {})
+    with self.assertRaisesRegex(ValueError, 'different lengths'):
+      diffing.align_heuristically([1], [2, 3])
+    with self.assertRaisesRegex(
+        ValueError, 'may only be aligned if they are equal'
+    ):
+      diffing.align_heuristically(SimpleClass(1, 2, 3), SimpleClass(3, 4, 5))
+
 
 class ReferenceTest(absltest.TestCase):
 
@@ -690,6 +700,19 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
     self.check_diff([set([5])], [set([6])],
                     expected_changes=(diffing.ModifyValue(
                         parse_path('[0]'), set([6])),))
+
+  def test_root_must_be_aligned(self):
+    old = fdl.Config(SimpleClass, 1, 2, 3)
+    new = fdl.Config(SimpleClass, 4, 5, 6)
+    # Manually construct an alignment with no alignments (where the root
+    # `old` and `new` objects are not aligned).  Note that
+    # `align_heuristically` always aligns the root objects.
+    alignment = diffing.DiffAlignment(old, new)
+    self.assertFalse(alignment.is_old_value_aligned(old))
+    with self.assertRaisesRegex(
+        ValueError, 'The root objects .* must be aligned'
+    ):
+      diffing._DiffFromAlignmentBuilder(alignment)
 
 
 class ResolveDiffReferencesTest(absltest.TestCase):

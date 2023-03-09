@@ -474,8 +474,10 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
   Returns:
     A `DiffAlignment`.
   """
-  # First pass: align by id.
   alignment = DiffAlignment(old, new, old_name, new_name)
+  alignment.align(old, new)
+
+  # First pass: align by id.
   old_by_id = daglish_legacy.collect_value_by_id(old, memoizable_only=True)
   new_by_id = daglish_legacy.collect_value_by_id(new, memoizable_only=True)
   for (value_id, value) in old_by_id.items():
@@ -537,6 +539,13 @@ class _DiffFromAlignmentBuilder:
     self.alignment: DiffAlignment = alignment
     self.paths_by_old_id = daglish_legacy.collect_paths_by_id(
         alignment.old, memoizable_only=True)
+    if not (
+        alignment.is_old_value_aligned(alignment.old)
+        and alignment.new_from_old(alignment.old) is alignment.new
+    ):
+      raise ValueError(
+          'The root objects alignment.old and alignment.new must be aligned.'
+      )
 
   def build_diff(self) -> Diff:
     """Returns a `Diff` between `alignment.old` and `alignment.new`."""
