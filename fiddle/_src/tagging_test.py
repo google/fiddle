@@ -17,9 +17,11 @@
 
 import copy
 import dataclasses
+import pickle
 from unittest import mock
 
 from absl.testing import absltest
+import cloudpickle
 import fiddle as fdl
 from fiddle import selectors
 from fiddle._src import tagging
@@ -90,6 +92,21 @@ class TaggingTest(absltest.TestCase):
 
       class Bar(tagging.Tag):  # pylint: disable=unused-variable
         pass
+
+  def test_tag_pickle(self):
+    p = pickle.dumps(RedTag)
+    rt = pickle.loads(p)
+    self.assertIs(rt, RedTag)
+
+  def test_tag_cloudpickle_other_module(self):
+    p = cloudpickle.dumps(tst.ParameterDType)
+    tag = cloudpickle.loads(p)
+    self.assertIs(tag, tst.ParameterDType)
+
+  def test_tag_cloudpickle_main_module(self):
+    p = cloudpickle.dumps(RedTag)
+    tag = cloudpickle.loads(p)
+    self.assertIs(tag, RedTag)
 
   def test_inline_tag_definition_fails(self):
 

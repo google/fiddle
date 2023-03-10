@@ -18,6 +18,8 @@
 See https://github.com/google/fiddle for documentation.
 """
 
+# pyformat: disable
+
 import sys
 from setuptools import find_packages
 from setuptools import setup
@@ -54,6 +56,7 @@ setup(
             'etils[epath]',
         ],
         'testing': [
+            'cloudpickle',
             'fiddle[flags]',
             'flax',
             'graphviz',

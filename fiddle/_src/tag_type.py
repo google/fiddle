@@ -18,6 +18,8 @@
 Please see tagging.py for information about tagging APIs.
 """
 
+import sys
+
 # This module is separate so that we can import it from config.py, but then
 # import config.py from tagging.py (and include user-facing APIs there).
 
@@ -32,6 +34,24 @@ class TagType(type):
   """
 
   def __init__(cls, name, bases, dct):
+    module_name = dct.get('__module__', None)
+    is_redefining_tag = (
+        module_name is not None
+        and module_name in sys.modules
+        and name in dir(sys.modules[module_name])
+    )
+    if is_redefining_tag:
+      if '__doc__' in dct or '__qualname__' in dct:
+        raise TypeError(f'Redefining tag {name}.')
+      # Likely cloudpickle un-pickling a tag; carry on.
+      #
+      # When deserializing a cloudpickle'd tag, the Tag subclass is initially
+      # initialized with an empty `dct` that is subsequently filled in.
+      #
+      # `tagging_test.py` has a couple tests that ensure a de-serialized Tag
+      # maintains expected identity equality.
+      super().__init__(name, bases, dct)
+      return
     if '__doc__' not in dct:
       raise TypeError('You must provide a tag description with a docstring.')
     if '__qualname__' not in dct:
