@@ -25,7 +25,7 @@ from fiddle._src import config
 from fiddle._src import daglish
 from fiddle._src import history
 from fiddle._src import tagging
-from fiddle.codegen import formatting_utilities
+from fiddle._src.codegen import formatting_utilities
 
 
 @dataclasses.dataclass(frozen=True)

@@ -38,4 +38,3 @@ from fiddle._src.diffing import RemoveTag
 from fiddle._src.diffing import resolve_diff_references
 from fiddle._src.diffing import SetValue
 from fiddle._src.diffing import skeleton_from_diff
-from fiddle.experimental import daglish_legacy

@@ -15,25 +15,5 @@
 
 """A Config that builds a `dict` and accepts any parameters."""
 
-from typing import Any, Iterable
-
-from fiddle._src import config
-
-
-def _kwargs_to_dict(**kwargs):
-  return dict(kwargs)
-
-
-class DictConfig(config.Config):
-  """A Config instance that builds a `dict` accepting any keys/values."""
-
-  def __init__(self, *args, **kwargs):
-    super().__init__(_kwargs_to_dict, *args, **kwargs)
-
-  @classmethod
-  def __unflatten__(
-      cls,
-      values: Iterable[Any],
-      metadata: config.BuildableTraverserMetadata,
-  ):
-    return cls(**metadata.arguments(values))
+# pylint: disable=unused-import
+from fiddle._src.experimental.dict_config import DictConfig

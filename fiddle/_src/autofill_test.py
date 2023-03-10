@@ -23,8 +23,8 @@ from absl.testing import absltest
 import fiddle as fdl
 from fiddle._src import autofill as autofill_impl
 from fiddle._src import autofill_test_helper as helper
-from fiddle.experimental import auto_config
-from fiddle.experimental import autofill as autofill_api
+from fiddle._src.experimental import auto_config
+from fiddle._src.experimental import autofill as autofill_api
 import typing_extensions
 
 

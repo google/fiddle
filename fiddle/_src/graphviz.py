@@ -32,8 +32,8 @@ from fiddle._src import daglish
 from fiddle._src import diffing
 from fiddle._src import tag_type
 from fiddle._src import tagging
-from fiddle.codegen import formatting_utilities
-from fiddle.experimental import daglish_legacy
+from fiddle._src.codegen import formatting_utilities
+from fiddle._src.experimental import daglish_legacy
 import graphviz
 import typing_extensions
 

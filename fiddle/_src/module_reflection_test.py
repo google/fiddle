@@ -20,7 +20,7 @@ import types
 from absl.testing import absltest
 from fiddle._src import module_reflection
 from fiddle._src import module_reflection_test_module as test_module
-from fiddle.experimental import auto_config
+from fiddle._src.experimental import auto_config
 
 
 class ModuleReflectionTest(absltest.TestCase):

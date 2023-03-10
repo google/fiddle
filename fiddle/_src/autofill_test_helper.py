@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from fiddle.experimental import autofill
+from fiddle._src.experimental import autofill
 from typing_extensions import Annotated
 
 

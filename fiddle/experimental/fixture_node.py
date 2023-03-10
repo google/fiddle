@@ -20,40 +20,6 @@ of what sub-configuation DAGs should be shared, how to replicate them, etc.,
 which are hard questions to answer well at the Fiddle library level.
 """
 
-from typing import Any
-
-from fiddle._src import config as config_lib
-from fiddle.experimental import daglish_legacy
-
-
-class FixtureNode(config_lib.Buildable):
-
-  def __build__(self, *args: Any, **kwargs: Any):
-    raise ValueError(
-        "You must first materialize a Fiddle configuration that contains "
-        "`FixtureNode`s. Please call "
-        "`config = fixture_node.materialize(config)`.")
-
-
-def materialize(config: Any):
-  """Invokes any `FixtureNode`s, resulting in low-level configuration.
-
-  Args:
-    config: fdl.Buildable object, or collection which may include Buildable
-      objects. Any `FixtureNode`s within this DAG will be invoked.
-
-  Returns:
-    Lower-level configuration as a result of invoking `FixtureNode`s in
-    `config`.
-  """
-
-  def traverse_fn(unused_all_paths, unused_value):
-    new_value = (yield)
-    if isinstance(new_value, FixtureNode):
-      # TODO(b/236129682): If this proposal is taken forward, preserve
-      # __argument_history__ as well.
-      return config_lib.get_callable(new_value)(**new_value.__arguments__)
-    else:
-      return new_value
-
-  return daglish_legacy.memoized_traverse(traverse_fn, config)
+# pylint: disable=unused-import
+from fiddle._src.experimental.fixture_node import FixtureNode
+from fiddle._src.experimental.fixture_node import materialize

@@ -27,8 +27,8 @@ from absl.testing import parameterized
 import fiddle as fdl
 from fiddle import daglish
 from fiddle import history
-from fiddle.testing import nested_values
-from fiddle.testing import test_util
+from fiddle._src.testing import nested_values
+from fiddle._src.testing import test_util
 
 
 @dataclasses.dataclass

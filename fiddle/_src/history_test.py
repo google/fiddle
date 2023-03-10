@@ -18,7 +18,7 @@
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle._src import history
-from fiddle.testing.example import fake_encoder_decoder
+from fiddle._src.testing.example import fake_encoder_decoder
 
 
 class SampleTag(fdl.Tag):

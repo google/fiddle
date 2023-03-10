@@ -18,7 +18,5 @@
 For additional details, please see Autofill's docstring.
 """
 
-from fiddle._src import autofill as impl
-
-
-Autofill = impl.Autofill
+# pylint: disable=unused-import
+from fiddle._src.autofill import Autofill

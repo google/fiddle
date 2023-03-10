@@ -23,7 +23,7 @@ from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union, 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import tag_type
-from fiddle.experimental import daglish_legacy
+from fiddle._src.experimental import daglish_legacy
 
 
 class AlignmentError(ValueError):

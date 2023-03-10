@@ -29,7 +29,7 @@ from fiddle import arg_factory
 from fiddle import daglish
 from fiddle import history
 from fiddle._src import config as config_lib
-from fiddle.experimental import daglish_legacy
+from fiddle._src.experimental import daglish_legacy
 import pytype_extensions
 
 

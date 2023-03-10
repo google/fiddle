@@ -15,26 +15,5 @@
 
 """A Config that builds a `types.SimpleNamespace` from any argument."""
 
-import types
-from typing import Any, Iterable
-
-from fiddle._src import config
-
-
-def _kwargs_to_namespace(**kwargs: Any) -> types.SimpleNamespace:
-  return types.SimpleNamespace(**kwargs)
-
-
-class NamespaceConfig(config.Config):
-  """A Config that builds a `types.SimpleNamespace` accepting all arg names."""
-
-  def __init__(self, *args, **kwargs):
-    super().__init__(_kwargs_to_namespace, *args, **kwargs)
-
-  @classmethod
-  def __unflatten__(
-      cls,
-      values: Iterable[Any],
-      metadata: config.BuildableTraverserMetadata,
-  ):
-    return cls(**metadata.arguments(values))
+# pylint: disable=unused-import
+from fiddle._src.experimental.namespace_config import NamespaceConfig

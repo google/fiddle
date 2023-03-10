@@ -67,7 +67,7 @@ from typing import Any, Collection, FrozenSet, Generic, Optional, Set, TypeVar, 
 from fiddle._src import config
 from fiddle._src import daglish
 from fiddle._src import tag_type
-from fiddle.experimental import auto_config
+from fiddle._src.experimental import auto_config
 
 TagType = tag_type.TagType
 TaggedValueNotFilledError = tag_type.TaggedValueNotFilledError

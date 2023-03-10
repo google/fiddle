@@ -76,7 +76,7 @@ _exclude_locations: Set[str] = set(
             "fiddle/_src/daglish.py",
             "fiddle/_src/history.py",
             "fiddle/_src/materialize.py",
-            "fiddle/experimental/auto_config.py",
+            "fiddle/_src/experimental/auto_config.py",
         ],
     )
 )
