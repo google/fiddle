@@ -16,6 +16,7 @@
 """Manages import statements for code generation."""
 
 import dataclasses
+import enum
 import functools
 import inspect
 from typing import Any, Dict, Union
@@ -211,27 +212,31 @@ class ImportManager:
     self.imports_by_full_name[full_module_name] = result
     return get_import_name(result)
 
-  def add(self, fn_or_cls: Any) -> str:
+  def add(self, value: Any) -> str:
     """Adds an import if it doesn't exist.
 
     This adds an import statement to this manager.
 
     Args:
-      fn_or_cls: Function or class.
+      value: Function, class, or enum value.
 
     Returns:
       Relative-qualified name for the instance.
     """
-    module_name = inspect.getmodule(fn_or_cls).__name__
-    fn_or_cls_name = fn_or_cls.__qualname__
+    module_name = inspect.getmodule(value).__name__
+    if isinstance(value, enum.Enum):
+      value_qualname = value.__class__.__qualname__ + "." + value.name
+    else:
+      value_qualname = value.__qualname__
     if module_name == "__main__":
       logging.warning(
           "%s's module is __main__, so an import couldn't be added.",
-          fn_or_cls_name)
-      return fn_or_cls_name
+          value_qualname,
+      )
+      return value_qualname
 
     imported_name = self.add_by_name(module_name)
-    return f"{imported_name}.{fn_or_cls_name}"
+    return f"{imported_name}.{value_qualname}"
 
   def sorted_import_nodes(self):
     """Returns imports sorted lexicographically."""

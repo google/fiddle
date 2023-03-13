@@ -15,6 +15,7 @@
 
 """Changes callables to symbol references."""
 
+import enum
 import functools
 import inspect
 from typing import Any
@@ -25,13 +26,15 @@ from fiddle._src import config as config_lib
 from fiddle._src.codegen.auto_config import code_ir
 
 
-def is_plain_symbol(value: Any) -> bool:
+def is_plain_symbol_or_enum_value(value: Any) -> bool:
   """Returns whether the value is a plain symbol."""
   if isinstance(value, config_lib.Buildable):
     return False
   elif isinstance(value, type):
     return True
   elif inspect.isfunction(value):
+    return True
+  elif isinstance(value, enum.Enum):
     return True
   else:
     return False
@@ -51,7 +54,7 @@ def import_symbols(task: code_ir.CodegenTask) -> None:
   for value, _ in daglish.iterate(task.top_level_call.all_fixture_functions()):
     if isinstance(value, config_lib.Buildable):
       task.import_manager.add(config_lib.get_callable(value))
-    elif is_plain_symbol(value):
+    elif is_plain_symbol_or_enum_value(value):
       task.import_manager.add(value)
 
 
@@ -128,7 +131,7 @@ def replace_callables_and_configs_with_symbols(
         return _handle_partial(value, state, symbol)
       else:
         raise TypeError(f"Unsupported Buildable {type(value)}")
-    elif is_plain_symbol(value):
+    elif is_plain_symbol_or_enum_value(value):
       symbol = task.import_manager.add(value)
       return code_ir.SymbolReference(symbol)
     else:

@@ -366,6 +366,7 @@ def register_constant(module: str, symbol: str, compare_by_identity: bool):
     _serialization_constants_by_value[value] = serialization_constant
 
 
+# TODO(b/273321868): Remove this soon.
 def register_enum(enum_type: Type[enum.Enum]) -> None:
   """Registers all members of the given enum using `register_constant`.
 
@@ -544,7 +545,10 @@ class Serialization:
       )
       raise UnserializableValueError(msg)
     module_name = module.__name__
-    symbol = value.__qualname__
+    if isinstance(value, enum.Enum):
+      symbol = value.__class__.__qualname__ + '.' + value.name
+    else:
+      symbol = value.__qualname__
     # Check to make sure we can import the symbol.
     if value is not import_symbol(self._pyref_policy, module_name, symbol):
       msg = (
@@ -606,7 +610,7 @@ class Serialization:
         if all_paths is None:
           return value  # If we don't need to add paths, just return the value.
         output = self._leaf(value)
-      elif isinstance(value, (type, types.FunctionType)):
+      elif isinstance(value, (type, types.FunctionType, enum.Enum)):
         output = self._pyref(value, current_path)
       elif id(value) in _serialization_constants_by_id:
         output = _serialization_constants_by_id[id(value)].to_pyref()

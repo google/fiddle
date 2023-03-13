@@ -228,7 +228,9 @@ AnyBuildable = TypeVar('AnyBuildable', bound=config.Buildable)
 
 def materialize_tags(
     buildable: AnyBuildable,
-    tags: Optional[collections.abc.Set[TagType]] = None) -> AnyBuildable:
+    tags: Optional[collections.abc.Set[TagType]] = None,
+    clear_field_tags: bool = False,
+) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
 
   TODO(b/242574056): Consider supporting tags directly on Config objects, e.g.
@@ -248,6 +250,7 @@ def materialize_tags(
       materialized. Note, if you would like to exclude a set of tags from being
       materialized, you can pass `tagging.list_tags(buildable) - excluded_tags`
       as the `tag` parameter.
+    clear_field_tags: Whether to remove all field tags.
 
   Returns:
     A new `fdl.Buildable` with its tags replaced by their values.
@@ -258,6 +261,9 @@ def materialize_tags(
     if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):
       return value.value
+    elif isinstance(value, config.Buildable) and clear_field_tags:
+      value.__argument_tags__.clear()
+      return value
     else:
       return value
 

@@ -17,6 +17,7 @@
 
 import collections
 import dataclasses
+import enum
 import json
 import random
 from typing import Any, List, NamedTuple, Optional, Type, cast
@@ -82,7 +83,12 @@ def switch_buildables_to_args(value, state: Optional[daglish.State] = None):
   state = state or daglish.MemoizedTraversal.begin(switch_buildables_to_args,
                                                    value)
   value = state.map_children(value)
-  return value.__arguments__ if isinstance(value, fdl.Buildable) else value
+  if isinstance(value, fdl.Buildable):
+    return fdl.ordered_arguments(value)
+  elif isinstance(value, enum.Enum):
+    return str(value)
+  else:
+    return value
 
 
 # Dataclasses iterator registry

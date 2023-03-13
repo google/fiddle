@@ -15,6 +15,7 @@
 
 """Provides utilities to generate and test nested values with Fiddle objects."""
 
+import enum
 import random
 from typing import Any, List, Union
 
@@ -29,6 +30,14 @@ def kwargs_fn(**kwargs):
 
 class SampleTag(tagging.Tag):
   """`fdl.Tag` that can be used for testing purposes."""
+
+
+@enum.unique
+class SampleEnum(enum.Enum):
+  ENUM_VALUE_A = 1
+  ENUM_VALUE_B = 2
+  ENUM_VALUE_C = 3
+  ENUM_VALUE_D = 4
 
 
 def calculate_nested_value_depth(value):
@@ -94,6 +103,9 @@ def generate_nested_value(
     alphabet = 'abcdefghijklmnopqrstuvwxyz'
     return ''.join([rng.choice(alphabet) for _ in range(length)])
 
+  def generate_enum():
+    return rng.choice(list(SampleEnum))
+
   def generate_list():
     length = rng.randint(0, max_container_size)
     return [generate_value() for _ in range(length)]
@@ -125,6 +137,7 @@ def generate_nested_value(
   def generate_leaf():
     generator = rng.choice([
         generate_string,
+        generate_enum,
         generate_int,
         generate_float,
         generate_bool,
