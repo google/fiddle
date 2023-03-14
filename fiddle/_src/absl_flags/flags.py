@@ -110,6 +110,7 @@ This implementation has drawn inspiration from multiple sources, including
 
 import ast
 import dataclasses
+import enum
 import importlib
 import inspect
 import re
@@ -218,11 +219,25 @@ def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
   return result
 
 
-def _import_dotted_name(name: str) -> Any:
+class _ImportDottedNameDebugContext(enum.Enum):
+  """Context of importing a sumbol, for error messages."""
+
+  BASE_CONFIG = 1
+  FIDDLER = 2
+
+  def error_prefix(self, name: str) -> str:
+    if self == _ImportDottedNameDebugContext.BASE_CONFIG:
+      return f'Could not init a buildable from {name!r}'
+    assert self == _ImportDottedNameDebugContext.FIDDLER
+    return f'Could not load fiddler {name!r}'
+
+
+def _import_dotted_name(name: str, mode: _ImportDottedNameDebugContext) -> Any:
   """Returns the Python object with the given dotted name.
 
   Args:
     name: The dotted name of a Python object, including the module name.
+    mode: Whether we're looking for a base config function or a fiddler.
 
   Returns:
     The named value.
@@ -235,15 +250,29 @@ def _import_dotted_name(name: str) -> Any:
   """
   name_pieces = name.split('.')
   if len(name_pieces) < 2:
-    raise ValueError('Expected a dotted name including the module name.')
+    raise ValueError(
+        f'{mode.error_prefix(name)}: Expected a dotted name including the '
+        'module name.'
+    )
 
   # We don't know where the module ends and the name begins; so we need to
   # try different split points.  Longer module names take precedence.
   for i in range(len(name_pieces) - 1, 0, -1):
     try:
       value = importlib.import_module('.'.join(name_pieces[:i]))
-      for name_piece in name_pieces[i:]:
-        value = getattr(value, name_piece)  # Can raise AttributeError.
+      for j, name_piece in enumerate(name_pieces[i:]):
+        try:
+          value = getattr(value, name_piece)  # Can raise AttributeError.
+        except AttributeError:
+          available_names = ', '.join(
+              repr(n) for n in dir(value) if not n.startswith('_')
+          )
+          module_name = '.'.join(name_pieces[: i + j])
+          failing_name = name_pieces[i + j]
+          raise ValueError(
+              f'{mode.error_prefix(name)}: module {module_name!r} has no '
+              f'attribute {failing_name!r}; available names: {available_names}'
+          ) from None
       return value
     except ModuleNotFoundError:
       if i == 1:  # Final iteration through the loop.
@@ -380,8 +409,10 @@ def apply_fiddlers_to(cfg: config.Buildable,
       fiddler = getattr(source_module, fiddler_name)
     elif allow_imports:
       try:
-        fiddler = _import_dotted_name(fiddler_name)
-      except (ValueError, ModuleNotFoundError, AttributeError) as e:
+        fiddler = _import_dotted_name(
+            fiddler_name, mode=_ImportDottedNameDebugContext.FIDDLER
+        )
+      except ModuleNotFoundError as e:
         raise ValueError(f'Could not load fiddler {fiddler_name!r}: {e}') from e
     else:
       available_fiddlers = ', '.join(
@@ -470,8 +501,10 @@ def create_buildable_from_flags(
       base_fn = getattr(module, base_name)
     elif allow_imports:
       try:
-        base_fn = _import_dotted_name(base_name)
-      except (ValueError, ModuleNotFoundError, AttributeError) as e:
+        base_fn = _import_dotted_name(
+            base_name, mode=_ImportDottedNameDebugContext.BASE_CONFIG
+        )
+      except ModuleNotFoundError as e:
         raise ValueError(
             f'Could not init a buildable from {base_name!r}: {e}') from e
     else:
