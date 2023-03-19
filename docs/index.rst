@@ -130,12 +130,80 @@ can activate all of this functionality by installing::
 Basic Usage
 -----------
 
-TODO
+Given a hypothentical (Fiddle-oblivious) codebase as follows::
+
+  # Use dataclasses if you want.
+  @dataclasses.dataclass
+  class Model:
+    predicted_value: int = 42  # Always the answer.
+
+    def __call__(self, x):
+      return self.predicted_value
+
+  # Or use regular Python classes
+  class Engine:
+    def __init__(self, model: Model, batch_size: int = 5):
+      self.model = model
+      self.batch_size = batch_size
+      self._thread = threading.thread(target=self.background_thread)
+      self._thread.start()
+
+    ...
+
+  # Inherit from whatever superclasses you'd like.
+  class Server(my_grpc.MyApiServicer):
+    def __init__(self, engine: Engine, port: int):
+      ...
+
+    def run(self):
+      server = grpc.server(port=self.port)
+      my_grpc.add_MyApiServicer_to_server(self.engine, server)
+      server.start()
+      server.wait_for_termination()
+
+  # Wire up objects.
+  def make_server():
+    model = Model(predicted_value=101)  # custom model!
+    engine = Engine(model=model)
+    server = Server(engine=engine, port=9000)
+    return server
+
+  # Main function to run our program.
+  def main():
+    server = make_server()
+    server.run()
+
+You can easily use Fiddle to make configuration changes to arbitrarily deeply
+nested objects with just a single line of Python::
+
+  @fdl.auto_config  # Adds a `.as_buildable` function to `make_server`.
+  def make_server():
+    # ... same as before
+
+  def main():
+    server_config = make_server.as_buildable()  # type: fdl.Config[Server]
+
+    server_config.port = 8080  # Can make changes to Server's parameters.
+    server_config.engine.model.predicted_value = 3000  # Deep changes in 1 line.
+    
+    # When you're done making configuration changes, just call `fdl.build`.
+    server: Server = fdl.build(config)
+
+    # From here-on, Fiddle is gone, and you just have your plain objects.
+    server.run()
+
+To learn more about Fiddle's features, including Fiddle's ability to suggest
+typo fixes, Fiddle's time-travelling configuration capabilities, and more, be
+sure to check out the Colab series (linked below).
 
 ----
 
 Learn More
 ----------
+
+We recommend new users start with the Colab series, which walks you through
+Fiddle features in an interactive Jupyter Notebook. See the API reference for
+all of Fiddle's features & how to use them.
 
 .. toctree::
    :maxdepth: 3
