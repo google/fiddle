@@ -19,7 +19,7 @@ import copy
 import dataclasses
 import inspect
 import types
-from typing import Any, Iterator, List, Optional, Type
+from typing import Any, Iterator, List, Optional, Type, Union
 
 from fiddle._src import config
 from fiddle._src import daglish
@@ -327,6 +327,41 @@ def _make_per_leaf_history_text(path: daglish.Path,
   else:
     past = ''
   current_value = _format_value(
-      value_history[-1].new_value, raw_value_repr=raw_value_repr)
+      value_history[-1].new_value, raw_value_repr=raw_value_repr
+  )
   current = f'{current_value} @ {value_history[-1].location}'
   return f'{_path_str(path)} = {current}{past}'
+
+
+def format_with_tabs(input_str: Union[List[str], str], depth: int = 0):
+  """Formats the output of as_str_flattened in a nested way."""
+  if isinstance(input_str, str):
+    input_str = input_str.split('\n')
+  output_string = ''
+  first = True
+  buffer = None
+  current_list = []
+  for line in input_str:
+    k = line.split(': ', 1)[0]
+    split = k.split('.', 1)
+    if len(split) > 1:
+      if first:
+        first = False
+        buffer = split[0]
+        current_list.append(line.split('.', 1)[1])
+      elif split[0] == buffer:
+        current_list.append(line.split('.', 1)[1])
+      else:
+        output_string += '\t' * depth + f'*{buffer}*\n'
+        buffer = split[0]
+        output_string += format_with_tabs(current_list, depth + 1)
+        current_list = []
+        current_list.append(line.split('.', 1)[1])
+    else:
+      output_string += '\t' * depth + line + '\n'
+
+  if buffer is not None:
+    output_string += '\t' * depth + f'*{buffer}*\n'
+    output_string += format_with_tabs(current_list, depth + 1)
+
+  return output_string

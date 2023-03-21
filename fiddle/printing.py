@@ -17,4 +17,5 @@
 
 # pylint: disable=unused-import
 from fiddle._src.printing import as_str_flattened
+from fiddle._src.printing import format_with_tabs
 from fiddle._src.printing import history_per_leaf_parameter
