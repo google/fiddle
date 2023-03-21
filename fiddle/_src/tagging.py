@@ -86,7 +86,7 @@ class Tag(metaclass=TagType):
   """
 
   @classmethod
-  def new(cls, default: Any = NO_VALUE) -> TaggedValueCls:
+  def new(cls, default: Any = NO_VALUE) -> Any:
     """Creates a new `TaggedValue` with `cls` as the only tag.
 
     If you would like to create a `TaggedValue` with multiple tags attached,
