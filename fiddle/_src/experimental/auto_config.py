@@ -234,12 +234,19 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     return self._handle_control_flow(node)
 
   def visit_FunctionDef(self, node: ast.FunctionDef):
+    """Transforms a FunctionDef node."""
     if self._function_def_depth > 0:
       msg = 'Nested function definitions are not supported by auto_config.'
       raise UnsupportedLanguageConstructError(msg, self._location_for(node))
     else:
       self._validate_decorator_ordering(node)
-      return self._generic_visit_inside_function(node)
+      # Backup decorator_list because we don't want to transform anything
+      # in decorators.
+      decorator_list = node.decorator_list
+      node.decorator_list = []
+      node = self._generic_visit_inside_function(node)
+      node.decorator_list = decorator_list
+      return node
 
   def visit_Lambda(self, node: ast.Lambda):
     if self._function_def_depth > 0:

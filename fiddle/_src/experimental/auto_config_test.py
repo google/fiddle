@@ -609,6 +609,14 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(with_policy.as_buildable(5), expected_with_policy)
     self.assertEqual(without_policy.as_buildable(5), expected_without_policy)
 
+  def test_lambda_supported_in_decorator(self):
+    @auto_config.auto_config(experimental_exemption_policy=lambda x: False)
+    def make_sample():
+      return dict(arg1=3)
+
+    expected = fdl.Config(dict, arg1=3)
+    self.assertEqual(make_sample.as_buildable(), expected)
+
   def test_function_metadata(self):
 
     @auto_config.auto_config
