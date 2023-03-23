@@ -24,7 +24,11 @@ import sys
 from setuptools import find_packages
 from setuptools import setup
 
-_VERSION = '0.2.5'
+
+_dct = {}
+with open('fiddle/version.py', encoding='utf-8') as f:
+  exec(f.read(), _dct)  # pylint: disable=exec-used
+__version__ = _dct['__version__']
 
 long_description = """
 # Fiddle
@@ -40,7 +44,7 @@ Python code.
 # pylint: disable=g-long-ternary
 setup(
     name='fiddle',
-    version=_VERSION,
+    version=__version__,
     include_package_data=True,
     packages=find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},

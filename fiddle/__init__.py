@@ -37,3 +37,4 @@ from fiddle._src.materialize import materialize_defaults
 from fiddle._src.tagging import set_tagged
 from fiddle._src.tagging import Tag
 from fiddle._src.tagging import TaggedValue
+from fiddle.version import __version__
