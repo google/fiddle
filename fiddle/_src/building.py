@@ -25,7 +25,6 @@ from fiddle._src import daglish
 from fiddle._src import reraised_exception
 
 T = TypeVar('T')
-CallableProducingT = Callable[..., T]
 
 
 class _BuildGuardState(threading.local):
@@ -101,31 +100,13 @@ def _build(value: Any, state: daglish.State) -> Any:
 
 # Define typing overload for `build(Partial[T])`
 @overload
-def build(buildable: config_lib.Partial[T]) -> CallableProducingT:
-  ...
-
-
-# Define typing overload for `build(Partial)`
-@overload
-def build(buildable: config_lib.Partial) -> Callable[..., Any]:
+def build(buildable: config_lib.Partial[T]) -> Callable[..., T]:
   ...
 
 
 # Define typing overload for `build(Config[T])`
 @overload
 def build(buildable: config_lib.Config[T]) -> T:
-  ...
-
-
-# Define typing overload for `build(Config)`
-@overload
-def build(buildable: config_lib.Config) -> Any:
-  ...
-
-
-# Define typing overload for `build(Buildable)`
-@overload
-def build(buildable: config_lib.Buildable) -> Any:
   ...
 
 
