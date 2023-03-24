@@ -106,7 +106,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   # "Dunder"-style names were chosen here to reduce the possibility of naming
   # conflicts while still making the fields accessible.
-  __fn_or_cls__: TypeOrCallableProducingT
+  __fn_or_cls__: TypeOrCallableProducingT[T]
   __signature__: inspect.Signature
   __arguments__: Dict[str, Any]
   __argument_history__: history.History
@@ -115,7 +115,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __init__(
       self,
-      fn_or_cls: Union['Buildable', TypeOrCallableProducingT],
+      fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]],
       *args,
       **kwargs,
   ):
@@ -720,7 +720,7 @@ class Config(Generic[T], Buildable[T]):
   """
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT
+  __fn_or_cls__: TypeOrCallableProducingT[T]
   __signature__: inspect.Signature
 
   def __build__(self, *args, **kwargs):
@@ -749,7 +749,7 @@ class TiedValue(Generic[T], Config[T]):
   """
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT
+  __fn_or_cls__: TypeOrCallableProducingT[T]
   __signature__: inspect.Signature
 
   value: T
@@ -923,7 +923,7 @@ class Partial(Generic[T], Buildable[T]):
   """
 
   # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT
+  __fn_or_cls__: TypeOrCallableProducingT[T]
 
   def __build__(self, *args, **kwargs):
     """Builds this ``Partial`` for the given ``args`` and ``kwargs``.
@@ -980,7 +980,7 @@ class ArgFactory(Generic[T], Buildable[T]):
   # in an inappropriate context.
 
   # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT
+  __fn_or_cls__: TypeOrCallableProducingT[T]
 
   def __build__(self, *args, **kwargs):
     if args or kwargs:
