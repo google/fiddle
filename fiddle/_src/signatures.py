@@ -59,7 +59,7 @@ def has_signature(fn_or_cls) -> bool:
 
   Note that this will return `True` even if a signature for `fn_or_cls` is not
   yet in the cache. The signature for `fn_or_cls` will be cached if it is
-  avialable.
+  available.
 
   Args:
     fn_or_cls: The function or class to check signature availability for.
