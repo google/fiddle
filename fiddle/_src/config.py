@@ -29,7 +29,6 @@ import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
 
 from fiddle._src import arg_factory
-from fiddle._src import autofill
 from fiddle._src import daglish
 from fiddle._src import field_metadata
 from fiddle._src import history
@@ -176,22 +175,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     for name, value in arguments.items():
       setattr(self, name, value)
 
-    for arg_name, autofill_metadata in autofill.parameters_to_autofill(
-        fn_or_cls, signature
-    ).items():
-      if arg_name not in arguments:
-        factory = autofill_metadata.factory
-        if factory:
-          autofill_buildable = factory()
-        else:
-          default_buildable_type = Config
-          if isinstance(self, (Partial, ArgFactory)):
-            default_buildable_type = ArgFactory
-          buildable_type = (
-              autofill_metadata.buildable_type or default_buildable_type
-          )
-          autofill_buildable = buildable_type(autofill_metadata.underlying_type)
-        setattr(self, arg_name, autofill_buildable)
+    for name, tags in tag_type.find_tags_from_annotations(fn_or_cls).items():
+      self.__argument_tags__[name].update(tags)
+      self.__argument_history__.add_updated_tags(
+          name, self.__argument_tags__[name]
+      )
 
   def __init_subclass__(cls):
     daglish.register_node_traverser(

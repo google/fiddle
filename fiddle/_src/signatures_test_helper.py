@@ -13,12 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Simplifies deep-configurability of nested objects in Fiddle-aware codebases.
+"""Helper modeule for tests to define funky type sitatuions.
 
-For additional details, please see Autofill's docstring.
+Define a parent dataclass type with type annotations not also defined in
+`signatures_test.py`.
 """
 
-from fiddle._src import autofill as impl
+import dataclasses
 
 
-Autofill = impl.Autofill
+class DontImportMeToTest:
+  """Don't import this type into the namespace of `signatures_test.py`."""
+
+  pass
+
+
+@dataclasses.dataclass
+class DataclassBaseWithLocalType:
+  one: DontImportMeToTest
+  two: 'DontImportMeToTest'

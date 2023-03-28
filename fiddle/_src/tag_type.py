@@ -19,6 +19,11 @@ Please see tagging.py for information about tagging APIs.
 """
 
 import sys
+from typing import Any, Callable, Iterable, Mapping, MutableMapping
+
+from fiddle._src import signatures
+import typing_extensions as typing
+
 
 # This module is separate so that we can import it from config.py, but then
 # import config.py from tagging.py (and include user-facing APIs there).
@@ -85,3 +90,36 @@ class TagType(type):
 
 class TaggedValueNotFilledError(ValueError):
   """A TaggedValue was not filled when build() was called."""
+
+
+def find_tags_from_annotations(
+    fn_or_cls: Callable[..., Any]
+) -> Mapping[str, Iterable[TagType]]:
+  """Returns a list of tags for each tagged parameter.
+
+  Parameters with no tags associated are not included in the returned
+  dictionary.
+
+  Args:
+    fn_or_cls: The type or callable to inspect for tags.
+
+  Returns:
+    A dictionary of param name to list of tags.
+  """
+  signature = signatures.get_signature(fn_or_cls)
+  type_hints = signatures.get_type_hints(fn_or_cls, include_extras=True)
+  name_to_tags: MutableMapping[str, Iterable[TagType]] = {}
+  for name, annotation in type_hints.items():
+    if name == 'return':
+      continue
+    if name not in signature.parameters:
+      # TODO(b/265956870): Add type debugging checks here.
+      continue
+    if not annotation:
+      continue
+    if typing.get_origin(annotation) is not typing.Annotated:
+      continue
+    tags = [t for t in typing.get_args(annotation) if isinstance(t, TagType)]
+    if tags:
+      name_to_tags[name] = tags
+  return name_to_tags

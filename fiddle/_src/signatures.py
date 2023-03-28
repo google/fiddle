@@ -15,13 +15,17 @@
 
 """Module for getting (and caching) inspect.Signature objects."""
 
+import dataclasses
 import inspect
+from typing import Any, Callable, Dict, Type
 import weakref
+import typing_extensions
 
 _signature_cache = weakref.WeakKeyDictionary()
+_type_hints_cache = weakref.WeakKeyDictionary()
 
 
-def _get_uncached(fn_or_cls) -> inspect.Signature:
+def _get_signature_uncached(fn_or_cls) -> inspect.Signature:
   try:
     return inspect.signature(fn_or_cls)
   except ValueError:
@@ -47,9 +51,9 @@ def get_signature(fn_or_cls) -> inspect.Signature:
   try:
     return _signature_cache[fn_or_cls]
   except TypeError:  # Unhashable value...
-    return _get_uncached(fn_or_cls)
+    return _get_signature_uncached(fn_or_cls)
   except KeyError:
-    signature = _get_uncached(fn_or_cls)
+    signature = _get_signature_uncached(fn_or_cls)
     _signature_cache[fn_or_cls] = signature
     return signature
 
@@ -69,3 +73,43 @@ def has_signature(fn_or_cls) -> bool:
   except (ValueError, TypeError):
     return False
   return True
+
+
+def _find_class_construction_fn(cls: Type[Any]) -> Callable[..., Any]:
+  """Find the first ``__init__`` or ``__new__`` method in the class's MRO."""
+  for base in inspect.getmro(cls):
+    if '__init__' in base.__dict__:
+      return base.__init__
+    if '__new__' in base.__dict__:
+      return base.__new__
+  raise RuntimeError('Could not find a class constructor.')
+
+
+def _get_type_hints_uncached(
+    fn_or_cls,
+    *,
+    include_extras,
+) -> Dict[str, Any]:
+  """Returns a dictionary corresponding to the annotations for `fn_or_cls`."""
+  try:
+    if isinstance(fn_or_cls, type) and not dataclasses.is_dataclass(fn_or_cls):
+      fn_or_cls = _find_class_construction_fn(fn_or_cls)
+    return typing_extensions.get_type_hints(
+        fn_or_cls, include_extras=include_extras
+    )
+  except (TypeError, NameError):
+    return {}
+
+
+def get_type_hints(
+    fn_or_cls: Any, *, include_extras: bool = False
+) -> Dict[str, Any]:
+  """Returns (and maybe caches) type hints for `fn_or_cls`, suppressing errors."""
+  try:
+    return _type_hints_cache[fn_or_cls, include_extras]
+  except TypeError:  # Unhashable fn_or_cls.
+    return _get_type_hints_uncached(fn_or_cls, include_extras=include_extras)
+  except KeyError:
+    hints = _get_type_hints_uncached(fn_or_cls, include_extras=include_extras)
+    _type_hints_cache[fn_or_cls, include_extras] = hints
+    return hints

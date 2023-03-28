@@ -15,11 +15,25 @@
 
 """Tests for signatures."""
 
+import collections
 import dataclasses
 import inspect
+import typing
 
 from absl.testing import absltest
 from fiddle._src import signatures
+from fiddle._src.signatures_test_helper import DataclassBaseWithLocalType
+import typing_extensions
+
+
+@dataclasses.dataclass
+class ChildClassWithNonLocalType(DataclassBaseWithLocalType):
+  three: int
+
+
+@dataclasses.dataclass
+class TaggedDataclass:
+  pseudo_tagged: typing_extensions.Annotated[int, 'some_metadata'] = 5
 
 
 class SignatureCacheTest(absltest.TestCase):
@@ -134,6 +148,79 @@ class SignatureCacheTest(absltest.TestCase):
         name='z',
         default=4,
         kind=inspect.Parameter.KEYWORD_ONLY)
+
+
+class TypeHintsCacheTest(absltest.TestCase):
+
+  def test_regular_class(self):
+    class RegularClass:
+
+      def __init__(self, x: int):
+        pass
+
+    hints = signatures.get_type_hints(RegularClass)
+    self.assertEqual(hints, {'x': int})
+
+  def test_dataclass(self):
+    @dataclasses.dataclass
+    class SomeDataclass:
+      x: int
+
+    hints = signatures.get_type_hints(SomeDataclass)
+    self.assertEqual(hints, {'x': int})
+
+  def test_namedtuple_function(self):
+    SampleTuple = collections.namedtuple('SampleTuple', ['x', 'y', 'z'])
+    hints = signatures.get_type_hints(SampleTuple)
+
+    self.assertEmpty(hints)
+
+  def test_namedtuple_class(self):
+    class SampleTuple(typing.NamedTuple):
+      x: int
+      y: str = 'why?'
+
+    hints = signatures.get_type_hints(SampleTuple)
+    self.assertEqual(hints, {'x': int, 'y': str})
+
+  def test_object(self):
+    hints = signatures.get_type_hints(object)
+    self.assertEqual(hints, {})
+
+  def test_int(self):
+    hints = signatures.get_type_hints(int)
+    self.assertEqual(hints, {})
+
+  def test_invalid_types(self):
+    class ClassWithInvalidAnnotations:
+
+      def __init__(self, oops: 'Any'):  # pytype: disable=name-error
+        pass
+
+    hints = signatures.get_type_hints(ClassWithInvalidAnnotations)
+    self.assertEqual({}, hints)
+
+  def test_annotations_with_extras(self):
+    hints = signatures.get_type_hints(TaggedDataclass, include_extras=True)
+    self.assertEqual(
+        hints,
+        {
+            'pseudo_tagged': typing_extensions.Annotated[int, 'some_metadata'],
+        },
+    )
+
+  def test_annotations_without_extras(self):
+    hints = signatures.get_type_hints(TaggedDataclass, include_extras=False)
+    self.assertEqual(hints, {'pseudo_tagged': int})
+    self.assertEqual(
+        hints,
+        signatures.get_type_hints(TaggedDataclass),
+        'Testing function defaults.',
+    )
+
+  def test_cross_module_dataclass_with_local_type(self):
+    hints = signatures.get_type_hints(ChildClassWithNonLocalType)
+    self.assertEqual(hints.keys(), {'one', 'two', 'three'}, hints)
 
 
 if __name__ == '__main__':

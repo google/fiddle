@@ -31,6 +31,7 @@ from fiddle import history
 from fiddle._src import config as config_lib
 from fiddle._src.experimental import daglish_legacy
 import pytype_extensions
+from typing_extensions import Annotated
 
 
 class Tag1(fdl.Tag):
@@ -175,6 +176,14 @@ class DataclassChild:
 @dataclasses.dataclass
 class DataclassParent:
   child: DataclassChild = dataclasses.field(default_factory=DataclassChild)
+
+
+@dataclasses.dataclass
+class DataclassAnnotated:
+  one: Annotated[int, Tag1]
+  two: Annotated[str, Tag1, Tag2]
+
+  three: 'Annotated[float, Tag2]'
 
 
 def raise_error():
@@ -649,6 +658,13 @@ class ConfigTest(parameterized.TestCase):
 
     with self.assertRaisesRegex(ValueError, '.*not set.*'):
       fdl.remove_tag(cfg, 'arg1', Tag2)
+
+  def test_tag_annotations(self):
+    cfg = fdl.Config(DataclassAnnotated)
+
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'one'))
+    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'two'))
+    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg, 'three'))
 
   def test_clear_tags(self):
     cfg = fdl.Config(SampleClass)
