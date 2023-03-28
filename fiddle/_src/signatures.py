@@ -17,6 +17,7 @@
 
 import dataclasses
 import inspect
+import types
 from typing import Any, Callable, Dict, Type
 import weakref
 import typing_extensions
@@ -85,18 +86,37 @@ def _find_class_construction_fn(cls: Type[Any]) -> Callable[..., Any]:
   raise RuntimeError('Could not find a class constructor.')
 
 
+# Replicates an explicit allowlist used by get_type_hints.
+_allowed_get_type_hints_types = (
+    types.FunctionType,
+    types.BuiltinFunctionType,
+    types.MethodType,
+    types.ModuleType,
+    types.WrapperDescriptorType,
+    types.MethodWrapperType,
+    types.MethodDescriptorType,
+)
+
+
 def _get_type_hints_uncached(
     fn_or_cls,
     *,
     include_extras,
 ) -> Dict[str, Any]:
   """Returns a dictionary corresponding to the annotations for `fn_or_cls`."""
+  if isinstance(fn_or_cls, _allowed_get_type_hints_types):
+    obj = fn_or_cls
+  elif isinstance(fn_or_cls, type) and dataclasses.is_dataclass(fn_or_cls):
+    obj = fn_or_cls
+  elif isinstance(fn_or_cls, type):
+    obj = _find_class_construction_fn(fn_or_cls)
+  elif hasattr(fn_or_cls, '__call__'):
+    obj = fn_or_cls.__call__
+  else:
+    obj = fn_or_cls
+
   try:
-    if isinstance(fn_or_cls, type) and not dataclasses.is_dataclass(fn_or_cls):
-      fn_or_cls = _find_class_construction_fn(fn_or_cls)
-    return typing_extensions.get_type_hints(
-        fn_or_cls, include_extras=include_extras
-    )
+    return typing_extensions.get_type_hints(obj, include_extras=include_extras)
   except (TypeError, NameError):
     return {}
 

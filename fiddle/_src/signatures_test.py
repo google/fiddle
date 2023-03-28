@@ -19,6 +19,7 @@ import collections
 import dataclasses
 import inspect
 import typing
+from typing import Tuple
 
 from absl.testing import absltest
 from fiddle._src import signatures
@@ -183,6 +184,30 @@ class TypeHintsCacheTest(absltest.TestCase):
     hints = signatures.get_type_hints(SampleTuple)
     self.assertEqual(hints, {'x': int, 'y': str})
 
+  def test_functor(self):
+    @dataclasses.dataclass
+    class Functor:
+      x: int = 0
+
+      def __call__(self, a: str, b: float) -> Tuple[str, float]:
+        return a, b
+
+    with self.subTest('class_hints'):
+      hints_for_class = signatures.get_type_hints(Functor)
+      self.assertEqual(hints_for_class, {'x': int})
+
+    with self.subTest('instance_hints'):
+      hints_for_instance = signatures.get_type_hints(
+          Functor(), include_extras=True
+      )
+      self.assertEqual(
+          hints_for_instance,
+          {'a': str, 'b': float, 'return': Tuple[str, float]},
+      )
+
+  def test_instance_value(self):
+    self.assertEqual(signatures.get_type_hints(object()), {})
+
   def test_object(self):
     hints = signatures.get_type_hints(object)
     self.assertEqual(hints, {})
@@ -192,6 +217,7 @@ class TypeHintsCacheTest(absltest.TestCase):
     self.assertEqual(hints, {})
 
   def test_invalid_types(self):
+
     class ClassWithInvalidAnnotations:
 
       def __init__(self, oops: 'Any'):  # pytype: disable=name-error
