@@ -17,6 +17,7 @@
 
 import dataclasses
 import functools
+from typing import Callable
 
 import fiddle as fdl
 from fiddle import arg_factory
@@ -52,6 +53,22 @@ def auto_config_arg_factory_fn():
       ),
       x=functools.partial(count, increment=3),
   )
+
+
+# Mock some Jax APIs so that nested arg factory examples are a bit more
+# readable than using foo/bar/baz.
+def initializer(name, dtype) -> Callable[..., None]:
+  raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class Attention:
+  kernel_init: Callable[..., None]
+
+
+@dataclasses.dataclass
+class EncoderLayer:
+  attention: Attention
 
 
 def simple_ir() -> code_ir.CodegenTask:
