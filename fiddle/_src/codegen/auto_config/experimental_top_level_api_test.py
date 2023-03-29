@@ -33,6 +33,18 @@ from fiddle._src.testing import test_util
 from fiddle._src.testing.example import fake_encoder_decoder
 
 
+def make_arg_factory_config():
+  return fdl.Partial(
+      test_fixtures.EncoderLayer,
+      attention=fdl.ArgFactory(
+          test_fixtures.Attention,
+          kernel_init=fdl.ArgFactory(
+              test_fixtures.initializer, name="const", dtype="float32"
+          ),
+      ),
+  )
+
+
 class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
 
   def get_tempdir(self):
@@ -58,6 +70,10 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
       {
           "testcase_name": "shared_config",
           "config": test_fixtures.unprocessed_shared_config().original_config,
+      },
+      {
+          "testcase_name": "arg_factory_config",
+          "config": make_arg_factory_config(),
       },
       {
           "testcase_name": "encoder_decoder_config",

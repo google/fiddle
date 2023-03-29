@@ -18,9 +18,11 @@
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle._src.codegen.auto_config import code_ir
+from fiddle._src.codegen.auto_config import complex_to_variables
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_to_cst
 from fiddle._src.codegen.auto_config import make_symbolic_references
+from fiddle._src.codegen.auto_config import split_arg_factories
 from fiddle._src.codegen.auto_config import test_fixtures
 
 
@@ -72,13 +74,14 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
     config = test_fixtures.auto_config_arg_factory_fn.as_buildable()
     task = init_task.init_task(config=config)
     make_symbolic_references.import_symbols(task)
+    split_arg_factories.lower_arg_factories(task)
     make_symbolic_references.replace_callables_and_configs_with_symbols(task)
     code = ir_to_cst.code_for_task(task).code
 
     expected = """
     from fiddle._src.codegen.auto_config import test_fixtures
-    from fiddle._src.experimental import auto_config
     from fiddle import arg_factory
+    from fiddle.experimental import auto_config
     import functools
 
 
@@ -89,6 +92,19 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
     """
     self.assertEqual(code.split(), expected.split(), msg=code)
 
+  def test_forget_to_lower_reasonable_error(self):
+    # This probably won't be very user-facing, but for our own ease of
+    # development, make sure error messages are reasonable if we forget to
+    # call lower_arg_factories().
+    config = test_fixtures.auto_config_arg_factory_fn.as_buildable()
+    task = init_task.init_task(config=config)
+    make_symbolic_references.import_symbols(task)
+    with self.assertRaisesRegex(
+        TypeError,
+        r'Path to misformed object in codegen DAG: \.output_value\.x\.',
+    ):
+      make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+
   def test_two_arg_factories(self):
     config = fdl.Partial(
         test_fixtures.SharedType,
@@ -97,10 +113,45 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
     )
     task = init_task.init_task(config=config)
     make_symbolic_references.import_symbols(task)
+    split_arg_factories.lower_arg_factories(task)
     make_symbolic_references.replace_callables_and_configs_with_symbols(task)
     code = ir_to_cst.code_for_task(task).code
     self.assertIn('7', code)
     self.assertIn('3.2', code)
+
+  def test_nested_arg_factories(self):
+    config = fdl.Partial(
+        test_fixtures.Attention,
+        kernel_init=fdl.ArgFactory(
+            test_fixtures.initializer, name='const', dtype='float32'
+        ),
+    )
+    task = init_task.init_task(config=config)
+    make_symbolic_references.import_symbols(task)
+    split_arg_factories.lower_arg_factories(task)
+    complex_to_variables.move_complex_nodes_to_variables(
+        task,
+        is_complex=complex_to_variables.more_complex_than(2),
+    )
+    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    code = ir_to_cst.code_for_task(task).code
+
+    # Note: Wrapped some lines on spaces, since we don't compare whitespace.
+    expected = """
+    from fiddle._src.codegen.auto_config import test_fixtures
+    from fiddle import arg_factory
+    from fiddle.experimental import auto_config
+    import functools
+
+
+    @auto_config.auto_config
+    def config_fixture():
+        initializer = functools.partial(test_fixtures.initializer,
+            name='const', dtype='float32')
+        return arg_factory.partial(test_fixtures.Attention,
+            kernel_init=initializer)
+    """
+    self.assertEqual(code.split(), expected.split(), msg=code)
 
 
 if __name__ == '__main__':

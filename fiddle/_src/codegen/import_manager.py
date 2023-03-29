@@ -105,6 +105,9 @@ _SPECIAL_IMPORT_ALIASES = {
     "fiddle.config": parse_import("import fiddle as fdl"),
     "fiddle": parse_import("import fiddle as fdl"),
     "fiddle._src.config": parse_import("import fiddle as fdl"),
+    "fiddle._src.experimental.auto_config": parse_import(
+        "from fiddle.experimental import auto_config"
+    ),
     "fiddle._src.arg_factory": parse_import("from fiddle import arg_factory"),
     "fiddle._src.codegen": parse_import("from fiddle import codegen"),
     "fiddle._src.codegen.py_val_to_cst_converter": parse_import(

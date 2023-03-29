@@ -63,6 +63,8 @@ def replace_callables_and_configs_with_symbols(
 ) -> None:
   """Replaces callables and Buildables with symbolic versions."""
 
+  fn_name = None
+
   def _handle_partial(
       value: config_lib.Partial, state: daglish.State, symbol: str
   ):
@@ -79,9 +81,9 @@ def replace_callables_and_configs_with_symbols(
     regular_args = {}
 
     for name, arg_value in arguments.items():
-      if isinstance(arg_value, config_lib.ArgFactory):
+      if isinstance(arg_value, code_ir.ArgFactoryExpr):
         arg_factory_args[name] = state.call(
-            config_lib.cast(config_lib.Partial, arg_value), daglish.Attr(name)
+            arg_value.expression, daglish.Attr(name)
         )
       else:
         regular_args[name] = state.call(arg_value, daglish.Attr(name))
@@ -129,6 +131,18 @@ def replace_callables_and_configs_with_symbols(
         )
       elif isinstance(value, config_lib.Partial):
         return _handle_partial(value, state, symbol)
+      elif isinstance(value, config_lib.ArgFactory):
+        paths = " , ".join(
+            daglish.path_str(path) for path in state.get_all_paths()
+        )
+        raise TypeError(
+            "fdl.ArgFactory instances should be inside fdl.Partial's, and "
+            "appropriately lowered with the split_arg_factories pass. Either "
+            "your config is malformed, or a previous codegen pass introduced "
+            f"an error. Path to misformed object in codegen DAG: {paths}.\n\n("
+            f"in function definition {fn_name}; `.output_value` "
+            "indicates the value in the `return` statement.)"
+        )
       else:
         raise TypeError(f"Unsupported Buildable {type(value)}")
     elif is_plain_symbol_or_enum_value(value):
@@ -138,4 +152,5 @@ def replace_callables_and_configs_with_symbols(
       return state.map_children(value)
 
   for fn in task.top_level_call.all_fixture_functions():
+    fn_name = fn.name.value
     fn.replace_with(daglish.MemoizedTraversal.run(traverse, fn))
