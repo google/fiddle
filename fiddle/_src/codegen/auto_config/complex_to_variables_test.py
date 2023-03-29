@@ -14,10 +14,14 @@
 # limitations under the License.
 
 from absl.testing import absltest
+import fiddle as fdl
+from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import complex_to_variables
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_printer
 from fiddle._src.codegen.auto_config import shared_to_variables
+from fiddle._src.codegen.auto_config import split_arg_factories
+from fiddle._src.codegen.auto_config import test_fixtures
 from fiddle._src.testing.example import fake_encoder_decoder
 
 
@@ -78,6 +82,23 @@ class MoveComplexNodesToVariablesTest(absltest.TestCase):
         task, is_complex=lambda x: True
     )
     self.assertEmpty(task.top_level_call.fn.variables)
+
+  def test_doesnt_break_arg_factory_expressions(self):
+    config = fdl.Partial(
+        test_fixtures.Attention,
+        kernel_init=fdl.ArgFactory(
+            test_fixtures.initializer, name="const", dtype="float32"
+        ),
+    )
+    task = init_task.init_task(config=config)
+    split_arg_factories.lower_arg_factories(task=task)
+    complex_to_variables.move_complex_nodes_to_variables(
+        task, is_complex=lambda x: True
+    )
+    code = ir_printer.format_task(task)
+    self.assertIn("kernel_init=ArgFactoryExpr[initializer]", code)
+    fn = task.top_level_call.fn
+    self.assertIsInstance(fn.output_value.kernel_init, code_ir.ArgFactoryExpr)
 
 
 if __name__ == "__main__":

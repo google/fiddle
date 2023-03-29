@@ -107,6 +107,25 @@ class SymbolReference(CodegenNode):
 
 
 @dataclasses.dataclass
+class ArgFactoryExpr(CodegenNode):
+  """Represents a factory that should be interpreted as an argument factory.
+
+  Inside Fiddle configs, we represent arg factories with fdl.ArgFactory, e.g.
+
+  attention=fdl.ArgFactory(
+    initializer=fdl.ArgFactory(nn.initializers.zeros, dtype='float16')
+  )
+
+  However in auto_config (and thus, we mean in normal Python code that just uses
+  arg_factory but not Fiddle otherwise), the `initializer` factory can be any
+  random callable, which can be pulled into a variable or `call`, etc., we just
+  need a way of tagging it as such.
+  """
+
+  expression: Any  # Wrapped expression, can involve VariableReference's
+
+
+@dataclasses.dataclass
 class Call(CodegenNode):
   name: Name
   arg_expressions: Dict[Name, Any]  # Value that can involve VariableReference's

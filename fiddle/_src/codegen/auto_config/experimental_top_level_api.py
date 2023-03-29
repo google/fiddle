@@ -28,6 +28,7 @@ from fiddle._src.codegen.auto_config import ir_to_cst
 from fiddle._src.codegen.auto_config import make_symbolic_references
 from fiddle._src.codegen.auto_config import naming
 from fiddle._src.codegen.auto_config import shared_to_variables
+from fiddle._src.codegen.auto_config import split_arg_factories
 
 
 def auto_config_codegen(
@@ -51,6 +52,13 @@ def auto_config_codegen(
   if debug_print:
     print("\n\nAfter initializing:", ir_printer.format_task(task), sep="\n")
   make_symbolic_references.import_symbols(task)
+  split_arg_factories.lower_arg_factories(task)
+  if debug_print:
+    print(
+        "\n\nAfter lowering arg factories:",
+        ir_printer.format_task(task),
+        sep="\n",
+    )
   shared_to_variables.move_shared_nodes_to_variables(
       task, make_namer=variable_namer
   )

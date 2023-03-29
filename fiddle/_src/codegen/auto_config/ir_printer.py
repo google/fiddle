@@ -87,6 +87,9 @@ def format_expr(expr: Any):
       return f"{value.name.value}({args_str})"
     elif isinstance(value, code_ir.VariableReference):
       return value.name.value
+    elif isinstance(value, code_ir.ArgFactoryExpr):
+      sub_value = state.map_children(value).expression
+      return f"ArgFactoryExpr[{sub_value}]"
     elif isinstance(value, code_ir.Name):
       return value.value
     elif isinstance(value, type):

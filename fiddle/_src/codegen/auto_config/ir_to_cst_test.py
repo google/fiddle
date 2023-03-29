@@ -33,7 +33,7 @@ class IrToCstTest(absltest.TestCase):
     code = ir_to_cst.code_for_task(task).code
     expected = """
     from fiddle._src.codegen.auto_config import test_fixtures
-    from fiddle._src.experimental import auto_config
+    from fiddle.experimental import auto_config
 
 
     @auto_config.auto_config
@@ -50,7 +50,7 @@ class IrToCstTest(absltest.TestCase):
     code = ir_to_cst.code_for_task(task).code
     expected = """
     from fiddle._src.codegen.auto_config import test_fixtures
-    from fiddle._src.experimental import auto_config
+    from fiddle.experimental import auto_config
 
 
     @auto_config.auto_config
@@ -71,7 +71,7 @@ class IrToCstTest(absltest.TestCase):
     task = init_task.init_task(config)
     code = ir_to_cst.code_for_task(task).code
     expected = """
-    from fiddle._src.experimental import auto_config
+    from fiddle.experimental import auto_config
 
 
     @auto_config.auto_config

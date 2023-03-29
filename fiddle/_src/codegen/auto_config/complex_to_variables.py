@@ -102,8 +102,12 @@ def move_complex_nodes_to_variables(
 
       value = state.map_children(value)
 
-      if isinstance(value, code_ir.VariableDeclaration):
+      if isinstance(
+          value, (code_ir.VariableDeclaration, code_ir.ArgFactoryExpr)
+      ):
         # If something is already a variable, don't create another variable.
+        # Likewise, if it is an ArgFactoryExpr, keep it inline with its parent
+        # fdl.Partial, since it's really more of an annotation on the argument.
         return value
       elif is_complex(value) and state.current_path:
         # Extract a new variable!
