@@ -656,6 +656,29 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(expected_signature, inspect.signature(my_helpful_function))
     self.assertEqual('my_helpful_function', my_helpful_function.__name__)
 
+  def test_unhashable_callable(self):
+    class UnhashableCallable:
+      a: int = 1
+
+      # Class with __eq__ but not __hash__ is unhashable.
+      def __eq__(self, other):
+        return self is other
+
+      def __call__(self, arg1: int) -> int:
+        return arg1
+
+    obj = UnhashableCallable()
+
+    with self.assertRaisesRegex(TypeError, 'unhashable type'):
+      _ = {obj: 1}
+
+    @auto_config.auto_config
+    def make_sample(obj):
+      return obj(1)
+
+    cfg = make_sample.as_buildable(obj)
+    self.assertEqual(cfg, fdl.Config(obj, arg1=1))
+
   def test_control_flow_if(self):
 
     def test_config(condition):

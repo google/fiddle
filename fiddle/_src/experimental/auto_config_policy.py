@@ -259,7 +259,9 @@ def v1(fn_or_cls) -> bool:
   """Returns `True` if `fn_or_cls` should not be represented as a fdl.Config."""
   if inspect.ismethod(fn_or_cls):
     fn_or_cls = fn_or_cls.__func__
-  return fn_or_cls in _v1_policy_set or _is_builtin_method(fn_or_cls)
+  return (
+      isinstance(fn_or_cls, typing.Hashable) and fn_or_cls in _v1_policy_set
+  ) or _is_builtin_method(fn_or_cls)
 
 
 latest = v1
