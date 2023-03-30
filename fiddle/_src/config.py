@@ -986,7 +986,9 @@ def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
 
 
 def update_callable(
-    buildable: Buildable, new_callable: TypeOrCallableProducingT
+    buildable: Buildable,
+    new_callable: TypeOrCallableProducingT,
+    drop_invalid_args: bool = False,
 ):
   """Updates ``config`` to build ``new_callable`` instead.
 
@@ -999,20 +1001,19 @@ def update_callable(
   Args:
     buildable: A ``Buildable`` (e.g. a ``fdl.Config``) to mutate.
     new_callable: The new callable ``config`` should call when built.
+    drop_invalid_args: If True, arguments that don't exist in the new callable
+      will be removed from buildable. If False, raise an exception for such
+      arguments.
 
   Raises:
     TypeError: if ``new_callable`` has varargs, or if there are arguments set on
       ``config`` that are invalid to pass to ``new_callable``.
   """
-  # TODO(b/272074845): Consider adding a "drop_invalid_args: bool = False"
-  # argument.
-
   # Note: can't just call config.__init__(new_callable, **config.__arguments__)
   # to preserve history.
   #
   # Note: can't call `setattr` on all the args to validate them, because that
   # will result in duplicate history entries.
-
   original_args = buildable.__arguments__
   signature = signatures.get_signature(new_callable)
   if any(
@@ -1030,11 +1031,15 @@ def update_callable(
         arg for arg in original_args.keys() if arg not in signature.parameters
     ]
     if invalid_args:
-      raise TypeError(
-          f'Cannot switch to {new_callable} (from '
-          f'{buildable.__fn_or_cls__}) because the Buildable would '
-          f'have invalid arguments {invalid_args}.'
-      )
+      if drop_invalid_args:
+        for arg in invalid_args:
+          delattr(buildable, arg)
+      else:
+        raise TypeError(
+            f'Cannot switch to {new_callable} (from '
+            f'{buildable.__fn_or_cls__}) because the Buildable would '
+            f'have invalid arguments {invalid_args}.'
+        )
 
   object.__setattr__(buildable, '__fn_or_cls__', new_callable)
   object.__setattr__(buildable, '__signature__', signature)

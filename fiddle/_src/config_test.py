@@ -1200,6 +1200,11 @@ class CallableApisTest(absltest.TestCase):
                                 r"have invalid arguments \['abc', 'xyz'\]"):
       fdl.update_callable(cfg, SampleClass)
 
+  def test_update_callable_drop_invalid_arg(self):
+    cfg = fdl.Config(fn_with_var_kwargs, arg1='123', xyz='321')
+    fdl.update_callable(cfg, SampleClass, drop_invalid_args=True)
+    self.assertEqual(cfg, fdl.Config(SampleClass, arg1='123'))
+
   def test_update_callable_new_kwargs(self):
     cfg = fdl.Config(SampleClass)
     cfg.arg1 = 1
