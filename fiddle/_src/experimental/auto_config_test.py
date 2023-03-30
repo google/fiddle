@@ -609,6 +609,24 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(with_policy.as_buildable(5), expected_with_policy)
     self.assertEqual(without_policy.as_buildable(5), expected_without_policy)
 
+  def test_inline_exemption(self):
+    @auto_config.auto_config
+    def make_sample(max_value):
+      # Test the case where we first create the function, then call.
+      # It produces different AST.
+      exempted_func = auto_config.exempt(pass_through)
+      return SampleClass(
+          arg1=auto_config.exempt(pass_through)(max_value),
+          arg2=SampleClass(
+              arg1=pass_through(max_value), arg2=exempted_func(max_value)
+          ),
+      )
+
+    cfg = make_sample.as_buildable(5)
+    self.assertEqual(cfg.arg1, 5)
+    self.assertEqual(cfg.arg2.arg1, fdl.Config(pass_through, 5))
+    self.assertEqual(cfg.arg2.arg2, 5)
+
   def test_lambda_supported_in_decorator(self):
     @auto_config.auto_config(experimental_exemption_policy=lambda x: False)
     def make_sample():

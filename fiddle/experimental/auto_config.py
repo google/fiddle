@@ -27,6 +27,7 @@ from fiddle._src.experimental.auto_config import auto_config
 from fiddle._src.experimental.auto_config import auto_config_policy
 from fiddle._src.experimental.auto_config import auto_unconfig
 from fiddle._src.experimental.auto_config import AutoConfig
+from fiddle._src.experimental.auto_config import exempt
 from fiddle._src.experimental.auto_config import inline
 from fiddle._src.experimental.auto_config import is_auto_config
 from fiddle._src.experimental.auto_config import UnsupportedLanguageConstructError

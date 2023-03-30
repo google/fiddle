@@ -458,6 +458,33 @@ def _make_partial(buildable_or_callable, *args, **kwargs):
     return config.Partial(buildable_or_callable, *args, **kwargs)
 
 
+def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
+  """Wrap a callable so that it's exempted from auto_config.
+
+  This can be used inside an auto_config function to inline exempt certain calls
+  so that they will be evaluated normally rather than turned into a config
+  object. For example::
+
+      @auto_config
+      def build_model():
+        return Model(a=np.square(3), b=exempt(np.square)(3))
+
+      config = build_model.as_buildable()
+      assert config.a == fdl.Config(np.square, 3)
+      assert config.b == 9
+
+  Args:
+    fn_or_cls: Any callable.
+
+  Returns:
+    A wrapped version of the same callable that will not be transformed to
+    config if called inside an auto_config function.
+  """
+  return AutoConfig(
+      func=fn_or_cls, buildable_func=fn_or_cls, always_inline=True
+  )
+
+
 def auto_config(
     fn=None,
     *,
@@ -599,6 +626,8 @@ def auto_config(
           },
       )
 
+    if fn_or_cls is exempt:
+      return fn_or_cls(*args, **kwargs)
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
 
