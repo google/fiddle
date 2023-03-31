@@ -501,8 +501,9 @@ def auto_config(
   handler. When the rewritten function is run, the call handler intercepts calls
   and applies the following rules:
 
-  - Calls to builtins, methods, callables without an inferrable signature, or
-    other functions that have been ``auto_config``'ed take place as usual.
+  - Calls to builtins, methods, callables without an inferrable signature,
+    callables wrapped by `auto_config.exempt`, or other functions that have
+    been ``auto_config``'ed take place as usual.
   - Calls to ``functools.partial`` are replaced by calling ``fdl.Partial`` with
     the same arguments;
   - All other calls are replaced by calling ``fdl.Config`` with the arguments
