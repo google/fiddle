@@ -121,7 +121,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """Initialize for ``fn_or_cls``, optionally specifying parameters.
 
     Args:
-      fn_or_cls: The function or class to configure, or a ``Buildable`` to copy.
+      fn_or_cls: A callable to configure. The signature of this callable will
+        determine the parameters this ``Buidlable`` can be used to configure.
       *args: Any positional arguments to configure for ``fn_or_cls``.
       **kwargs: Any keyword arguments to configure for ``fn_or_cls``.
     """
