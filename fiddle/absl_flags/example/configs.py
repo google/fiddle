@@ -16,7 +16,7 @@
 """A collection of Fiddle-based configurations and fiddlers.
 
 The Fiddle recommended pattern is to define one or more "base" configurations
-(e.g. `simple` in this example). As new experiments are performed, they simply
+(e.g. `base` in this example). As new experiments are performed, they simply
 mutate the base configuration or another experiment. (Fiddle's history tracking
 lets you easily determine which experiment set what value when there's a large
 stack of incremental experiments.)
