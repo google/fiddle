@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# pyformat: mode=midnight
 """A policy of functions to skip representing as `fdl.Config`'s.
 
 When running `auto_config` on a function, some Python functions cannot or, in
