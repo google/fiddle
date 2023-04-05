@@ -259,6 +259,14 @@ class DescribeDagDiffsTest(parameterized.TestCase):
     y = SampleClass(a=shared_list, b=copy.copy(shared_list))
     self.assertEmpty(test_util.describe_dag_diffs(x, y))
 
+  def test_adding_and_removing_tags_is_equivalent(self):
+    config = fdl.Config(SampleClass)
+    fdl.add_tag(config, 'a', SampleTag)
+    fdl.remove_tag(config, 'a', SampleTag)
+    self.assertEmpty(
+        test_util.describe_dag_diffs(config, fdl.Config(SampleClass))
+    )
+
 
 class TestCaseTest(testing.TestCase):
 

@@ -199,8 +199,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     arguments = ordered_arguments(self)
     keys = tuple(arguments.keys())
     values = tuple(arguments.values())
-    tags = {
-        name: frozenset(tags) for name, tags in self.__argument_tags__.items()
+    argument_tags = {
+        name: frozenset(tags)
+        for name, tags in self.__argument_tags__.items()
+        if tags  # Don't include empty sets.
     }
     argument_history = {
         name: tuple(entries)
@@ -209,7 +211,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     metadata = BuildableTraverserMetadata(
         fn_or_cls=self.__fn_or_cls__,
         argument_names=keys,
-        argument_tags=tags,
+        argument_tags=argument_tags,
         argument_history=argument_history,
     )
     return values, metadata
