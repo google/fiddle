@@ -100,26 +100,32 @@ def _build(value: Any, state: daglish.State) -> Any:
 
 # Define typing overload for `build(Partial[T])`
 @overload
-def build(buildable: config_lib.Partial[T]) -> Callable[..., T]:
+def build(
+    buildable: config_lib.Partial[T],
+    experimental_allow_nested_build: bool = False,
+) -> Callable[..., T]:
   ...
 
 
 # Define typing overload for `build(Config[T])`
 @overload
-def build(buildable: config_lib.Config[T]) -> T:
+def build(
+    buildable: config_lib.Config[T],
+    experimental_allow_nested_build: bool = False,
+) -> T:
   ...
 
 
 # Define typing overload for nested structures.
 @overload
-def build(buildable: Any) -> Any:
+def build(buildable: Any, experimental_allow_nested_build: bool = False) -> Any:
   ...
 
 
 # This is a free function instead of a method on the `Buildable` object in order
 # to avoid potential naming collisions (e.g., if a function or class has a
 # parameter named `build`).
-def build(buildable):
+def build(buildable, experimental_allow_nested_build: bool = False):
   """Builds ``buildable``, recursively building nested ``Buildable`` instances.
 
   This is the core function for turning a ``Buildable`` into a usable object. It
@@ -141,10 +147,15 @@ def build(buildable):
   Args:
     buildable: A ``Buildable`` instance to build, or a nested structure of
       ``Buildable`` objects.
+    experimental_allow_nested_build: If true, then allow `fdl.build` to be
+      called inside another `fdl.build` call.
 
   Returns:
     The built version of ``buildable``.
   """
 
-  with _in_build():
+  if experimental_allow_nested_build:
     return daglish.MemoizedTraversal.run(_build, buildable)
+  else:
+    with _in_build():
+      return daglish.MemoizedTraversal.run(_build, buildable)
