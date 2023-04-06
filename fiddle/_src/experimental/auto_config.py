@@ -945,3 +945,16 @@ def _getsource_for_lambda(fn: Callable[..., Any]) -> str:
         'Fiddle auto_config was unable to find the source code for '
         f'{fn}: multiple lambdas found on line {lambda_finder.lineno}; '
         'try moving each lambda to its own line.')
+
+
+def with_buildable_func(
+    buildable_func: Callable[..., Any]
+) -> Callable[..., Any]:
+  """A decorator that adds an auto_config-only code path."""
+
+  def decorator(func):
+    return AutoConfig(
+        func=func, buildable_func=buildable_func, always_inline=True
+    )
+
+  return decorator
