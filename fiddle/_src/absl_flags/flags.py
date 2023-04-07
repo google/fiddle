@@ -117,7 +117,7 @@ import re
 import sys
 import textwrap
 import typing
-from typing import Any, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from absl import app
 from absl import flags
@@ -304,6 +304,88 @@ def parse_value(value: str, path: str) -> Any:
     ) from e
 
 
+@dataclasses.dataclass(frozen=True)
+class CallExpression:
+  """Parsed components of a call expression (or bare function name).
+
+  Examples:
+
+  >>> CallExpression.parse("fn('foo', False, x=[1, 2])")
+  CallExpression(func_name='fn', args=('foo', False'), kwargs={'x': [1, 2]})
+  >>> CallExpression.parse("fn")  # Bare function name: empty args/kwargs.
+  CallExpression(func_name='fn', args=()), kwargs={})
+
+  Attributes:
+    func_name: The name fo the function that should be called.
+    args: Parsed values of positional arguments for the function.
+    kwargs: Parsed values of keyword arguments for the function.
+  """
+
+  func_name: str
+  args: Optional[Tuple[Any, ...]]
+  kwargs: Optional[Dict[str, Any]]
+
+  _PARSE_RE = re.compile(r'(?P<func_name>[\w\.]+)(?:\((?P<args>.*)\))?')
+
+  @classmethod
+  def parse(cls, value: str) -> 'CallExpression':
+    """Returns a CallExpression parsed from a string.
+
+    Args:
+      value: A string containing positional and keyword arguments for a
+        function.  Must consist of an open paren followed by comma-separated
+        argument values followed by a close paren.  Argument values must be
+        literal constants (i.e., must be parsable with `ast.literal_eval`).
+        var-positional and var-keyword arguments are not supported.
+
+    Raises:
+      SyntaxError: If `value` is not a simple call expression with literal
+        arguments.
+    """
+    m = re.fullmatch(cls._PARSE_RE, value)
+    if m is None:
+      raise SyntaxError(
+          f'Expected a function name or call expression; got: {value!r}'
+      )
+    if m.group('args') is None:  # Bare function name
+      return CallExpression(m.group('func_name'), (), {})
+
+    node = ast.parse(value)  # Can raise SyntaxError.
+    if not (
+        isinstance(node, ast.Module)
+        and len(node.body) == 1
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Call)
+    ):
+      raise SyntaxError(
+          f'Expected a function name or call expression; got: {value!r}'
+      )
+    call_node = node.body[0].value
+    args = []
+    for arg in call_node.args:
+      if isinstance(arg, ast.Starred):
+        raise SyntaxError('*args is not supported.')
+      try:
+        args.append(ast.literal_eval(arg))
+      except ValueError as exc:
+        raise SyntaxError(
+            'Expected arguments to be simple literals; got '
+            f'{ast.unparse(arg)!r} (while parsing {value!r})'
+        ) from exc
+    kwargs = {}
+    for kwarg in call_node.keywords:
+      if kwarg.arg is None:
+        raise SyntaxError('**kwargs is not supported.')
+      try:
+        kwargs[kwarg.arg] = ast.literal_eval(kwarg.value)
+      except ValueError as exc:
+        raise SyntaxError(
+            'Expected arguments to be simple literals; got '
+            f'{ast.unparse(kwarg.value)!r} (while parsing {value!r})'
+        ) from exc
+    return CallExpression(m.group('func_name'), tuple(args), kwargs)
+
+
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
   for flag in _FDL_SET.value:
@@ -404,7 +486,9 @@ def apply_fiddlers_to(cfg: config.Buildable,
                       source_module: Any,
                       allow_imports=False):
   """Applies fiddlers to `cfg`."""
-  for fiddler_name in _FIDDLER.value:
+  for fiddler_value in _FIDDLER.value:
+    call_expr = CallExpression.parse(fiddler_value)
+    fiddler_name = call_expr.func_name
     if hasattr(source_module, fiddler_name):
       fiddler = getattr(source_module, fiddler_name)
     elif allow_imports:
@@ -420,7 +504,7 @@ def apply_fiddlers_to(cfg: config.Buildable,
       raise ValueError(
           f'No fiddler named {fiddler_name!r} found; available fiddlers: '
           f'{available_fiddlers}.')
-    fiddler(cfg)
+    fiddler(cfg, *call_expr.args, **call_expr.kwargs)
 
 
 def _print_help(module, allow_imports):
@@ -496,7 +580,8 @@ def create_buildable_from_flags(
       raise ValueError(err_msg.format(flag='--fiddler'))
 
   if _FDL_CONFIG.value:
-    base_name = _FDL_CONFIG.value
+    call_expr = CallExpression.parse(_FDL_CONFIG.value)
+    base_name = call_expr.func_name
     if hasattr(module, base_name):
       base_fn = getattr(module, base_name)
     elif allow_imports:
@@ -513,9 +598,9 @@ def create_buildable_from_flags(
                        f'available names: {", ".join(available_names)}.')
 
     if auto_config.is_auto_config(base_fn):
-      buildable = base_fn.as_buildable()
+      buildable = base_fn.as_buildable(*call_expr.args, **call_expr.kwargs)
     else:
-      buildable = base_fn()
+      buildable = base_fn(*call_expr.args, **call_expr.kwargs)
   elif _FDL_CONFIG_FILE.value:
     with _FDL_CONFIG_FILE.value.open() as f:
       buildable = serialization.load_json(f.read(), pyref_policy=pyref_policy)
