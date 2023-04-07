@@ -17,6 +17,6 @@
 
 # pylint: disable=unused-import
 from fiddle._src.experimental.tied_value import get_tied
-from fiddle._src.experimental.tied_value import new
+from fiddle._src.experimental.tied_value import tied_value
 from fiddle._src.experimental.tied_value import TiedValue
 from fiddle._src.experimental.tied_value import untie

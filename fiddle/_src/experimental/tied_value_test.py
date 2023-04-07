@@ -27,15 +27,18 @@ class DType(fdl.Tag):
 
 def tied_config():
   config = fake_encoder_decoder.fixture.as_buildable().encoder
-  config.attention.dtype = config.mlp.dtype = tied_value.new(value='float32')
+  config.attention.dtype = config.mlp.dtype = tied_value.tied_value(
+      value='float32'
+  )
   return config
 
 
 def tied_tagged_config():
   """Tests the interaction between TaggedValueCls and TiedValue."""
   config = fake_encoder_decoder.fixture.as_buildable().encoder
-  config.attention.dtype = config.mlp.dtype = tied_value.new(
-      DType.new('float32'))
+  config.attention.dtype = config.mlp.dtype = tied_value.tied_value(
+      DType.new('float32')
+  )
   return config
 
 
@@ -43,18 +46,19 @@ def tagged_tied_config():
   """Tests the interaction between TaggedValueCls and TiedValue."""
   config = fake_encoder_decoder.fixture.as_buildable().encoder
   config.attention.dtype = config.mlp.dtype = DType.new(
-      tied_value.new('float32'))
+      tied_value.tied_value('float32')
+  )
   return config
 
 
 class TiedValueTest(absltest.TestCase):
 
   def test_new_doesnt_rewrap(self):
-    tied = tied_value.new(value='float32')
+    tied = tied_value.tied_value(value='float32')
     self.assertIsInstance(tied, tied_value.TiedValue)
     self.assertEqual(tied.value, 'float32')
 
-    wrapped = tied_value.new(tied)
+    wrapped = tied_value.tied_value(tied)
     self.assertIs(wrapped, tied)
 
   def test_basic_sharing(self):
@@ -123,7 +127,7 @@ class TiedValueTest(absltest.TestCase):
 
   def test_works_in_lists(self):
     """TiedValue works in lists, but you need to use `.value` here."""
-    config = [tied_value.new(1)] * 2 + [tied_value.new(2)]
+    config = [tied_value.tied_value(1)] * 2 + [tied_value.tied_value(2)]
     config[0].value = 3
     self.assertEqual(fdl.build(config), [3, 3, 2])
 

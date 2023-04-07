@@ -29,11 +29,15 @@ def _identity(value: ValueT) -> ValueT:
   return value
 
 
-def new(value: ValueT) -> TiedValue[ValueT]:
-  """Returns a new TiedValue (unless value is already a TiedValue).
+def tied_value(value: ValueT) -> TiedValue[ValueT]:
+  """Creates a TiedValue (unless value is already a TiedValue).
 
   Args:
-    value: Value to tie; if it is already a TiedValue it is returned unmodified.
+    value: Value to tie.
+
+  Returns:
+    TiedValue: A new TiedValue, or if argument is already a TiedValue it is
+      returned unmodified.
   """
   return value if isinstance(value, TiedValue) else TiedValue(_identity, value)
 
