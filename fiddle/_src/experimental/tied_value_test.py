@@ -15,6 +15,8 @@
 
 """Tests for tied_value."""
 
+import copy
+
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle._src.experimental import tied_value
@@ -80,7 +82,7 @@ class TiedValueTest(absltest.TestCase):
     self.assertEqual(encoder.attention.dtype, 'float64')
     self.assertEqual(encoder.mlp.dtype, 'float64')
 
-  def test_tagged_and_tied_iteraction(self):
+  def test_tagged_and_tied_interaction(self):
     """Tests interaction between values that are tagged and tied.
 
     Note: This only applies to TaggedValueCls, which is a bit legacy. Usually
@@ -130,6 +132,40 @@ class TiedValueTest(absltest.TestCase):
     config = [tied_value.tied_value(1)] * 2 + [tied_value.tied_value(2)]
     config[0].value = 3
     self.assertEqual(fdl.build(config), [3, 3, 2])
+
+  def test_overwrite_with_new_tied_value_breaks_ties(self):
+    """Overwriting with a new TiedValue breaks existing ties."""
+    config = tied_config()
+    config.attention.dtype = tied_value.tied_value('float64')
+    self.assertEqual(config.mlp.dtype, 'float32')
+    self.assertEqual(config.attention.dtype, 'float64')
+
+  def test_tied_value_preserves_ties_during_copy(self):
+    """Copying a Config with a TiedValue preserves the ties."""
+    config = fdl.Config(fake_encoder_decoder.Mlp)
+    config.dtype = tied_value.tied_value('float32')
+    config_copy = copy.copy(config)
+    config.dtype = 'float64'
+    self.assertEqual(config.dtype, 'float64')
+    self.assertEqual(config_copy.dtype, 'float64')
+
+  def test_tied_value_breaks_ties_during_deepcopy(self):
+    """Copying a Config with a TiedValue preserves the ties."""
+    config = fdl.Config(fake_encoder_decoder.Mlp)
+    config.dtype = tied_value.tied_value('float32')
+    config_copy = copy.deepcopy(config)
+    config_copy.dtype = 'float64'
+    self.assertEqual(config.dtype, 'float32')
+    self.assertEqual(config_copy.dtype, 'float64')
+
+  def test_overwrite_with_new_tied_value_during_copy_breaks_ties(self):
+    """Overwriting with a new TiedValue during copy breaks existing ties."""
+    config = fdl.Config(fake_encoder_decoder.Mlp)
+    config.dtype = tied_value.tied_value('float32')
+    config_copy = copy.copy(config)
+    config_copy.dtype = tied_value.tied_value('float64')
+    self.assertEqual(config.dtype, 'float32')
+    self.assertEqual(config_copy.dtype, 'float64')
 
 
 if __name__ == '__main__':

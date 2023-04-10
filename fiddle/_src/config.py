@@ -302,7 +302,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     # Actually set the value, handling TiedValue's as a special case.
     current = self.__arguments__.get(name)
-    if isinstance(current, TiedValue):
+    if isinstance(current, TiedValue) and not isinstance(value, TiedValue):
       # This will create a history entry in the TiedValue as well. (Seems
       # reasonable, but not clear what's best?)
       current.value = value
