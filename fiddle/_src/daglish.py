@@ -624,10 +624,16 @@ class MemoizedTraversal(BasicTraversal):
     memo: Memoization dictionary mapping `id(value)` to the tuple `(value,
       result)`, where `value` is a traversed node and `result` is the value
       returned by `apply` for `value`.
+    _cycle_start: Dictionary used for cycle detection.  When the traversal is
+      applied to a value, `_cycle_start[id(value)]` is temporarily set to the
+      current the `state`.  Once the result has been computed,
+      `_cycle_start[id(value)]` is deleted.  If a cycle is detected during
+      traversal, `MemoizedTraversal` raises a `ValueError`.
   """
 
   memoize_internables: bool = True
   memo: Dict[int, Tuple[Any, Any]] = dataclasses.field(default_factory=dict)
+  _cycle_start: Dict[int, State] = dataclasses.field(default_factory=dict)
 
   @classmethod
   def begin(cls,
@@ -654,13 +660,24 @@ class MemoizedTraversal(BasicTraversal):
         memoize_internables=memoize_internables).initial_state()
 
   def apply(self, value, state):
+    value_id = id(value)
     if not self.memoize_internables and is_internable(value):
       return self.traversal_fn(value, state)
-    elif id(value) in self.memo:
-      return self.memo[id(value)][1]
+    elif value_id in self.memo:
+      return self.memo[value_id][1]
+    elif value_id in self._cycle_start:
+      original_state = self._cycle_start[value_id]
+      raise ValueError(
+          "Fiddle detected a cycle while traversing a value: "
+          f"<root>{path_str(original_state.current_path)} is "
+          f"<root>{path_str(state.current_path)}."
+          " Configurations with cycles are not supported."
+      )
     else:
+      self._cycle_start[value_id] = state
       result = self.traversal_fn(value, state)
-      self.memo[id(value)] = (value, result)
+      self.memo[value_id] = (value, result)
+      del self._cycle_start[value_id]
       return result
 
 

@@ -542,6 +542,29 @@ class MemoizedTraversalTest(absltest.TestCase):
     result = daglish.MemoizedTraversal.run(traverse, list(range(10_000)))
     self.assertEqual(result, 50_005_000)
 
+  def test_cycle_detection(self):
+    def traverse(value, state: daglish.State):
+      return state.map_children(value)
+
+    x = [1, 2, 3]
+    x.append(x)
+    with self.assertRaisesRegex(
+        ValueError,
+        "Fiddle detected a cycle while traversing a value: "
+        r"<root>\[3\] is <root>\[3\]\[3\]\.",
+    ):
+      daglish.MemoizedTraversal.run(traverse, x)
+
+  def test_cycle_detection_in_fdl_build(self):
+    cfg = fdl.Config(Foo, bar=fdl.Config(Foo))
+    cfg.bar.bar = cfg
+    with self.assertRaisesRegex(
+        ValueError,
+        "Fiddle detected a cycle while traversing a value: "
+        r"<root>\.bar is <root>\.bar\.bar\.bar\.",
+    ):
+      fdl.build(cfg)
+
 
 if __name__ == "__main__":
   absltest.main()
