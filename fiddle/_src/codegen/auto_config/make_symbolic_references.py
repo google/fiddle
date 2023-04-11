@@ -54,6 +54,10 @@ def import_symbols(task: code_ir.CodegenTask) -> None:
   for value, _ in daglish.iterate(task.top_level_call.all_fixture_functions()):
     if isinstance(value, config_lib.Buildable):
       task.import_manager.add(config_lib.get_callable(value))
+      # Import the tags too.
+      for arg_tags in value.__argument_tags__.values():
+        for tag in arg_tags:
+          task.import_manager.add(tag)
     elif is_plain_symbol_or_enum_value(value):
       task.import_manager.add(value)
 
@@ -72,6 +76,7 @@ def replace_callables_and_configs_with_symbols(
     symbol_ref = code_ir.SymbolReference(symbol)
 
     arguments = config_lib.ordered_arguments(value)
+    all_tags = value.__argument_tags__
 
     # Arguments which were config_lib.ArgFactory arguments; these need to be
     # turned into regular calls.
@@ -87,6 +92,21 @@ def replace_callables_and_configs_with_symbols(
         )
       else:
         regular_args[name] = state.call(arg_value, daglish.Attr(name))
+
+    for dict_of_args in (arg_factory_args, regular_args):
+      for arg in dict_of_args:
+        if arg in all_tags:
+          tags = all_tags[arg]
+          if len(tags) != 1:
+            # TODO(b/277263789): Support more than 1 tag.
+            raise RuntimeError(
+                "We don't support more than 1 tag yet"
+                f" {state.current_path} {arg}; found: {tags}"
+            )
+          dict_of_args[arg] = code_ir.TagSymbolNew(
+              tag_symbol_expression=task.import_manager.add(tags.pop()),
+              item_to_tag=dict_of_args[arg],
+          )
 
     def _arg_factory_partial():
       return code_ir.SymbolCall(
@@ -123,7 +143,17 @@ def replace_callables_and_configs_with_symbols(
     if isinstance(value, config_lib.Buildable):
       symbol = task.import_manager.add(config_lib.get_callable(value))
       if isinstance(value, config_lib.Config):
+        all_tags = value.__argument_tags__
         value = state.map_children(value)
+        for arg, arg_tags in all_tags.items():
+          if len(arg_tags) == 1:
+            value.__arguments__[arg] = code_ir.TagSymbolNew(
+                tag_symbol_expression=task.import_manager.add(arg_tags.pop()),
+                item_to_tag=value.__arguments__[arg],
+            )
+          elif len(arg_tags) > 1:
+            # TODO(b/277263789): Support more than 1 tag.
+            raise RuntimeError("We don't support multiple tags yet.")
         return code_ir.SymbolCall(
             symbol_expression=symbol,
             positional_arg_expressions=[],

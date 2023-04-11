@@ -69,9 +69,27 @@ def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
     fn_or_cls_name = str(fn_or_cls)  # callable instances, etc.
   kwargs_str = ', '.join(
       f'{name}={_format_arg(value)}' for name, value in arguments.items())
-  return ('\n\nFiddle context: failed to construct or call '
-          f'{fn_or_cls_name} at {path_str} '
-          f'with arguments ({kwargs_str})')
+
+  tag_information = ''
+  bound_args = buildable.__signature__.bind_partial(**arguments)
+  bound_args.apply_defaults()
+  unset_arg_tags = []
+  for param in buildable.__signature__.parameters:
+    if param in bound_args.arguments:
+      continue  # User supplied it, all good.
+    tags = buildable.__argument_tags__.get(param, None)
+    if tags:
+      tag_str = ' '.join(sorted(str(tag) for tag in tags))
+      unset_arg_tags.append(f' - {param}: {tag_str}')
+  if unset_arg_tags:
+    tag_details = '\n'.join(unset_arg_tags)
+    tag_information = f'\nTags for unset arguments:\n{tag_details}'
+
+  return (
+      '\n\nFiddle context: failed to construct or call '
+      f'{fn_or_cls_name} at {path_str} '
+      f'with arguments ({kwargs_str}){tag_information}'
+  )
 
 
 def call_buildable(

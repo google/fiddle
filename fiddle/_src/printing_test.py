@@ -243,17 +243,6 @@ class AsStrFlattenedTests(absltest.TestCase):
         x = 'cba' {SampleTag} {SampleTag2}
         y = 'cba' {SampleTag} {SampleTag2}""")
 
-  def test_tagged_config(self):
-    cfg = fdl.Config(
-        fn_x_y,
-        x=fdl.TaggedValue(tags=(SampleTag,), default=fdl.Config(SampleClass)),
-    )
-    output = printing.as_str_flattened(cfg)
-    self.check_result(
-        output, f"""\
-        x = <Config[SampleClass()]> {SampleTag}
-        y = <[unset]>""")
-
   def test_argument_tags(self):
     cfg = fdl.Config(fn_x_y, y='abc')
     fdl.add_tag(cfg, 'x', SampleTag)

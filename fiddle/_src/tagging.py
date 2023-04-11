@@ -62,7 +62,7 @@ from __future__ import annotations
 import collections
 import inspect
 import typing
-from typing import Any, Collection, FrozenSet, Generic, Optional, Set, TypeVar, Union
+from typing import Any, Collection, FrozenSet, Optional, TypeVar, Union
 
 from fiddle._src import config
 from fiddle._src import daglish
@@ -75,6 +75,8 @@ TaggedValueNotFilledError = tag_type.TaggedValueNotFilledError
 NO_VALUE = config.NO_VALUE
 NoValue = config.NoValue
 _NoValue = config.NoValue
+tagged_value_fn = config.tagged_value_fn
+TaggedValueCls = config.TaggedValueCls
 
 
 class Tag(metaclass=TagType):
@@ -113,41 +115,6 @@ class Tag(metaclass=TagType):
 T = TypeVar('T')
 
 
-def tagged_value_fn(value: Union[T, NoValue] = NO_VALUE,
-                    tags: Optional[Set[TagType]] = None) -> T:
-  """Identity function to return value if set, and raise an error if not.
-
-  Args:
-    value: The value to return.
-    tags: The tags associated with the value. (Used in generating error messages
-      if `value` is not set.)
-
-  Returns:
-    The value `value` passed to it.
-  """
-  if value is NO_VALUE:
-    msg = ('Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
-           'calls, but one was not set.')
-    if tags:
-      msg += ' Unset tags: ' + str(tags)
-    raise TaggedValueNotFilledError(msg)
-  return value
-
-
-class TaggedValueCls(Generic[T], config.Config[T]):
-  """Placeholder class for TaggedValue instances."""
-
-  @property
-  def tags(self):
-    return self.__argument_tags__['value']
-
-  def __build__(self, *args: Any, **kwargs: Any) -> T:
-    if self.__fn_or_cls__ is not tagged_value_fn:
-      raise RuntimeError('Unexpected __fn_or_cls__ in TaggedValueCls; found:'
-                         f'{self.__fn_or_cls__}')
-    return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
-
-
 def TaggedValue(  # pylint: disable=invalid-name
     tags: Collection[TagType],
     default: Union[NoValue, T] = NO_VALUE,
@@ -167,9 +134,11 @@ def TaggedValue(  # pylint: disable=invalid-name
   Raises:
     ValueError: If `tags` is empty.
   """
-  result = TaggedValueCls(tagged_value_fn, value=default)
   if not tags:
     raise ValueError('At least one tag must be provided.')
+  result = TaggedValueCls(tagged_value_fn)
+  if default is not NO_VALUE:
+    result.value = default
   for tag in tags:
     config.add_tag(result, 'value', tag)
   return result
@@ -233,9 +202,6 @@ def materialize_tags(
 ) -> AnyBuildable:
   """Materialize tagged fields with assigned values or default values.
 
-  TODO(b/242574056): Consider supporting tags directly on Config objects, e.g.
-  by removing those tags.
-
   Converts:
   ```foo.bar.baz = MyCustomTag.new(4096)```
 
@@ -261,8 +227,13 @@ def materialize_tags(
     if isinstance(value, TaggedValueCls) and value.value != NO_VALUE and (
         tags is None or set(value.tags) & tags):
       return value.value
-    elif isinstance(value, config.Buildable) and clear_field_tags:
-      value.__argument_tags__.clear()
+    elif isinstance(value, config.Buildable):
+      if tags:
+        for tag_set in value.__argument_tags__.values():
+          for tag in tags:
+            tag_set.discard(tag)
+      if clear_field_tags:
+        value.__argument_tags__.clear()
       return value
     else:
       return value

@@ -26,6 +26,8 @@ import fiddle as fdl
 from fiddle import selectors
 from fiddle._src import tagging
 from fiddle._src import tagging_test_module as tst
+from fiddle.experimental import auto_config
+from fiddle.experimental import dataclasses as fdl_dc
 
 
 @dataclasses.dataclass
@@ -44,6 +46,21 @@ class BlueTag(fdl.Tag):
 
 def return_kwargs(**kwargs):
   return kwargs
+
+
+def sample_function(x, y):
+  return (x, y)
+
+
+@auto_config.auto_config
+def custom_default_factory():
+  return Foo(1, "2")
+
+
+@dataclasses.dataclass
+class Baz:
+  foo: Foo = fdl_dc.field(default_factory=custom_default_factory)
+  baz: int = 2
 
 
 def get_single_tag(tagged_value: tagging.TaggedValueCls) -> tagging.TagType:
@@ -120,17 +137,21 @@ class TaggingTest(absltest.TestCase):
     with self.assertRaisesRegex(
         tagging.TaggedValueNotFilledError,
         "Expected.*TaggedValue.*replaced.*one was not set"):
-      tagging.tagged_value_fn()
+      tagging.tagged_value_fn(fdl.NO_VALUE)
 
   def test_tagged_value_identity_fn_none_value(self):
     # Test that when the value is None, that's OK.
     self.assertIsNone(tagging.tagged_value_fn(value=None))
 
   def test_tagged_value_error_message(self):
-    cfg = tagging.TaggedValue(tags={tst.ParameterDType})
+    cfg = fdl.Config(Foo)
+    cfg.bar = tagging.TaggedValue(tags={tst.ParameterDType})
     with self.assertRaisesRegex(
-        tagging.TaggedValueNotFilledError,
-        r"Unset tags: {fiddle._src.tagging_test_module.ParameterDType}",
+        TypeError,
+        (
+            r"Tags for unset arguments:\n - bar: "
+            r"#fiddle._src.tagging_test_module.ParameterDType"
+        ),
     ):
       fdl.build(cfg)
 
@@ -140,21 +161,30 @@ class TaggingTest(absltest.TestCase):
 
   def test_one_taggedvalue_unset_in_config(self):
     cfg = fdl.Config(
-        return_kwargs,
-        foo=tst.ParameterDType.new(default=None),
-        bar=tst.ParameterDType.new())
+        sample_function,
+        x=tst.ParameterDType.new(default=None),
+        y=tst.ParameterDType.new(),
+    )
     with self.assertRaisesRegex(
-        tagging.TaggedValueNotFilledError,
-        "Expected.*TaggedValue.*replaced.*one was not set"):
+        TypeError, r" - y: #fiddle._src.tagging_test_module.ParameterDType"
+    ):
       fdl.build(cfg)
 
   def test_set_tagged(self):
     cfg = fdl.Config(
         return_kwargs,
         foo=tst.ParameterDType.new(default=None),
-        bar=tst.LinearParamDType.new())
+        bar=tst.LinearParamDType.new(),
+    )
     tagging.set_tagged(cfg, tag=tst.LinearParamDType, value=1)
     self.assertDictEqual(fdl.build(cfg), {"foo": None, "bar": 1})
+
+  def test_tagging_dataclass_field_defaults(self):
+    cfg = fdl.Config(Baz, foo=RedTag.new())
+    obj = fdl.build(cfg)
+    self.assertEqual(
+        obj.foo.bar, 1, "Default values from dataclass field missing."
+    )
 
   def test_set_two_taggedvalues(self):
     cfg = fdl.Config(
@@ -277,7 +307,13 @@ class TaggingTest(absltest.TestCase):
 
     self.assertEqual(fdl.build(cfg), (1, 2, 1, 4))
 
-    with self.assertRaises(tagging.TaggedValueNotFilledError):
+    with self.assertRaisesRegex(
+        TypeError,
+        (
+            r".*Tags for unset arguments:\n - a:"
+            r" #fiddle._src.tagging_test_module.ParameterDType.*"
+        ),
+    ):
       fdl.build(copied)
 
     tagging.set_tagged(copied, tag=tst.ParameterDType, value=10)
@@ -297,26 +333,35 @@ class TaggingTest(absltest.TestCase):
     )
     copied = copy.deepcopy(cfg)
     self.assertIsNot(copied.a, cfg.a)
-    self.assertIsNot(copied.a.value, cfg.a.value)
 
-    self.assertIs(get_single_tag(copied.a), get_single_tag(cfg.a))
-    self.assertIs(get_single_tag(copied.b), get_single_tag(cfg.b))
-    self.assertIs(cfg.a.value, cfg.b.value)
-    self.assertIs(copied.a.value, copied.b.value)
+    self.assertLen(fdl.get_tags(cfg, "a"), 1)
+    self.assertLen(fdl.get_tags(copied, "a"), 1)
+    self.assertIs(
+        list(fdl.get_tags(cfg, "a"))[0], list(fdl.get_tags(copied, "a"))[0]
+    )
+
+    self.assertLen(fdl.get_tags(cfg, "b"), 1)
+    self.assertLen(fdl.get_tags(copied, "b"), 1)
+    self.assertIs(
+        list(fdl.get_tags(cfg, "b"))[0], list(fdl.get_tags(copied, "b"))[0]
+    )
+
+    self.assertIs(cfg.a, cfg.b)
+    self.assertIs(copied.a, copied.b)
 
   def test_shallow_copy_tagged_values(self):
     cfg = tst.ParameterDType.new()
     copied = copy.copy(cfg)
 
     self.assertIs(get_single_tag(copied), tst.ParameterDType)
-    self.assertIs(copied.value, tagging.NO_VALUE)
+    self.assertFalse(hasattr(copied, "value"))
 
-    with self.assertRaises(tagging.TaggedValueNotFilledError):
+    with self.assertRaises(TypeError):
       fdl.build(copied)
     tagging.set_tagged(cfg, tag=tst.ParameterDType, value=1)
     self.assertEqual(fdl.build(cfg), 1)
 
-    with self.assertRaises(tagging.TaggedValueNotFilledError):
+    with self.assertRaises(TypeError):
       fdl.build(copied)
     tagging.set_tagged(copied, tag=tst.ParameterDType, value=2)
     self.assertEqual(fdl.build(cfg), 1)
@@ -342,8 +387,7 @@ class TaggingTest(absltest.TestCase):
 
     foo_cfg = tagging.materialize_tags(
         foo_cfg, tags=set(tagging.list_tags(foo_cfg) - {RedTag}))
-    self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
-    self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
+    self.assertEqual(frozenset([RedTag]), fdl.get_tags(foo_cfg, "bar"))
 
   def test_materialize_tags_removes_tag_when_default_provided(self):
     foo_cfg = fdl.Config(Foo)
@@ -370,8 +414,7 @@ class TaggingTest(absltest.TestCase):
     foo_cfg.qux = "abc"
 
     foo_cfg = tagging.materialize_tags(foo_cfg)
-    self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
-    self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
+    self.assertEqual(frozenset([RedTag]), fdl.get_tags(foo_cfg, "bar"))
 
   def test_materialize_tags_materializes_tag_in_tags_list(self):
     foo_cfg = fdl.Config(Foo)
@@ -388,8 +431,7 @@ class TaggingTest(absltest.TestCase):
     foo_cfg.qux = "abc"
 
     foo_cfg = tagging.materialize_tags(foo_cfg, tags={BlueTag})
-    self.assertIsInstance(foo_cfg.bar, tagging.TaggedValueCls)
-    self.assertEqual(get_single_tag(foo_cfg.bar), RedTag)
+    self.assertEqual(frozenset([RedTag]), fdl.get_tags(foo_cfg, "bar"))
 
 
 # TODO(b/272077830): Test set_tagged that leverages tag inheritance.

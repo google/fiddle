@@ -82,6 +82,14 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
           cst.parse_expression(value.symbol_expression),
           args=args,
       )
+    elif isinstance(value, code_ir.TagSymbolNew):
+      attr = daglish.Attr("item_to_tag")
+      item_to_tag = state.call(value.item_to_tag, attr)
+      base_name = cst.parse_expression(value.tag_symbol_expression)
+      with_tags = cst.parse_expression("auto_config.with_tags")
+      return cst.Call(
+          with_tags, args=[cst.Arg(item_to_tag), cst.Arg(base_name)]
+      )
     elif isinstance(value, code_ir.SymbolReference):
       return cst.parse_expression(value.expression)
     elif state.is_traversable(value):

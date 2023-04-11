@@ -18,6 +18,7 @@
 import copy
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import fiddle as fdl
 from fiddle._src.experimental import tied_value
 from fiddle._src.testing.example import fake_encoder_decoder
@@ -53,7 +54,7 @@ def tagged_tied_config():
   return config
 
 
-class TiedValueTest(absltest.TestCase):
+class TiedValueTest(parameterized.TestCase):
 
   def test_new_doesnt_rewrap(self):
     tied = tied_value.tied_value(value='float32')
@@ -82,17 +83,23 @@ class TiedValueTest(absltest.TestCase):
     self.assertEqual(encoder.attention.dtype, 'float64')
     self.assertEqual(encoder.mlp.dtype, 'float64')
 
-  def test_tagged_and_tied_interaction(self):
+  @parameterized.named_parameters(
+      ('tied_config', tied_tagged_config()),
+      ('tagged_config', tagged_tied_config()),
+  )
+  def test_tagged_and_tied_iteraction(self, config):
     """Tests interaction between values that are tagged and tied.
 
     Note: This only applies to TaggedValueCls, which is a bit legacy. Usually
     tags attached to fields should be used.
+
+    Args:
+      config: The configuration to check.
     """
-    for config in [tied_tagged_config(), tagged_tied_config()]:
-      config.attention.dtype.value = 'bfloat16'
-      encoder = fdl.build(config)
-      self.assertEqual(encoder.attention.dtype, 'bfloat16')
-      self.assertEqual(encoder.mlp.dtype, 'bfloat16')
+    config.attention.dtype = 'bfloat16'
+    encoder = fdl.build(config)
+    self.assertEqual(encoder.attention.dtype, 'bfloat16')
+    self.assertEqual(encoder.mlp.dtype, 'bfloat16')
 
   def test_untie_and_set_tied(self):
     config = tied_config()

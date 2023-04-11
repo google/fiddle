@@ -1021,11 +1021,37 @@ class ConfigTest(parameterized.TestCase):
         TypeError, r'.*missing 1 required.*\n\n.*<root>\.arg1.*arg1=1'):
       fdl.build(cfg)
 
-  def test_build_raises_exception_on_call(self):
+  def test_build_reraises_nice_error_with_tag_information(self):
+    cfg = fdl.Config(SampleClass)
+    fdl.add_tag(cfg, 'arg2', Tag1)
 
+    with self.assertRaisesRegex(
+        TypeError,
+        r'.*Tags for unset arguments:\n - arg2: #{module}.Tag1.*'.format(
+            module=__name__
+        ),
+    ):
+      fdl.build(cfg)
+
+  def test_build_reraises_nice_error_multiple_tags(self):
+    cfg = fdl.Config(SampleClass)
+    fdl.add_tag(cfg, 'arg1', Tag2)
+    fdl.add_tag(cfg, 'arg2', Tag1)
+    fdl.add_tag(cfg, 'arg2', Tag2)
+
+    expected_match = (
+        r'.* - arg1: #{module}.Tag2\n - arg2: #{module}.Tag1 #{module}.Tag2.*'
+        .format(module=__name__)
+    )
+    with self.assertRaisesRegex(TypeError, expected_match):
+      fdl.build(cfg)
+
+  def test_build_raises_exception_on_call(self):
     cfg = fdl.Config(raise_error)
-    msg = ('My fancy exception\n\nFiddle context: failed to construct or call '
-           'raise_error at <root> with arguments ()')
+    msg = (
+        'My fancy exception\n\nFiddle context: failed to construct or call '
+        'raise_error at <root> with arguments ()'
+    )
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
       fdl.build(cfg)
 

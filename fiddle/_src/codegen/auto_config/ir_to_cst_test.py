@@ -80,6 +80,40 @@ class IrToCstTest(absltest.TestCase):
     """
     self.assertEqual(code.split(), expected.split(), msg=code)
 
+  def test_tags_generation_config(self):
+    task = test_fixtures.simple_ir_with_tags()
+    make_symbolic_references.import_symbols(task)
+    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    code = ir_to_cst.code_for_task(task).code
+    expected = """
+    from fiddle._src.codegen.auto_config import test_fixtures
+    from fiddle.experimental import auto_config
+
+
+    @auto_config.auto_config
+    def config_fixture():
+        return test_fixtures.foo(x=auto_config.with_tags(4, test_fixtures.ATag))
+    """
+    self.assertEqual(code.split(), expected.split(), msg=code)
+
+  def test_tags_generation_partial(self):
+    task = test_fixtures.simple_partial_ir_with_tags()
+    make_symbolic_references.import_symbols(task)
+    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    code = ir_to_cst.code_for_task(task).code
+    expected = """
+    from fiddle._src.codegen.auto_config import test_fixtures
+    from fiddle.experimental import auto_config
+    import functools
+
+
+    @auto_config.auto_config
+    def config_fixture():
+        return functools.partial(test_fixtures.foo,
+            x=auto_config.with_tags(4, test_fixtures.ATag))
+    """
+    self.assertEqual(code.split(), expected.split(), msg=code)
+
 
 if __name__ == "__main__":
   absltest.main()

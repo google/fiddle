@@ -26,7 +26,7 @@ import inspect
 import itertools
 import logging
 import types
-from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
 
 from fiddle._src import arg_factory
 from fiddle._src import daglish
@@ -299,6 +299,19 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """Sets parameter ``name`` to ``value``."""
 
     self.__validate_param_name__(name)
+
+    if isinstance(value, TaggedValueCls):
+      tags = value.__argument_tags__.get('value', ())
+      if tags:
+        self.__argument_tags__[name].update(tags)
+        self.__argument_history__.add_updated_tags(
+            name, self.__argument_tags__[name]
+        )
+      if 'value' in value.__arguments__:
+        # Must pull from underlying dictionary to preserve TiedValue's.
+        value = value.__arguments__['value']
+      else:
+        return
 
     # Actually set the value, handling TiedValue's as a special case.
     current = self.__arguments__.get(name)
@@ -728,6 +741,56 @@ class Config(Generic[T], Buildable[T]):
       ``kwargs``.
     """
     return self.__fn_or_cls__(*args, **kwargs)
+
+
+def tagged_value_fn(
+    value: Union[T, NoValue], tags: Optional[Set[tag_type.TagType]] = None
+) -> T:
+  """Identity function to return value if set, and raise an error if not.
+
+  Args:
+    value: The value to return.
+    tags: The tags associated with the value. (Used in generating error messages
+      if `value` is not set.)
+
+  Returns:
+    The value `value` passed to it.
+  """
+  if value is NO_VALUE:
+    msg = (
+        'Expected all `TaggedValue`s to be replaced via fdl.set_tagged() '
+        'calls, but one was not set.'
+    )
+    if tags:
+      msg += ' Unset tags: ' + str(tags)
+    raise tag_type.TaggedValueNotFilledError(msg)
+  return value
+
+
+class TaggedValueCls(Generic[T], Config[T]):
+  """Placeholder class for TaggedValue instances.
+
+  Instances of this class are generally transitory; when passed as an argument
+  of a Fiddle Buildable, will be expanded into that argument's values and tags.
+  However, they may survive as stand-alone objects within tuples, lists, and
+  dictionaries.
+  """
+
+  # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
+  __fn_or_cls__: TypeOrCallableProducingT[T]
+  __signature__: inspect.Signature
+
+  @property
+  def tags(self):
+    return self.__argument_tags__['value']
+
+  def __build__(self, *args: Any, **kwargs: Any) -> T:
+    if self.__fn_or_cls__ is not tagged_value_fn:
+      raise RuntimeError(
+          'Unexpected __fn_or_cls__ in TaggedValueCls; found:'
+          f'{self.__fn_or_cls__}'
+      )
+    return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
 
 
 class TiedValue(Generic[T], Config[T]):

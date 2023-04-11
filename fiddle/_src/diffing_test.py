@@ -624,14 +624,10 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
         y=GreenTag.new([6]),
         z=BlueTag.new(GreenTag.new({1: 2})))
     expected_changes = (
-        diffing.RemoveTag(parse_path('.x.value'), GreenTag),
-        diffing.AddTag(parse_path('.x.value'), BlueTag),
-        diffing.ModifyValue(parse_path('.y.value[0]'), 6),
-        diffing.RemoveTag(parse_path('.z.value'), GreenTag),
-        diffing.AddTag(parse_path('.z.value'), BlueTag),
-        diffing.RemoveTag(parse_path('.z.value.value'), BlueTag),
-        diffing.AddTag(parse_path('.z.value.value'), GreenTag),
-        diffing.ModifyValue(parse_path('.z.value.value'), {1: 2}),
+        diffing.RemoveTag(parse_path('.x'), GreenTag),
+        diffing.AddTag(parse_path('.x'), BlueTag),
+        diffing.ModifyValue(parse_path('.y[0]'), 6),
+        diffing.ModifyValue(parse_path('.z'), {1: 2}),
     )
     self.check_diff(old, new, expected_changes)
 
@@ -652,14 +648,18 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
     tagged_value = BlueTag.new([0])
     old = fdl.Config(SimpleClass)
     new = fdl.Config(SimpleClass, x=tagged_value, y=tagged_value)
-    expected_changes = (diffing.SetValue(
-        parse_path('.x'), parse_reference('new_shared_values', '[1]')),
-                        diffing.SetValue(
-                            parse_path('.y'),
-                            parse_reference('new_shared_values', '[1]')))
+    expected_changes = (
+        diffing.AddTag(parse_path('.x'), BlueTag),
+        diffing.AddTag(parse_path('.y'), BlueTag),
+        diffing.SetValue(
+            parse_path('.x'), parse_reference('new_shared_values', '[0]')
+        ),
+        diffing.SetValue(
+            parse_path('.y'), parse_reference('new_shared_values', '[0]')
+        ),
+    )
     expected_new_shared_values = (
         [0],
-        BlueTag.new(parse_reference('new_shared_values', '[0]')),
     )
     self.check_diff(old, new, expected_changes, expected_new_shared_values)
 

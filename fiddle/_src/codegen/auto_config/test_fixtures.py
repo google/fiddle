@@ -30,6 +30,10 @@ def foo(x):
   return x
 
 
+class ATag(fdl.Tag):
+  """Sample tag to test code generation of tags."""
+
+
 @dataclasses.dataclass
 class SharedType:
   x: int
@@ -90,6 +94,30 @@ def simple_ir() -> code_ir.CodegenTask:
       fn, parent=None, children={}, parameter_values={}, output_value=config
   )
   return code_ir.CodegenTask(config, top_level_call=call_instance)
+
+
+def simple_ir_with_tags() -> code_ir.CodegenTask:
+  """Returns a single fixture bound to a config with a tag.
+
+  Code:
+
+  def config_fixture():
+    return fdl.Config(foo, x=ATag.new(4))
+  """
+  config = fdl.Config(foo, x=ATag.new(4))
+  return init_task.init_task(config)
+
+
+def simple_partial_ir_with_tags() -> code_ir.CodegenTask:
+  """Returns a single fixture bound to a Partial with a tag.
+
+  Code:
+
+  def config_fixture():
+    return fdl.Partial(foo, x=ATag.new(4))
+  """
+  partial = fdl.Partial(foo, x=ATag.new(4))
+  return init_task.init_task(partial)
 
 
 def simple_shared_variable_ir() -> code_ir.CodegenTask:

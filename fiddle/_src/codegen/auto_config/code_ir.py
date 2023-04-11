@@ -142,6 +142,12 @@ class SymbolCall(CodegenNode):
 
 
 @dataclasses.dataclass
+class TagSymbolNew(CodegenNode):
+  tag_symbol_expression: str
+  item_to_tag: Any
+
+
+@dataclasses.dataclass
 class FunctoolsPartialCall(SymbolCall):
   pass
 
