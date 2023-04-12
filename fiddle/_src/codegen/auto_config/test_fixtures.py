@@ -30,7 +30,15 @@ def foo(x):
   return x
 
 
+def bar(x, y):
+  return x + y
+
+
 class ATag(fdl.Tag):
+  """Sample tag to test code generation of tags."""
+
+
+class BTag(fdl.Tag):
   """Sample tag to test code generation of tags."""
 
 
@@ -102,9 +110,14 @@ def simple_ir_with_tags() -> code_ir.CodegenTask:
   Code:
 
   def config_fixture():
-    return fdl.Config(foo, x=ATag.new(4))
+    return fdl.Config(
+        bar,
+        x=ATag.new(1),
+        y=fdl.TaggedValue([ATag, BTag], default=2))
   """
-  config = fdl.Config(foo, x=ATag.new(4))
+  config = fdl.Config(
+      bar, x=ATag.new(1), y=fdl.TaggedValue([ATag, BTag], default=2)
+  )
   return init_task.init_task(config)
 
 
@@ -114,9 +127,16 @@ def simple_partial_ir_with_tags() -> code_ir.CodegenTask:
   Code:
 
   def config_fixture():
-    return fdl.Partial(foo, x=ATag.new(4))
+    return fdl.Partial(
+        bar,
+        x=ATag.new(1),
+        y=fdl.TaggedValue([ATag, BTag], default=2))
   """
-  partial = fdl.Partial(foo, x=ATag.new(4))
+  partial = fdl.Partial(
+      bar,
+      x=ATag.new(1),
+      y=fdl.TaggedValue([ATag, BTag], default=2),
+  )
   return init_task.init_task(partial)
 
 

@@ -142,8 +142,8 @@ class SymbolCall(CodegenNode):
 
 
 @dataclasses.dataclass
-class TagSymbolNew(CodegenNode):
-  tag_symbol_expression: str
+class TaggedValue(CodegenNode):
+  tags_symbol_expression: List[str]
   item_to_tag: Any
 
 

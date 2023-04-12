@@ -97,14 +97,9 @@ def replace_callables_and_configs_with_symbols(
       for arg in dict_of_args:
         if arg in all_tags:
           tags = all_tags[arg]
-          if len(tags) != 1:
-            # TODO(b/277263789): Support more than 1 tag.
-            raise RuntimeError(
-                "We don't support more than 1 tag yet"
-                f" {state.current_path} {arg}; found: {tags}"
-            )
-          dict_of_args[arg] = code_ir.TagSymbolNew(
-              tag_symbol_expression=task.import_manager.add(tags.pop()),
+          tags_expr = [task.import_manager.add(tag) for tag in tags]
+          dict_of_args[arg] = code_ir.TaggedValue(
+              tags_symbol_expression=tags_expr,
               item_to_tag=dict_of_args[arg],
           )
 
@@ -146,14 +141,13 @@ def replace_callables_and_configs_with_symbols(
         all_tags = value.__argument_tags__
         value = state.map_children(value)
         for arg, arg_tags in all_tags.items():
-          if len(arg_tags) == 1:
-            value.__arguments__[arg] = code_ir.TagSymbolNew(
-                tag_symbol_expression=task.import_manager.add(arg_tags.pop()),
-                item_to_tag=value.__arguments__[arg],
-            )
-          elif len(arg_tags) > 1:
-            # TODO(b/277263789): Support more than 1 tag.
-            raise RuntimeError("We don't support multiple tags yet.")
+          tags_expr = []
+          while arg_tags:
+            tags_expr.append(task.import_manager.add(arg_tags.pop()))
+          value.__arguments__[arg] = code_ir.TaggedValue(
+              tags_symbol_expression=tags_expr,
+              item_to_tag=value.__arguments__[arg],
+          )
         return code_ir.SymbolCall(
             symbol_expression=symbol,
             positional_arg_expressions=[],

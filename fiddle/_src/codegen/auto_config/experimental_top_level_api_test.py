@@ -89,10 +89,9 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
   def test_fuzz(self):
     # TODO(b/272826193): Test on more RNG seeds.
     for i in range(10):
-      # TODO(b/269518512): Support tags.
       config = tagging.materialize_tags(
           nested_values.generate_nested_value(random.Random(i)),
-          clear_field_tags=True,
+          clear_field_tags=False,
       )
       # `auto_config` checks that a Buildable is returned, to avoid user errors.
       has_buildables = any(
