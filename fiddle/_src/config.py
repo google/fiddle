@@ -692,14 +692,14 @@ class Config(Generic[T], Buildable[T]):
       fn_config = Config(test_function, 1)
       fn_config.kwarg = 'kwarg'
 
-  A ``Config`` instance may be transformd into instances and function outputs by
-  passing it to the ``build`` function. The ``build`` function invokes each
+  A ``Config`` instance may be transformed into instances and function outputs
+  by passing it to the ``build`` function. The ``build`` function invokes each
   function or class in the configuration tree (appropriately propagating the
   built outputs from nested ``Config``'s). For example, using the
   ``SampleClass`` config from above::
 
       instance = build(class_config)
-      assert instance.arg == 'arg'
+      assert instance.arg == 1
       assert instance.kwarg == 'kwarg'
 
   If the same ``Config`` instance is used in multiple places within the
