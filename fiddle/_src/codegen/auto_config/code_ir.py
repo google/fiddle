@@ -142,8 +142,10 @@ class SymbolCall(CodegenNode):
 
 
 @dataclasses.dataclass
-class TagSymbolNew(CodegenNode):
-  tag_symbol_expression: str
+class WithTagsCall(CodegenNode):
+  """Represents a call to auto_config.with_tags()."""
+
+  tag_symbol_expressions: List[str]
   item_to_tag: Any
 
 

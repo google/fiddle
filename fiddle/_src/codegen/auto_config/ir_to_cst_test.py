@@ -92,7 +92,9 @@ class IrToCstTest(absltest.TestCase):
 
     @auto_config.auto_config
     def config_fixture():
-        return test_fixtures.foo(x=auto_config.with_tags(4, test_fixtures.ATag))
+        return test_fixtures.bar(x=auto_config.with_tags(1,
+          test_fixtures.ATag),
+          y=auto_config.with_tags(2, test_fixtures.ATag, test_fixtures.BTag))
     """
     self.assertEqual(code.split(), expected.split(), msg=code)
 
@@ -109,8 +111,9 @@ class IrToCstTest(absltest.TestCase):
 
     @auto_config.auto_config
     def config_fixture():
-        return functools.partial(test_fixtures.foo,
-            x=auto_config.with_tags(4, test_fixtures.ATag))
+        return functools.partial(test_fixtures.bar,
+            x=auto_config.with_tags(1, test_fixtures.ATag),
+            y=auto_config.with_tags(2, test_fixtures.ATag, test_fixtures.BTag))
     """
     self.assertEqual(code.split(), expected.split(), msg=code)
 
