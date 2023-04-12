@@ -165,9 +165,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
 
-    if hasattr(fn_or_cls, '__fiddle_init__'):
-      fn_or_cls.__fiddle_init__(self)
-
     if dataclasses.is_dataclass(self.__fn_or_cls__):
       fields = dataclasses.fields(self.__fn_or_cls__)
       _add_dataclass_tags(self, fields)
@@ -709,18 +706,6 @@ class Config(Generic[T], Buildable[T]):
   instance of a ``Config`` with the same parameter settings that will yield a
   separate instance during ``build``, ``copy.copy()`` or ``copy.deepcopy()``
   may be used.
-
-  A class or function can customize the Config instance by defining a
-  ``__fiddle_init__`` property. For example::
-
-      class MyClass:
-        def __init__(self, x, y, z):
-          ...
-
-        @staticmethod
-        def __fiddle_init__(cfg):
-          cfg.y = 42
-          cfg.z = Config(MyOtherClass)
   """
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
