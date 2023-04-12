@@ -52,7 +52,9 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
       flags.FLAGS.test_tmpdir
     except flags.UnparsedFlagAccessError:
       # Sometimes need to initialize flags when running `pytest`.
-      flags.FLAGS(sys.argv)
+      program, *rest = sys.argv
+      rest = [flag for flag in rest if "test_tmpdir" in flag]
+      flags.FLAGS([program, *rest])
     return self.create_tempdir().full_path
 
   def _load_code_as_module(self, code: str) -> types.ModuleType:
