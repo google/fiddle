@@ -91,43 +91,45 @@ def switch_buildables_to_args(value, state: Optional[daglish.State] = None):
     return value
 
 
-# Dataclasses iterator registry
-class DataclassType:
-  """Sentinel class for registry lookup."""
-
-
-class DataclassAwareRegistry(daglish.NodeTraverserRegistry):
-
-  def find_node_traverser(
-      self, node_type: Type[Any]) -> Optional[daglish.NodeTraverser]:
-    if dataclasses.is_dataclass(node_type):
-      node_type = DataclassType
-    return super().find_node_traverser(node_type)
-
-
-dataclass_registry = DataclassAwareRegistry(use_fallback=True)
+def _names(value_or_type):
+  return [field.name for field in dataclasses.fields(value_or_type)]
 
 
 def _flatten_dataclass(value):
-  as_dict = dataclasses.asdict(value)
-  return tuple(as_dict.values()), (tuple(as_dict.keys()), type(value))
+  names = _names(value)
+  return [getattr(value, name) for name in names], (type(value), names)
 
 
 def _unflatten_dataclass(values, metadata):
-  keys, class_type = metadata
-  return class_type(**dict(zip(keys, values)))
+  typ, names = metadata
+  assert len(names) == len(values)
+  values_dict = {name: value for name, value in zip(names, values)}
+  return typ(**values_dict)
 
 
-def _dataclass_path_elements(value):
-  return [daglish.Attr(field.name) for field in dataclasses.fields(value)]
+def _path_elements_fn(value):
+  return tuple(daglish.Attr(name) for name in _names(value))
 
 
-dataclass_registry.register_node_traverser(
-    DataclassType,
-    flatten_fn=_flatten_dataclass,
-    unflatten_fn=_unflatten_dataclass,
-    path_elements_fn=_dataclass_path_elements,
+dataclass_traverser = daglish.NodeTraverser(
+    flatten=_flatten_dataclass,
+    unflatten=_unflatten_dataclass,
+    path_elements=_path_elements_fn,
 )
+
+
+class DataclassTraverserRegistry(daglish.NodeTraverserRegistry):
+
+  def find_node_traverser(
+      self, node_type: Type[Any]
+  ) -> Optional[daglish.NodeTraverser]:
+    traverser = self.fallback_registry.find_node_traverser(node_type)
+    if traverser is None and dataclasses.is_dataclass(node_type):
+      traverser = dataclass_traverser
+    return traverser
+
+
+dataclass_registry = DataclassTraverserRegistry(use_fallback=True)
 
 
 class PathTest(parameterized.TestCase):
@@ -564,6 +566,50 @@ class MemoizedTraversalTest(absltest.TestCase):
         r"<root>\.bar is <root>\.bar\.bar\.bar\.",
     ):
       fdl.build(cfg)
+
+  def test_get_all_paths_dataclass_traverser(self):
+    config = {"dataclass": Foo(3, fdl.Config(sample_fn, "arg"))}
+    config["alt"] = config["dataclass"].baz
+
+    def traverse(value, state: daglish.State):
+      if state.is_traversable(value):
+        return {
+            "paths": ", ".join(
+                daglish.path_str(path)
+                for path in state.get_all_paths(allow_caching=True)
+            ),
+            "sub_values": state.flattened_map_children(value).values,
+        }
+      else:
+        return "leaf value"
+
+    traverser = daglish.MemoizedTraversal(traverse, config, dataclass_registry)
+    result = traverse(config, traverser.initial_state())
+    self.assertDictEqual(
+        result,
+        {
+            "paths": "",
+            "sub_values": [
+                {
+                    "paths": "['dataclass']",
+                    "sub_values": [
+                        "leaf value",
+                        {
+                            "paths": "['dataclass'].baz, ['alt']",
+                            "sub_values": ["leaf value"],
+                        },
+                    ],
+                },
+                # This one comes from the config['alt']. It is returned as one
+                # of the values from flattened_map_chidlren() but is the same
+                # object as above.
+                {
+                    "paths": "['dataclass'].baz, ['alt']",
+                    "sub_values": ["leaf value"],
+                },
+            ],
+        },
+    )
 
 
 if __name__ == "__main__":

@@ -606,7 +606,8 @@ class BasicTraversal(Traversal):
       return self.paths_cache[object_id]
     else:
       all_paths = self.paths_cache = collect_paths_by_id(
-          self.root_obj, memoizable_only=True)
+          self.root_obj, memoizable_only=True, registry=self.registry
+      )
       return all_paths[object_id]
 
 
@@ -681,8 +682,12 @@ class MemoizedTraversal(BasicTraversal):
       return result
 
 
-def collect_paths_by_id(structure,
-                        memoizable_only=False) -> Dict[int, List[Path]]:
+def collect_paths_by_id(
+    structure,
+    memoizable_only=False,
+    *,
+    registry: NodeTraverserRegistry = _default_traverser_registry,
+) -> Dict[int, List[Path]]:
   """Returns a dict mapping id(v)->paths for all `v` traversable from structure.
 
   I.e., if `result = collect_paths_by_id(structure)`, then `result[id(v)]` is
@@ -695,6 +700,7 @@ def collect_paths_by_id(structure,
     memoizable_only: If true, then only include values `v` for which
       `is_memoizable(v)` is true.  Currently required to be True, to avoid bugs
       that can result from Python's interning optimizations.
+    registry: Node traversal registry used to collect paths.
   """
   if not memoizable_only:
     raise ValueError(
@@ -710,7 +716,8 @@ def collect_paths_by_id(structure,
     if state.is_traversable(value):
       state.flattened_map_children(value)
 
-  BasicTraversal.run(traverse, structure)
+  traversal = BasicTraversal(traverse, structure, registry=registry)
+  traverse(structure, traversal.initial_state())
   return paths_by_id
 
 
