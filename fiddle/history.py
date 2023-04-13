@@ -24,5 +24,6 @@ from fiddle._src.history import History
 from fiddle._src.history import HistoryEntry
 from fiddle._src.history import Location
 from fiddle._src.history import LocationProvider
+from fiddle._src.history import set_tracking
 from fiddle._src.history import suspend_tracking
 from fiddle._src.history import tracking_enabled

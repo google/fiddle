@@ -241,12 +241,29 @@ def suspend_tracking():
   Yields:
     There is no associated yield value.
   """
-  previous_value = _tracking_state.enabled
-  _tracking_state.enabled = False
+  previous_enabled = tracking_enabled()
+  set_tracking(enabled=False)
   try:
     yield
   finally:
-    _tracking_state.enabled = previous_value
+    set_tracking(enabled=previous_enabled)
+
+
+def set_tracking(enabled: bool):
+  """Sets whether Fiddle performs history tracking.
+
+  For performance reasons, it can be valuable to disable history tracking. This
+  function enables callers to imperatively control whether Fiddle tracks
+  mutations to Buildable objects. To disable history tracking::
+
+    history.set_tracking(enabled=False)
+
+  Note: where possible, prefer the context manager ``suspend_tracking`` instead.
+
+  Args:
+    enabled: Whether history tracking should be enabled.
+  """
+  _tracking_state.enabled = enabled
 
 
 def tracking_enabled() -> bool:
