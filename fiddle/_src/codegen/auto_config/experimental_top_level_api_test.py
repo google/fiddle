@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import importlib
 import os
 import random
@@ -105,6 +106,23 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
           module = self._load_code_as_module(code)
           generated_config = module.config_fixture.as_buildable()
           self.assertDagEqual(config, generated_config)
+
+  def test_config_contains_tags_wo_default(self):
+    @dataclasses.dataclass
+    class Foo:
+      a: int = 1
+
+    config = fdl.Config(Foo)
+    fdl.set_tags(config, "a", [test_fixtures.ATag])
+
+    with self.assertRaisesRegex(
+        ValueError,
+        (
+            "assigning a value to the field first or removing field tags from "
+            "your config"
+        ),
+    ):
+      experimental_top_level_api.auto_config_codegen(config)
 
 
 if __name__ == "__main__":

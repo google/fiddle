@@ -142,6 +142,14 @@ def replace_callables_and_configs_with_symbols(
         value = state.map_children(value)
         for arg, arg_tags in all_tags.items():
           tag_expr = [task.import_manager.add(tag) for tag in arg_tags]
+          if arg not in value.__arguments__:
+            raise ValueError(
+                f"Tagged field '{arg}' of {value!r} is not found in its"
+                f" arguments: {value.__arguments__}. This is likely because the"
+                " tagged field doesn't yet have a value. Consider assigning a"
+                " value to the field first or removing field tags from your"
+                " config, for example using `fdl.clear_tags`."
+            )
           value.__arguments__[arg] = code_ir.WithTagsCall(
               tag_symbol_expressions=tag_expr,
               item_to_tag=value.__arguments__[arg],
