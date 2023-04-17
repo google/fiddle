@@ -15,6 +15,7 @@
 
 """Tests for fiddle.codegen.py_val_to_cst_converter."""
 
+import enum
 import functools
 import inspect
 import logging.config
@@ -45,6 +46,16 @@ class AnotherTag(fdl.Tag):
 
 def sample_fn(x, y, z):
   return (x, y, z)
+
+
+class MyEnum(enum.Enum):
+  FOO = 'foo'
+  BAR = 'bar'
+
+
+class MyStrEnum(str, enum.Enum):
+  FOO = 'foo'
+  BAR = 'bar'
 
 
 def _get_cst_code(cst_module):
@@ -111,6 +122,10 @@ class PyValToCstConverterTest(parameterized.TestCase):
           functools.partial(sample_fn, 3, z=4),
           'functools.partial(sample_fn, 3, z=4)',
       ),
+      # Enums:
+      (MyEnum.FOO, 'MyEnum.FOO'),
+      (MyStrEnum.FOO, 'MyStrEnum.FOO'),
+      (re.RegexFlag.DOTALL, 're.RegexFlag.DOTALL'),
   ])
   def test_convert(self, pyval, expected):
     cst_expr = py_val_to_cst_converter.convert_py_val_to_cst(pyval)

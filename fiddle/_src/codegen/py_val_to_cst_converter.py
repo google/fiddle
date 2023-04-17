@@ -16,6 +16,7 @@
 """Library for converting Python values to `cst` expressions."""
 
 import builtins
+import enum
 import functools
 import inspect
 import types
@@ -396,3 +397,10 @@ def _convert_partial(value: functools.partial,
                 kwarg_to_cst(arg_name, conversion_fn(arg_val))
                 for (arg_name, arg_val) in value.keywords.items()
             ]))
+
+
+@register_py_val_to_cst_converter(lambda value: isinstance(value, enum.Enum))
+def _convert_enum(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
+  return cst.Attribute(
+      value=conversion_fn(type(value)), attr=cst.Name(value.name)
+  )
