@@ -64,6 +64,7 @@ setup(
             'fiddle[flags]',
             'flax',
             'graphviz',
+            'lingvo',
             'pytest',
             'pytype',
         ] + ['seqio-nightly'] if sys.platform != 'darwin' else []
