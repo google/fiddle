@@ -121,7 +121,8 @@ def describe_dag_diffs(x, y):
   def find_diffs(x_val, y_val, path):
     """Adds differences between `x_val` and `y_val` to `diffs`."""
 
-    # Compare the sharing structure of x_val and y_val.
+    # Compare the sharing structure of x_val and y_val for x_val and y_val not
+    # immutable literal simple types.
     shared_x_path = x_memo.get(id(x_val))
     shared_y_path = y_memo.get(id(y_val))
     if shared_x_path is not None and shared_x_path == shared_y_path:
@@ -130,18 +131,24 @@ def describe_dag_diffs(x, y):
     if shared_x_path is None:
       x_memo[id(x_val)] = path
     else:
-      path_str = daglish.path_str(path)
-      x_path = daglish.path_str(shared_x_path)
-      diffs.append(f'* Sharing diff: x{path_str} is x{x_path} but '
-                   f'y{path_str} is not y{x_path}')
+      if not daglish.is_internable(x_val):
+        path_str = daglish.path_str(path)
+        x_path = daglish.path_str(shared_x_path)
+        diffs.append(
+            f'* Sharing diff: x{path_str} is x{x_path} but '
+            f'y{path_str} is not y{x_path}'
+        )
 
     if shared_y_path is None:
       y_memo[id(y_val)] = path
     else:
-      path_str = daglish.path_str(path)
-      y_path = daglish.path_str(shared_y_path)
-      diffs.append(f'* Sharing diff: y{path_str} is y{y_path} but '
-                   f'x{path_str} is not x{y_path}')
+      if not daglish.is_internable(y_val):
+        path_str = daglish.path_str(path)
+        y_path = daglish.path_str(shared_y_path)
+        diffs.append(
+            f'* Sharing diff: y{path_str} is y{y_path} but '
+            f'x{path_str} is not x{y_path}'
+        )
 
     # Compare x_val and y_val by type.
     if type(x_val) is not type(y_val):
