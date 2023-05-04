@@ -523,6 +523,54 @@ class ConfigTest(parameterized.TestCase):
     self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'two'))
     self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg, 'three'))
 
+  def test_tags_flattening_and_unflattening(self):
+    def flatten_unflatten(config):
+      values, metadata = config.__flatten__()
+      return type(config).__unflatten__(values, metadata)
+
+    with self.subTest('tagged_field_without_value'):
+      cfg = fdl.Config(DataclassAnnotated)
+      self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'one'))
+      cfg2 = flatten_unflatten(cfg)
+      self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg2, 'one'))
+
+    with self.subTest('untagged_field_without_value'):
+      cfg = fdl.Config(DataclassAnnotated)
+      fdl.clear_tags(cfg, 'one')
+      self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'one'))
+      cfg2 = flatten_unflatten(cfg)
+      self.assertEqual(frozenset([]), fdl.get_tags(cfg2, 'one'))
+
+    with self.subTest('tagged_field_with_value'):
+      cfg = fdl.Config(DataclassAnnotated)
+      cfg.one = fdl.TaggedValue([Tag2], 3)
+      self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'one'))
+      cfg2 = flatten_unflatten(cfg)
+      self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg2, 'one'))
+
+    with self.subTest('untagged_field_with_value'):
+      cfg = fdl.Config(DataclassAnnotated)
+      cfg.one = 3
+      fdl.clear_tags(cfg, 'one')
+      self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'one'))
+      cfg2 = flatten_unflatten(cfg)
+      self.assertEqual(frozenset([]), fdl.get_tags(cfg2, 'one'))
+
+  def test_setting_tagged_values_with_daglish_traversal(self):
+    cfg = fdl.Config(DataclassAnnotated, one=3)
+
+    def traverse(value, state):
+      if isinstance(value, int):
+        return fdl.TaggedValue([Tag2], value)
+      else:
+        return state.map_children(value)
+
+    # We expect the TaggedValue class *not* to be unwrapped by the constructor
+    # now, because __new__ is called directly.
+    cfg2 = traverse(cfg, daglish.MemoizedTraversal.begin(traverse, cfg))
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg2, 'one'))
+    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg2.one, 'value'))
+
   def test_clear_tags(self):
     cfg = fdl.Config(SampleClass)
     fdl.add_tag(cfg, 'arg1', Tag1)

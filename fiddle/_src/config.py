@@ -126,31 +126,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       *args: Any positional arguments to configure for ``fn_or_cls``.
       **kwargs: Any keyword arguments to configure for ``fn_or_cls``.
     """
-    if isinstance(fn_or_cls, Buildable):
-      raise ValueError(
-          'Using the Buildable constructor to convert a buildable to a new '
-          'type or to override arguments is forbidden; please use either '
-          '`fdl.cast(new_type, buildable)` (for casting) or '
-          '`fdl.copy_with(buildable, **kwargs)` (for overriding arguments).'
-      )
-
-    # Using `super().__setattr__` here because assigning directly would trigger
-    # our `__setattr__` override. Using `super().__setattr__` instead of special
-    # casing these attribute names in `__setattr__` also has the effect of
-    # making them easily gettable but not as easily settable by user code.
-    super().__setattr__('__fn_or_cls__', fn_or_cls)
-    super().__setattr__('__arguments__', {})
-    signature = signatures.get_signature(fn_or_cls)
-    super().__setattr__('__signature__', signature)
-    has_var_keyword = any(
-        param.kind == param.VAR_KEYWORD
-        for param in signature.parameters.values()
-    )
+    signature = self.__init_callable__(fn_or_cls)
     arg_history = history.History()
     arg_history.add_new_value('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__argument_history__', arg_history)
     super().__setattr__('__argument_tags__', collections.defaultdict(set))
-    super().__setattr__('_has_var_keyword', has_var_keyword)
 
     arguments = signature.bind_partial(*args, **kwargs).arguments
     for name in list(arguments.keys()):  # Make a copy in case we mutate.
@@ -178,6 +158,32 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       self.__argument_history__.add_updated_tags(
           name, self.__argument_tags__[name]
       )
+
+  def __init_callable__(
+      self, fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]]
+  ) -> inspect.Signature:
+    if isinstance(fn_or_cls, Buildable):
+      raise ValueError(
+          'Using the Buildable constructor to convert a buildable to a new '
+          'type or to override arguments is forbidden; please use either '
+          '`fdl.cast(new_type, buildable)` (for casting) or '
+          '`fdl.copy_with(buildable, **kwargs)` (for overriding arguments).'
+      )
+
+    # Using `super().__setattr__` here because assigning directly would trigger
+    # our `__setattr__` override. Using `super().__setattr__` instead of special
+    # casing these attribute names in `__setattr__` also has the effect of
+    # making them easily gettable but not as easily settable by user code.
+    super().__setattr__('__fn_or_cls__', fn_or_cls)
+    super().__setattr__('__arguments__', {})
+    signature = signatures.get_signature(fn_or_cls)
+    super().__setattr__('__signature__', signature)
+    has_var_keyword = any(
+        param.kind == param.VAR_KEYWORD
+        for param in signature.parameters.values()
+    )
+    super().__setattr__('_has_var_keyword', has_var_keyword)
+    return signature
 
   def __init_subclass__(cls):
     daglish.register_node_traverser(
@@ -217,9 +223,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __unflatten__(
       cls, values: Iterable[Any], metadata: BuildableTraverserMetadata
   ):
-    rebuilt = cls(metadata.fn_or_cls, **metadata.arguments(values))  # pytype: disable=not-instantiable
+    rebuilt = cls.__new__(cls)
+    rebuilt.__init_callable__(metadata.fn_or_cls)
     object.__setattr__(rebuilt, '__argument_tags__', metadata.tags())
     object.__setattr__(rebuilt, '__argument_history__', metadata.history())
+    object.__setattr__(rebuilt, '__arguments__', metadata.arguments(values))
     return rebuilt
 
   def __path_elements__(self):
