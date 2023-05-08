@@ -17,6 +17,7 @@
 
 import contextlib
 import functools
+import logging
 import threading
 from typing import Any, Callable, Dict, TypeVar, overload
 
@@ -104,18 +105,6 @@ def call_buildable(
     return buildable.__build__(**arguments)
 
 
-def _build(value: Any, state: daglish.State) -> Any:
-  """Inner method / implementation of build()."""
-
-  if isinstance(value, config_lib.Buildable):
-    sub_traversal = state.flattened_map_children(value)
-    metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
-    arguments = metadata.arguments(sub_traversal.values)
-    return call_buildable(value, arguments, current_path=state.current_path)
-  else:
-    return state.map_children(value)
-
-
 # Define typing overload for `build(Partial[T])`
 @overload
 def build(buildable: config_lib.Partial[T]) -> Callable[..., T]:
@@ -163,6 +152,29 @@ def build(buildable):
   Returns:
     The built version of ``buildable``.
   """
+  is_built = False
+
+  def _build(value: Any, state: daglish.State) -> Any:
+    """Inner method / implementation of build()."""
+    nonlocal is_built
+    if isinstance(value, config_lib.Buildable):
+      sub_traversal = state.flattened_map_children(value)
+      metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
+      arguments = metadata.arguments(sub_traversal.values)
+      is_built = True
+      return call_buildable(value, arguments, current_path=state.current_path)
+    else:
+      return state.map_children(value)
 
   with _in_build():
-    return daglish.MemoizedTraversal.run(_build, buildable)
+    result = daglish.MemoizedTraversal.run(_build, buildable)
+
+  if not is_built:
+    logging.warning(
+        'No Buildables found in value passed to `fdl.build()`: '
+        '%s with type %s.',
+        str(buildable),
+        type(buildable),
+    )
+
+  return result
