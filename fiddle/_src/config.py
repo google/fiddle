@@ -1212,7 +1212,7 @@ def ordered_arguments(
         value = buildable.__arguments__[name]
         if (not exclude_equal_to_default) or (value != param.default):
           result[name] = value
-      elif param.default != param.empty:
+      elif param.default is not param.empty:
         if include_defaults:
           result[name] = param.default
       elif include_unset:

@@ -481,6 +481,30 @@ class ConfigTest(parameterized.TestCase):
     cfg2 = fdl.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
+  def test_config_with_non_comparable_values(self):
+    # This test ensures that fdl.Config and fdl.build work properly with
+    # argument defaults that don't support equality testing. Something related
+    # can come up with NumPy arrays, which test for equality against scalars in
+    # an elementwise fashion, and subsequently can't directly be coerced to a
+    # bool (e.g., used as the condition in an if statement).
+
+    @dataclasses.dataclass(frozen=True, eq=False)
+    class ClassWithDisabledEquality:
+
+      def __eq__(self, _):
+        raise NotImplementedError()
+
+    def fn_with_non_comparable_default(
+        value1, value2=ClassWithDisabledEquality()
+    ):
+      return value1, value2
+
+    cfg = fdl.Config(fn_with_non_comparable_default)
+    cfg.value1 = ClassWithDisabledEquality()
+    value1, value2 = fdl.build(cfg)
+    self.assertIsInstance(value1, ClassWithDisabledEquality)
+    self.assertIsInstance(value2, ClassWithDisabledEquality)
+
   def test_unsetting_argument(self):
     fn_config = fdl.Config(basic_fn)
     fn_config.arg1 = 3
