@@ -139,6 +139,15 @@ class DescribeDagDiffsTest(parameterized.TestCase):
         test_util.describe_dag_diffs(b, a),
         ['* Sharing diff: y[1] is y[0] but x[1] is not x[0]'])
 
+  def test_no_sharing_diff_for_internable_value(self):
+    shared_tuple = tuple(range(20))  # To make sure it's not actually interned.
+    a = [shared_tuple, shared_tuple]
+    b = [shared_tuple, tuple(range(20))]
+    self.assertIsNot(b[0], b[1])
+    self.assertEqual(
+        test_util.get_shared_paths(a), test_util.get_shared_paths(b)
+    )
+
   def test_leaf_diff(self):
     x = fdl.Config(sample_fn, a=5)
     y = fdl.Config(sample_fn, a=6)

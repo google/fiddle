@@ -86,7 +86,7 @@ def get_shared_paths(structure: Any) -> Set[Set[daglish.Path]]:
   result = set()
 
   def collect_value(paths: daglish.Paths, value: Any):
-    if daglish.is_memoizable(value) and len(paths) > 1:
+    if not daglish.is_internable(value) and len(paths) > 1:
       result.add(frozenset(paths))
     return (yield)
 
