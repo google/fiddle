@@ -24,37 +24,15 @@ can be valuable.
 import copy
 import inspect
 import textwrap
-from typing import Any, Dict, Iterable, List, Optional, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar
 
 from fiddle import daglish
 from fiddle import diffing
-from fiddle import graphviz
 from fiddle._src import config as config_lib
+from fiddle._src import graphviz_custom_object
 from fiddle._src.experimental import daglish_legacy
 
-
-def _raise_error():
-  """Helper function for `Trimmed` that raises an error."""
-  raise ValueError('Please do not call fdl.build() on a config tree with '
-                   'Trimmed() nodes. These nodes are for visualization only.')
-
-
-class Trimmed(config_lib.Config[type(None)], graphviz.CustomGraphvizBuildable):
-  """Represents a configuration that has been trimmed."""
-
-  def __init__(self):
-    super().__init__(_raise_error)
-
-  def __render_value__(self, api: graphviz.GraphvizRendererApi) -> Any:
-    return api.tag('i')('(trimmed...)')
-
-  @classmethod
-  def __unflatten__(
-      cls,
-      values: Iterable[Any],
-      metadata: config_lib.BuildableTraverserMetadata,
-  ):
-    return cls()
+Trimmed = graphviz_custom_object.Trimmed
 
 
 _T = TypeVar('_T')
@@ -77,8 +55,9 @@ def trimmed(config: _T, trim: List[config_lib.Buildable]) -> _T:
     Copy of the Buildable with nodes replaced.
   """
 
-  return copy.deepcopy(config,
-                       {id(sub_config): Trimmed() for sub_config in trim})
+  return copy.deepcopy(
+      config, {id(sub_config): Trimmed() for sub_config in trim}
+  )
 
 
 def with_defaults_trimmed(config: _T) -> _T:
@@ -93,13 +72,15 @@ def with_defaults_trimmed(config: _T) -> _T:
 
   # TODO(b/241261427): Remove args matching dataclasses' default_factory too.
   def traverse_fn(_, value):
-    new_value = (yield)
+    new_value = yield
     if isinstance(value, config_lib.Buildable):
       for name, attr_value in list(new_value.__arguments__.items()):
         param = value.__signature__.parameters.get(name, None)
-        if (param is not None and
-            param.kind != inspect.Parameter.VAR_KEYWORD and
-            param.default == attr_value):
+        if (
+            param is not None
+            and param.kind != inspect.Parameter.VAR_KEYWORD
+            and param.default == attr_value
+        ):
           delattr(new_value, name)
       return new_value
     else:
@@ -127,8 +108,8 @@ def depth_over(config: Any, depth: int) -> List[config_lib.Buildable]:
     List of all sub-Buildables with depth strictly greater than `depth`.
   """
   node_to_depth: Dict[int, int] = {}  # Buildable hash --> min depth.
-  id_to_node: Dict[int,
-                   config_lib.Buildable] = {}  # Buildable hash --> Buildable.
+  # Buildable hash --> Buildable.
+  id_to_node: Dict[int, config_lib.Buildable] = {}
 
   def _path_len(path: daglish.Path) -> int:
     return sum(1 if isinstance(elt, daglish.Attr) else 0 for elt in path)

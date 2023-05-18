@@ -15,7 +15,6 @@
 
 """Provides a renderer to visualize a DAG of `fdl.Buildable`s via Graphviz."""
 
-import abc
 import collections
 import colorsys
 import copy
@@ -30,12 +29,13 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import diffing
+from fiddle._src import graphviz_custom_object
 from fiddle._src import tag_type
 from fiddle._src import tagging
 from fiddle._src.codegen import formatting_utilities
 from fiddle._src.experimental import daglish_legacy
+from fiddle._src.experimental import visualize
 import graphviz
-import typing_extensions
 
 _BUILDABLE_INSTANCE_COLORS = [
     '#ffc0cb',  # pink
@@ -78,24 +78,6 @@ class _TrimmedSentinel:
 
 
 _TRIMMED_SENTINEL = _TrimmedSentinel()
-
-
-class GraphvizRendererApi(typing_extensions.Protocol):
-  """API of _GraphvizRenderer exposed to CustomGraphvizBuildable subclasses."""
-
-  def tag(self, tag: str, **kwargs) -> Callable[[Any], str]:
-    raise NotImplementedError()
-
-
-class CustomGraphvizBuildable(metaclass=abc.ABCMeta):
-  """Mixin class that marks a Buildable has having a custom __render_value__.
-
-  This lets certain special-purpose Buildables customize how they are rendered.
-  """
-
-  @abc.abstractmethod
-  def __render_value__(self, api: GraphvizRendererApi) -> Any:
-    """Renders this Buildable as a value."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -421,7 +403,7 @@ class _GraphvizRenderer:
     """Returns an HTML string rendering `value`."""
     if value is tagging.NO_VALUE:
       return self.tag('i')('tagging.NO_VALUE')
-    elif isinstance(value, CustomGraphvizBuildable):
+    elif isinstance(value, graphviz_custom_object.CustomGraphvizBuildable):
       return value.__render_value__(self)
     elif isinstance(value, tagging.TaggedValueCls):
       return self._render_tagged_value(value, color)
@@ -465,9 +447,10 @@ class _GraphvizRenderer:
     # If this is not a Buildable or shared value, then render it using
     # _render_value.
     buildable_types = (config_lib.Buildable, _ChangedBuildable)
-    if not (id(value) in self._shared_value_ids or
-            (isinstance(value, buildable_types) and
-             not isinstance(value, CustomGraphvizBuildable))):
+    is_standard_buildable = isinstance(
+        value, buildable_types
+    ) and not isinstance(value, graphviz_custom_object.CustomGraphvizBuildable)
+    if not (id(value) in self._shared_value_ids or is_standard_buildable):
       return self._render_value(value)
 
     # First, add the value to the graph. This will add a separate node and
@@ -613,7 +596,11 @@ class _GraphvizRenderer:
     return table(tr(row))
 
 
-def render(config: Any) -> graphviz.Graph:
+def render(
+    config: Any,
+    max_depth: Optional[int] = None,
+    max_str_length: Optional[int] = None,
+) -> graphviz.Graph:
   """Renders the given ``config`` as a ``graphviz.Graph``.
 
   Each config is rendered as a table of keys and values (with a header row).
@@ -625,12 +612,21 @@ def render(config: Any) -> graphviz.Graph:
   Args:
     config: The ``fdl.Buildable`` (or nested structure of ``fdl.Buildable``'s)
       to render.
+    max_depth: Max depth of nodes to render.
+    max_str_length: Max length of long string fields or object repr's in a
+      config.
 
   Returns:
     A ``graphviz.Graph`` object containing the resulting rendering of
     ``config``. Standard ``graphviz`` methods can then be used to export this to
     a file.
   """
+  if max_depth is not None:
+    config = visualize.trimmed(
+        config, trim=visualize.depth_over(config, depth=max_depth)
+    )
+  if max_str_length is not None:
+    config = visualize.trim_long_fields(config, threshold=max_str_length)
   return _GraphvizRenderer().render(config)
 
 

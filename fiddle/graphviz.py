@@ -17,7 +17,7 @@
 
 # pylint: disable=unused-import
 
-from fiddle._src.graphviz import CustomGraphvizBuildable
-from fiddle._src.graphviz import GraphvizRendererApi
 from fiddle._src.graphviz import render
 from fiddle._src.graphviz import render_diff
+from fiddle._src.graphviz_custom_object import CustomGraphvizBuildable
+from fiddle._src.graphviz_custom_object import GraphvizRendererApi
