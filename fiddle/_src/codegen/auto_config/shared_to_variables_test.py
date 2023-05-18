@@ -74,7 +74,6 @@ class SharedToVariablesTest(absltest.TestCase):
         parent=None,
         children={},
         parameter_values={},
-        output_value=None,
     )
     shared_to_variables.move_shared_nodes_to_variables(task)
     intermediate_code = ir_printer.format_task(task)

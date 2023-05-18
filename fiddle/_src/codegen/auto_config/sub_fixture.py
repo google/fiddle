@@ -73,14 +73,7 @@ def _transform_sub_fixtures(
   for fixture in new_fixtures:
     call_node = fixture_call_mapping[id(fixture)]
     task.top_level_call.children[call_node] = code_ir.CallInstance(
-        fixture,
-        parent=None,
-        children={},
-        parameter_values={},
-        # TODO(b/283273399): Remove output_value from code_ir.CallInstance.
-        # The config is stored in `fixture` and `output_value`` is not used
-        # anyway, so feed None here for simplicity.
-        output_value=None,
+        fixture, parent=None, children={}, parameter_values={}
     )
 
 

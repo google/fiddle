@@ -200,7 +200,6 @@ class CallInstance:
   parent: Optional[CallInstance]
   children: Dict[Call, CallInstance]
   parameter_values: Dict[Name, Any]
-  output_value: Any
 
   def __hash__(self) -> int:
     return id(self)
