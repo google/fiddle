@@ -19,7 +19,7 @@ Note: We do not generally do a lot of formatting, instead relying on existing
 source code formatters (pyformat, yapf, etc.).
 """
 
-from typing import Any
+from typing import Any, List
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
@@ -39,6 +39,26 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
   """
 
   def traverse(value, state: daglish.State) -> cst.CSTNode:
+
+    def _prepare_args_helper(
+        names: List[str], values: List[Any], attr: daglish.Attr
+    ) -> List[cst.Arg]:
+      """Prepare code_ir.Arg node based on names and values."""
+      args = []
+      for arg_name, arg_value in zip(names, values):
+        arg_value = state.call(arg_value, attr, daglish.Key(arg_name))
+        args.append(
+            cst.Arg(
+                arg_value,
+                keyword=cst.Name(arg_name),
+                equal=cst.AssignEqual(
+                    whitespace_before=cst.SimpleWhitespace(""),
+                    whitespace_after=cst.SimpleWhitespace(""),
+                ),
+            )
+        )
+      return args
+
     if isinstance(value, config_lib.Buildable):
       raise ValueError(
           "Internal Fiddle error: you must run the make_symbolic_reference "
@@ -66,18 +86,9 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       for i, arg_value in enumerate(value.positional_arg_expressions):
         arg_value = state.call(arg_value, attr, daglish.Key(i))
         args.append(cst.Arg(arg_value))
-      for arg_name, arg_value in value.arg_expressions.items():
-        arg_value = state.call(arg_value, attr, daglish.Key(arg_name))
-        args.append(
-            cst.Arg(
-                arg_value,
-                keyword=cst.Name(arg_name),
-                equal=cst.AssignEqual(
-                    whitespace_before=cst.SimpleWhitespace(""),
-                    whitespace_after=cst.SimpleWhitespace(""),
-                ),
-            )
-        )
+      if value.arg_expressions:
+        names, values = zip(*value.arg_expressions.items())
+        args.extend(_prepare_args_helper(names, values, attr))
       return cst.Call(
           cst.parse_expression(value.symbol_expression),
           args=args,
@@ -94,6 +105,14 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       return cst.Call(with_tags, args=call_args)
     elif isinstance(value, code_ir.SymbolReference):
       return cst.parse_expression(value.expression)
+    elif isinstance(value, code_ir.Call):
+      args = []
+      if value.arg_expressions:
+        attr = daglish.Attr("arg_expressions")
+        names, values = zip(*value.arg_expressions.items())
+        names = [name.value for name in names]
+        args = _prepare_args_helper(names, values, attr)
+      return cst.Call(cst.parse_expression(value.name.value), args=args)
     elif state.is_traversable(value):
       raise NotImplementedError(
           f"Expression generation is not implemented for {value!r}"
@@ -176,6 +195,6 @@ def code_for_task(
     LibCST module.
   """
   body = []
-  for fn in reversed(task.top_level_call.all_fixture_functions()):
+  for fn in task.top_level_call.all_fixture_functions():
     body.append(code_for_fn(fn, task=task))
   return cst.Module(body=task.import_manager.sorted_import_lines() + body)

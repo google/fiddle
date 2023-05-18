@@ -124,6 +124,64 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
     ):
       experimental_top_level_api.auto_config_codegen(config)
 
+  def test_sub_fixtures_wo_shared_nodes(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    # Remove the shared embedder
+    config.encoder.embedders = None
+    config.decoder.embedders = None
+    code = experimental_top_level_api.auto_config_codegen(
+        config,
+        sub_fixtures={
+            "fake_encoder": config.encoder,
+            "fake_decoder": config.decoder,
+        },
+        max_expression_complexity=2,
+    )
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    self.assertDagEqual(config, generated_config)
+
+  def test_nested_sub_fixture(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    # Remove the shared embedder
+    config.encoder.embedders = None
+    config.decoder.embedders = None
+    code = experimental_top_level_api.auto_config_codegen(
+        config,
+        sub_fixtures={
+            "fake_encoder": config.encoder,
+            "attention": config.encoder.attention,
+        },
+    )
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    self.assertDagEqual(config, generated_config)
+
+  def test_sub_fixtures_interaction_w_move_shared_nodes_to_variables(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    code = experimental_top_level_api.auto_config_codegen(
+        config, sub_fixtures={"embedder": config.encoder.embedders["tokens"]}
+    )
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    self.assertDagEqual(config, generated_config)
+
+  def test_sub_fixtures_interaction_w_move_complex_nodes_to_variables(self):
+    config = fake_encoder_decoder.fixture.as_buildable()
+    # Remove the shared embedder
+    config.encoder.embedders = None
+    config.decoder.embedders = None
+    for complexity in [None, 2, 3]:
+      with self.subTest(f"max_complexity_as_{complexity}"):
+        code = experimental_top_level_api.auto_config_codegen(
+            config,
+            sub_fixtures={"fake_encoder": config.encoder},
+            max_expression_complexity=complexity,
+        )
+        module = self._load_code_as_module(code)
+        generated_config = module.config_fixture.as_buildable()
+        self.assertDagEqual(config, generated_config)
+
 
 if __name__ == "__main__":
   absltest.main()

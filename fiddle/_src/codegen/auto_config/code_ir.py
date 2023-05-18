@@ -130,6 +130,9 @@ class Call(CodegenNode):
   name: Name
   arg_expressions: Dict[Name, Any]  # Value that can involve VariableReference's
 
+  def __hash__(self):
+    return id(self)
+
 
 @dataclasses.dataclass
 class SymbolCall(CodegenNode):

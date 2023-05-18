@@ -29,13 +29,14 @@ from fiddle._src.codegen.auto_config import make_symbolic_references
 from fiddle._src.codegen.auto_config import naming
 from fiddle._src.codegen.auto_config import shared_to_variables
 from fiddle._src.codegen.auto_config import split_arg_factories
+from fiddle._src.codegen.auto_config import sub_fixture
 
 
 def auto_config_codegen(
     config,
     *,
     top_level_fixture_name: str = "config_fixture",
-    fixtures: Optional[Dict[str, Any]] = None,
+    sub_fixtures: Optional[Dict[str, Any]] = None,
     max_expression_complexity: Optional[int] = None,
     variable_namer: Callable[
         [namespace_lib.Namespace], naming.Namer
@@ -43,15 +44,24 @@ def auto_config_codegen(
     debug_print: bool = False,
 ) -> str:
   """Generates code for an auto_config fixture."""
-  if fixtures:
-    raise NotImplementedError()
-
   task = init_task.init_task(
       config, top_level_fixture_name=top_level_fixture_name
   )
   if debug_print:
     print("\n\nAfter initializing:", ir_printer.format_task(task), sep="\n")
+
+  # import_symbols should be the first pass in general
   make_symbolic_references.import_symbols(task)
+
+  if sub_fixtures is not None:
+    sub_fixture.transform_sub_fixtures(task, sub_fixtures)
+    if debug_print:
+      print(
+          "\n\nAfter transforming subfixtures:",
+          ir_printer.format_task(task),
+          sep="\n",
+      )
+
   split_arg_factories.lower_arg_factories(task)
   if debug_print:
     print(
@@ -59,6 +69,7 @@ def auto_config_codegen(
         ir_printer.format_task(task),
         sep="\n",
     )
+
   shared_to_variables.move_shared_nodes_to_variables(
       task, make_namer=variable_namer
   )
@@ -68,6 +79,7 @@ def auto_config_codegen(
         ir_printer.format_task(task),
         sep="\n",
     )
+
   if max_expression_complexity is not None:
     complex_to_variables.move_complex_nodes_to_variables(
         task,
@@ -82,6 +94,7 @@ def auto_config_codegen(
           ir_printer.format_task(task),
           sep="\n",
       )
+
   make_symbolic_references.replace_callables_and_configs_with_symbols(task)
   if debug_print:
     print(
