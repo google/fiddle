@@ -82,15 +82,11 @@ def move_complex_nodes_to_variables(
       not the overall config.
   """
 
-  global_in_use_names = copy.copy(task.global_namespace.names)
-  global_in_use_names.update(
-      fn.name.value for fn in task.top_level_call.all_fixture_functions()
-  )
+  task_existing_names = naming.get_task_existing_names(task)
 
   def _process_fn(fn: code_ir.FixtureFunction) -> None:
-    names = copy.copy(global_in_use_names)
-    names.update(parameter.name.value for parameter in fn.parameters)
-    names.update(variable.name.value for variable in fn.variables)
+    names = copy.copy(task_existing_names)
+    names.update(naming.get_fn_existing_names(fn))
     namer = make_namer(namespace_lib.Namespace(names))
 
     new_variables = []

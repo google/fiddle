@@ -15,28 +15,12 @@
 
 """Transform sub-fixtures into separate functions."""
 
-import copy
-from typing import Dict, Set
+from typing import Dict
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src.codegen.auto_config import code_ir
-
-
-# TODO(b/283273520): Deduplicate this logics in different passes.
-def _get_existing_names(
-    task: code_ir.CodegenTask,
-) -> Set[str]:
-  """Extract existing names from CodegenTask."""
-  all_fn_names = {
-      fn.name.value for fn in task.top_level_call.all_fixture_functions()
-  }
-  fn = task.top_level_call.fn
-  names = copy.copy(task.global_namespace.names)
-  names.update(all_fn_names)
-  names.update(parameter.name.value for parameter in fn.parameters)
-  names.update(variable.name.value for variable in fn.variables)
-  return names
+from fiddle._src.codegen.auto_config import naming
 
 
 def _transform_sub_fixtures(
@@ -92,7 +76,8 @@ def transform_sub_fixtures(
       sub-fixtures config object.
   """
   # Validate sub_fixtures names
-  existing_names = _get_existing_names(task)
+  existing_names = naming.get_task_existing_names(task)
+  existing_names.update(naming.get_fn_existing_names(task.top_level_call.fn))
   for name in sub_fixtures:
     if name in existing_names:
       msg = (

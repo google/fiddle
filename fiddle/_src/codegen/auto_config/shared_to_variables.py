@@ -56,9 +56,7 @@ def move_shared_nodes_to_variables(
       not the overall config.
   """
 
-  all_fn_names = {
-      fn.name.value for fn in task.top_level_call.all_fixture_functions()
-  }
+  task_existing_names = naming.get_task_existing_names(task)
 
   def _process_fn(fn: code_ir.FixtureFunction) -> None:
     # Object IDs of values to extract into variables.
@@ -79,10 +77,8 @@ def move_shared_nodes_to_variables(
 
     # Create a namer for new variables. But don't try to fix pre-existing bugs
     # if there are already conflicting names.
-    names = copy.copy(task.global_namespace.names)
-    names.update(all_fn_names)
-    names.update(parameter.name.value for parameter in fn.parameters)
-    names.update(variable.name.value for variable in fn.variables)
+    names = copy.copy(task_existing_names)
+    names.update(naming.get_fn_existing_names(fn))
     namer = make_namer(namespace_lib.Namespace(names))
 
     new_variables = []

@@ -16,12 +16,14 @@
 """API and default implementation for naming objects."""
 
 import abc
+import copy
 import dataclasses
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Set
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src.codegen import namespace as namespace_lib
+from fiddle._src.codegen.auto_config import code_ir
 
 
 _camel_to_snake = namespace_lib.camel_to_snake  # pylint: disable=protected-access
@@ -181,3 +183,20 @@ class TypeFirstNamer(Namer):
           f"paths {paths!r}"
       )
     return self.name_from_candidates(candidates)
+
+
+def get_task_existing_names(task: code_ir.CodegenTask) -> Set[str]:
+  """Get existing names from a CodegenTask."""
+  names = copy.copy(task.global_namespace.names)
+  names.update(
+      fn.name.value for fn in task.top_level_call.all_fixture_functions()
+  )
+  return names
+
+
+def get_fn_existing_names(fn: code_ir.FixtureFunction) -> Set[str]:
+  """Get existing names from a FixtureFunction."""
+  names = set()
+  names.update(parameter.name.value for parameter in fn.parameters)
+  names.update(variable.name.value for variable in fn.variables)
+  return names
