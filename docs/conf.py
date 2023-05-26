@@ -75,14 +75,12 @@ main_doc = 'index'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
 html_theme = 'sphinx_book_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    'logo_only': True,
     'show_toc_level': 2,
     'repository_url': 'https://github.com/google/fiddle',
     'use_repository_button': True,  # add a "link to repository" button
