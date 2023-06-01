@@ -48,6 +48,7 @@ setup(
     include_package_data=True,
     packages=find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},
+    python_requires='>=3.9',
     install_requires=[
         'absl-py',
         'graphviz',
