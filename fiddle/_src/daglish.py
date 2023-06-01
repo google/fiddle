@@ -357,6 +357,9 @@ def is_internable(value: Any) -> bool:
 
   Args:
     value: any value, it can be a Fiddle buildable or a regular Python value.
+
+  Returns:
+    A bool indicating whether interning optimization is applicable to `value`.
   """
   return not is_memoizable(value) or (
       # We want tuples only and not things like NamedTuples which are not

@@ -65,7 +65,7 @@ class MoveComplexNodesToVariablesTest(absltest.TestCase):
     complex_to_variables.move_complex_nodes_to_variables(
         task, is_complex=lambda x: True
     )
-    self.assertLen(task.top_level_call.fn.variables, 14)
+    self.assertLen(task.top_level_call.fn.variables, 13)
     code = ir_printer.format_task(task)
     self.assertIn("self_attention =", code)
     self.assertIn("cross_attention =", code)

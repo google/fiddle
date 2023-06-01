@@ -72,6 +72,11 @@ class FakeEncoderDecoder:
   decoder: FakeDecoder
 
 
+@dataclasses.dataclass
+class ModelWrapper:
+  model: FakeEncoderDecoder
+
+
 @auto_config.auto_config
 def fixture():
   dtype = "float32"

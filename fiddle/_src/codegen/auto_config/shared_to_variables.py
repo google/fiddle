@@ -65,7 +65,8 @@ def move_shared_nodes_to_variables(
     def find_to_extract(value, parent_results: Any) -> Any:
       """Processes a node in a function definition."""
       if isinstance(
-          value, (code_ir.VariableReference, code_ir.SymbolReference)
+          value,
+          (code_ir.VariableReference, code_ir.SymbolReference, code_ir.Name),
       ):
         # Don't double-extract variables, and repeated symbol references are
         # fine.
@@ -73,7 +74,9 @@ def move_shared_nodes_to_variables(
       elif len(parent_results) > 1:
         to_extract_ids.add(id(value))
 
-    parents_first_traversal.traverse_parents_first(find_to_extract, fn)
+    parents_first_traversal.traverse_parents_first(
+        find_to_extract, fn.output_value
+    )
 
     # Create a namer for new variables. But don't try to fix pre-existing bugs
     # if there are already conflicting names.
@@ -108,9 +111,9 @@ def move_shared_nodes_to_variables(
       else:
         return value
 
-    new_fn = daglish.MemoizedTraversal.run(traverse, fn)
-    new_fn.variables.extend(new_variables)
-    fn.replace_with(new_fn)
+    new_value = daglish.MemoizedTraversal.run(traverse, fn.output_value)
+    fn.output_value = new_value
+    fn.variables.extend(new_variables)
 
   for fn in task.top_level_call.all_fixture_functions():
     _process_fn(fn)

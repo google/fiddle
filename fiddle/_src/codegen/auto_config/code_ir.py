@@ -89,7 +89,7 @@ class CodegenNode:
 @dataclasses.dataclass
 class Parameter(CodegenNode):
   name: Name
-  value_type: Type[Any]
+  value_type: Optional[Type[Any]] = None
 
 
 @dataclasses.dataclass

@@ -21,9 +21,9 @@ Currently this just affects codegen, graphviz, and other debugging functions.
 from fiddle._src.codegen import import_manager
 from fiddle._src.codegen import py_val_to_cst_converter
 from fiddle._src.codegen import special_value_codegen
+from fiddle._src.codegen.auto_config import sub_fixture
 import jax
 from jax import numpy as jnp
-
 import libcst as cst
 
 
@@ -48,6 +48,27 @@ _jnp_type_importables = (
     (jnp.float64, _make_jnp_importable("float64")),
     (jnp.complex64, _make_jnp_importable("complex64")),
     (jnp.complex128, _make_jnp_importable("complex128")),
+)
+
+_jax_initializers = (
+    jax.nn.initializers.constant,
+    jax.nn.initializers.delta_orthogonal,
+    jax.nn.initializers.glorot_normal,
+    jax.nn.initializers.glorot_uniform,
+    jax.nn.initializers.he_normal,
+    jax.nn.initializers.he_uniform,
+    jax.nn.initializers.kaiming_normal,
+    jax.nn.initializers.kaiming_uniform,
+    jax.nn.initializers.lecun_normal,
+    jax.nn.initializers.lecun_uniform,
+    jax.nn.initializers.normal,
+    jax.nn.initializers.ones,
+    jax.nn.initializers.orthogonal,
+    jax.nn.initializers.uniform,
+    jax.nn.initializers.variance_scaling,
+    jax.nn.initializers.xavier_normal,
+    jax.nn.initializers.xavier_uniform,
+    jax.nn.initializers.zeros,
 )
 
 _import_aliases = (
@@ -114,3 +135,9 @@ def enable():
   # that register_converter is usually a decorator, but we call it directly.
   py_val_to_cst_converter.register_py_val_to_cst_converter(is_jnp_device_array)(
       convert_jnp_device_array_to_cst)
+
+  for dtype, _ in _jnp_type_importables:
+    sub_fixture.register_immutable(dtype)
+
+  for init in _jax_initializers:
+    sub_fixture.register_immutable(init)

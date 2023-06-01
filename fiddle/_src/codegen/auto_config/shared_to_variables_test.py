@@ -34,15 +34,6 @@ class SharedToVariablesTest(absltest.TestCase):
     make_symbolic_references.replace_callables_and_configs_with_symbols(task)
     self.assertLen(task.top_level_call.fn.variables, 1)
 
-  def test_fails_on_unnameable_example(self):
-    shared = {"a": 7}
-    config = [shared, shared]
-    task = init_task.init_task(config)
-    with self.assertRaisesRegex(
-        ValueError, r"Could not generate any candidate names for \{'a': 7\}"
-    ):
-      shared_to_variables.move_shared_nodes_to_variables(task)
-
   def test_works_on_toy_example_two_vars(self):
     task = test_fixtures.unprocessed_two_shared_config()
     shared_to_variables.move_shared_nodes_to_variables(task)
