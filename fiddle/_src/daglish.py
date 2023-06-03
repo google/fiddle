@@ -22,6 +22,7 @@ import collections
 import dataclasses
 import enum
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, TypeVar, Union
+from lingvo.core import nested_map
 
 
 class PathElement(metaclass=abc.ABCMeta):
@@ -252,10 +253,18 @@ register_node_traverser(
     path_elements_fn=lambda x: tuple(Key(key) for key in x.keys()))
 
 register_node_traverser(
+    nested_map.NestedMap,
+    flatten_fn=lambda x: (tuple(x.values()), tuple(x.keys())),
+    unflatten_fn=lambda values, keys: dict(zip(keys, values)),
+    path_elements_fn=lambda x: [Key(key) for key in x.keys()],
+)
+
+register_node_traverser(
     tuple,
     flatten_fn=lambda x: (x, None),
     unflatten_fn=lambda x, _: tuple(x),
-    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))))
+    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))),
+)
 
 register_node_traverser(
     NamedTupleType,
