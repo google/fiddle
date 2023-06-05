@@ -14,53 +14,13 @@
 # limitations under the License.
 
 """Transform sub-fixtures into separate functions."""
-from typing import Any, Callable, Dict, List, Tuple, Type
+from typing import Any, Callable, Dict, List, Tuple
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src.codegen import namespace as namespace_lib
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import naming
-
-
-_IMMUTABLE_OBJECT_IDS = set()
-
-
-def register_immutable(value: Type[Any]) -> None:
-  """Registers a certain type to be immutable."""
-  _IMMUTABLE_OBJECT_IDS.add(id(value))
-
-
-# TODO(b/285146396): Register the tensorflow dtypes as immutable.
-def is_immutable(value: Any) -> bool:
-  """Returns true if value is immutable from the point view of Fiddle.
-
-  This method differs from `is_internable` in that NamedTuples and other tuple
-  subclasses are included here. This method also explictly classsify jax dtypes
-  and initializers as immutable, so that they are not extracted as separate
-  variables in generated code.
-
-  Frozen dataclasses are not considered as immutable here. Because dataclasses
-  are not traversable by default, and will be handled like a generic object.
-  The motivation for this decision is partly to encourage users to
-  create fdl.Config out of dataclasses rather than have dataclass instances
-  in the fdl.Config.
-
-  Args:
-    value: A candidate value to check for immutability.
-
-  Returns:
-    A bool indicating whether `value` is immutable.
-  """
-  result = daglish.is_internable(value) or (
-      isinstance(value, tuple) and all(is_immutable(e) for e in value)
-  )
-  if not result:
-    if isinstance(value, config_lib.Buildable):
-      value = value.__fn_or_cls__
-    if id(value) in _IMMUTABLE_OBJECT_IDS:
-      return True
-  return result
 
 
 def _find_shared_nodes(
@@ -102,7 +62,7 @@ def _find_shared_nodes(
   # 2nd pass: find out shared nodes within sub-fixtures
   for idx, fixture in enumerate(sub_fixtures.values()):
     for value, path in daglish.iterate(fixture, memoized=False):
-      if not is_immutable(value):
+      if not daglish.is_unshareable(value):
         used_by_sub_fixture = False
         if id(value) in is_visited:
           # Ensure the node is shared among multiple sub-fixtures.
@@ -125,7 +85,7 @@ def _find_shared_nodes(
   for fixture in sub_fixtures.values():
     fixture_share_node_ids[id(fixture)] = set()
     for value, _ in daglish.iterate(fixture, memoized=False):
-      if not is_immutable(value):
+      if not daglish.is_unshareable(value):
         if id(value) in shared_nodes or id(value) in top_fixture_node_ids:
           fixture_share_node_ids[id(fixture)].add(id(value))
 

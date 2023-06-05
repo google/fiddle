@@ -14,8 +14,6 @@
 # limitations under the License.
 
 """Tests for transform_sub_fixtures pass."""
-import dataclasses
-from typing import Any, NamedTuple
 
 from absl.testing import absltest
 import fiddle as fdl
@@ -24,26 +22,6 @@ from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import sub_fixture
 from fiddle._src.codegen.auto_config import test_fixtures
 from fiddle._src.testing.example import fake_encoder_decoder
-
-
-class SampleNamedTuple(NamedTuple):
-  fizz: Any
-  buzz: Any
-
-
-class IsImmutableTest(absltest.TestCase):
-
-  def test_frozen_dataclass(self):
-    @dataclasses.dataclass(frozen=True)
-    class FrozenFoo:
-      bar: Any
-
-    foo = FrozenFoo(1)
-    self.assertFalse(sub_fixture.is_immutable(foo))
-
-  def test_named_tuple(self):
-    tuple_foo = SampleNamedTuple(1, 2)
-    self.assertTrue(sub_fixture.is_immutable(tuple_foo))
 
 
 class SubFixtureTest(absltest.TestCase):

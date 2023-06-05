@@ -18,10 +18,10 @@
 Currently this just affects codegen, graphviz, and other debugging functions.
 """
 
+from fiddle._src import daglish_extensions
 from fiddle._src.codegen import import_manager
 from fiddle._src.codegen import py_val_to_cst_converter
 from fiddle._src.codegen import special_value_codegen
-from fiddle._src.codegen.auto_config import sub_fixture
 import jax
 from jax import numpy as jnp
 import libcst as cst
@@ -137,7 +137,8 @@ def enable():
       convert_jnp_device_array_to_cst)
 
   for dtype, _ in _jnp_type_importables:
-    sub_fixture.register_immutable(dtype)
+    daglish_extensions.register_immutable(dtype)
 
   for init in _jax_initializers:
-    sub_fixture.register_immutable(init)
+    daglish_extensions.register_immutable(init)
+    daglish_extensions.register_function_with_immutable_return_value(init)

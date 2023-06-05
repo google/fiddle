@@ -44,3 +44,5 @@ from fiddle._src.daglish import register_node_traverser
 from fiddle._src.daglish import State
 from fiddle._src.daglish import SubTraversalResult
 from fiddle._src.daglish import Traversal
+from fiddle._src.daglish_extensions import is_immutable
+from fiddle._src.daglish_extensions import is_unshareable
