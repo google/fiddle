@@ -20,7 +20,7 @@ import dataclasses
 import functools
 import pickle
 import threading
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Generic, TypeVar
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -125,6 +125,14 @@ class DataclassAnnotated:
 
 def raise_error():
   raise ValueError('My fancy exception')
+
+
+_T = TypeVar('_T')
+
+
+@dataclasses.dataclass
+class GenericClass(Generic[_T]):
+  x: _T = 1
 
 
 class ConfigTest(parameterized.TestCase):
@@ -480,6 +488,10 @@ class ConfigTest(parameterized.TestCase):
     cfg1 = fdl.Config(basic_fn, 1, 2)
     cfg2 = fdl.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
+
+  def test_default_value_for_generic_classes(self):
+    self.assertEqual(fdl.Config(GenericClass).x, 1)
+    self.assertEqual(fdl.Config(GenericClass[int]).x, 1)
 
   def test_config_with_non_comparable_values(self):
     # This test ensures that fdl.Config and fdl.build work properly with

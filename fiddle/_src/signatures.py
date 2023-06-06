@@ -17,7 +17,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Type
+from typing import Any, Callable, Dict, Generic, Type
 import weakref
 import typing_extensions
 
@@ -26,6 +26,21 @@ _type_hints_cache = weakref.WeakKeyDictionary()
 
 
 def _get_signature_uncached(fn_or_cls) -> inspect.Signature:
+  """Returns the signature for a function or class.
+
+  This mostly calls inspect.signature, but handles generics and some builtin
+  types better.
+
+  Args:
+    fn_or_cls: Function or class callable.
+  """
+  # TODO(b/285387519): Switch to typing.get_origin after dropping Python 3.8
+  # support.
+  origin = typing_extensions.get_origin(fn_or_cls)
+  fn_or_cls = origin if origin is not None else fn_or_cls
+  if isinstance(fn_or_cls, type) and issubclass(fn_or_cls, Generic):
+    fn_or_cls = fn_or_cls.__init__
+
   try:
     return inspect.signature(fn_or_cls)
   except ValueError:
