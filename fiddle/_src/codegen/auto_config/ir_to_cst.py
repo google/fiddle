@@ -80,7 +80,7 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       return cst.Dict(elements)
     elif isinstance(value, code_ir.VariableReference):
       return cst.Name(value.name.value)
-    elif isinstance(value, code_ir.SymbolCall):
+    elif isinstance(value, code_ir.SymbolOrFixtureCall):
       attr = daglish.Attr("arg_expressions")
       args = []
       for i, arg_value in enumerate(value.positional_arg_expressions):
@@ -105,14 +105,6 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       return cst.Call(with_tags, args=call_args)
     elif isinstance(value, code_ir.SymbolReference):
       return cst.parse_expression(value.expression)
-    elif isinstance(value, code_ir.Call):
-      args = []
-      if value.arg_expressions:
-        attr = daglish.Attr("arg_expressions")
-        names, values = zip(*value.arg_expressions.items())
-        names = [name.value for name in names]
-        args = _prepare_args_helper(names, values, attr)
-      return cst.Call(cst.parse_expression(value.name.value), args=args)
     elif state.is_traversable(value):
       raise NotImplementedError(
           f"Expression generation is not implemented for {value!r}"

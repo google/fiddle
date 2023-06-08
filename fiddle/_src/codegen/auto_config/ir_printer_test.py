@@ -20,7 +20,6 @@ import textwrap
 from typing import Any, Optional
 
 from absl.testing import absltest
-from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import ir_printer
 from fiddle._src.codegen.auto_config import test_fixtures
 
@@ -62,13 +61,6 @@ class IrPrinterTest(absltest.TestCase):
     self.assertEqual(ir_printer.format_expr(example_tuple), "()")
     example_tuple = (3,)
     self.assertEqual(ir_printer.format_expr(example_tuple), "(3,)")
-
-  def test_format_call(self):
-    call = code_ir.Call(
-        name=code_ir.Name("foo_fixture"),
-        arg_expressions={code_ir.Name("bar"): 777},
-    )
-    self.assertEqual(ir_printer.format_expr(call), "foo_fixture(bar=777)")
 
   def test_format_simple_ir(self):
     task = test_fixtures.simple_ir()

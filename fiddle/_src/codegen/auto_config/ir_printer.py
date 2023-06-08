@@ -79,12 +79,6 @@ def format_expr(expr: Any):
           + ", ".join(f'"{key}": {value}' for key, value in value.items())
           + "}"
       )
-    elif isinstance(value, code_ir.Call):
-      args_str = ", ".join(
-          f"{key}={value}"
-          for key, value in state.map_children(value.arg_expressions).items()
-      )
-      return f"{value.name.value}({args_str})"
     elif isinstance(value, code_ir.VariableReference):
       return value.name.value
     elif isinstance(value, code_ir.ArgFactoryExpr):

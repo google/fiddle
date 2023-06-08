@@ -124,11 +124,10 @@ def _add_fixtures_to_task(
 ) -> None:
   """Add new fixtures as the children of task.top_level_call."""
   for fixture in fixtures:
-    # TODO(b/285212472): Consolidate Call and CallInstance classes.
-    call = code_ir.Call(name=fixture.name, arg_expressions={})
-    task.top_level_call.children[call] = code_ir.CallInstance(
-        fixture, parent=None, children={}, parameter_values={}
+    call_instance = code_ir.CallInstance(
+        fixture, parent=None, children=[], parameter_values={}
     )
+    task.top_level_call.children.append(call_instance)
 
 
 def _transform_sub_fixtures(
@@ -232,8 +231,12 @@ def _transform_sub_fixtures(
       new_fixtures.append(fixture_fn)
       args = {}
       for param in params:
-        args[param.name] = code_ir.VariableReference(name=param.name)
-      return code_ir.Call(name=name, arg_expressions=args)
+        args[param.name.value] = code_ir.VariableReference(name=param.name)
+      return code_ir.SymbolOrFixtureCall(
+          symbol_expression=name.value,
+          positional_arg_expressions=[],
+          arg_expressions=args,
+      )
     else:
       return value
 

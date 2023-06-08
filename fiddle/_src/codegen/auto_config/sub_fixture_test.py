@@ -17,7 +17,6 @@
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import sub_fixture
 from fiddle._src.codegen.auto_config import test_fixtures
@@ -56,13 +55,6 @@ class SubFixtureTest(absltest.TestCase):
         task, {"fake_encoder": config.encoder, "fake_decoder": config.decoder}
     )
     self.assertLen(task.top_level_call.children, 2)
-
-    with self.subTest("call_nodes"):
-      names = ["fake_encoder", "fake_decoder"]
-      for idx, node in enumerate(task.top_level_call.children):
-        self.assertIsInstance(node, code_ir.Call)
-        self.assertIsInstance(node.name, code_ir.Name)
-        self.assertEqual(node.name.value, names[idx])
 
   def test_nested_sub_fixture(self):
     config = fake_encoder_decoder.fixture.as_buildable()

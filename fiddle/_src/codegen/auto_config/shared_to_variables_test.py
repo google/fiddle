@@ -55,16 +55,19 @@ class SharedToVariablesTest(absltest.TestCase):
     # Note: This doesn't strictly respect the API, the key should be a Call.
     # If this is ever required by another part of the code, then make up a
     # fake Call to use as a key.
-    task.top_level_call.children[None] = code_ir.CallInstance(
-        fn=code_ir.FixtureFunction(
-            code_ir.Name("shared_type"),
-            [],
-            [],
-            None,
-        ),
-        parent=None,
-        children={},
-        parameter_values={},
+    task.top_level_call.children = []
+    task.top_level_call.children.append(
+        code_ir.CallInstance(
+            fn=code_ir.FixtureFunction(
+                code_ir.Name("shared_type"),
+                [],
+                [],
+                None,
+            ),
+            parent=None,
+            children=[],
+            parameter_values={},
+        )
     )
     shared_to_variables.move_shared_nodes_to_variables(task)
     intermediate_code = ir_printer.format_task(task)

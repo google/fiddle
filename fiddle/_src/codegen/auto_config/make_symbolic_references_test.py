@@ -60,7 +60,7 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
             ),
             parameters=[],
             variables=[],
-            output_value=code_ir.SymbolCall(
+            output_value=code_ir.SymbolOrFixtureCall(
                 symbol_expression='test_fixtures.foo',
                 positional_arg_expressions=[],
                 arg_expressions={'x': 4},

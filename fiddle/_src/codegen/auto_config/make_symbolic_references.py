@@ -104,7 +104,7 @@ def replace_callables_and_configs_with_symbols(
           )
 
     def _arg_factory_partial():
-      return code_ir.SymbolCall(
+      return code_ir.SymbolOrFixtureCall(
           task.import_manager.add(arg_factory.partial),
           positional_arg_expressions=[symbol_ref],
           arg_expressions=arg_factory_args,
@@ -116,7 +116,7 @@ def replace_callables_and_configs_with_symbols(
       # arguments, because this will mean there's a fdl.Partial when we call
       # the auto_config fixture's as_buildable() method. If we got rid of the
       # functools.partial, then we couldn't configure any attributes.
-      return code_ir.SymbolCall(
+      return code_ir.SymbolOrFixtureCall(
           task.import_manager.add(functools.partial),
           positional_arg_expressions=[symbol_ref],
           arg_expressions=regular_args,
@@ -128,7 +128,7 @@ def replace_callables_and_configs_with_symbols(
       # We have both functools.partial and arg_factory args. It doesn't matter
       # which order, but we need to emit both decorators. Go with functools
       # on the outer level.
-      return code_ir.SymbolCall(
+      return code_ir.SymbolOrFixtureCall(
           task.import_manager.add(functools.partial),
           positional_arg_expressions=[_arg_factory_partial()],
           arg_expressions=regular_args,
@@ -154,7 +154,7 @@ def replace_callables_and_configs_with_symbols(
               tag_symbol_expressions=tag_expr,
               item_to_tag=value.__arguments__[arg],
           )
-        return code_ir.SymbolCall(
+        return code_ir.SymbolOrFixtureCall(
             symbol_expression=symbol,
             positional_arg_expressions=[],
             arg_expressions=config_lib.ordered_arguments(value),

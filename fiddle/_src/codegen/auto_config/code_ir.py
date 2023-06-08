@@ -126,17 +126,8 @@ class ArgFactoryExpr(CodegenNode):
 
 
 @dataclasses.dataclass
-class Call(CodegenNode):
-  name: Name
-  arg_expressions: Dict[Name, Any]  # Value that can involve VariableReference's
-
-  def __hash__(self):
-    return id(self)
-
-
-@dataclasses.dataclass
-class SymbolCall(CodegenNode):
-  """Reference to a call of a library symbol, like MyEncoderLayer()."""
+class SymbolOrFixtureCall(CodegenNode):
+  """Reference to a call of a library symbol/fixture, like MyEncoderLayer()."""
 
   symbol_expression: str
   # Values for args can involve VariableReference's, Calls, etc.
@@ -153,7 +144,7 @@ class WithTagsCall(CodegenNode):
 
 
 @dataclasses.dataclass
-class FunctoolsPartialCall(SymbolCall):
+class FunctoolsPartialCall(SymbolOrFixtureCall):
   pass
 
 
@@ -198,7 +189,7 @@ class CallInstance:
 
   fn: FixtureFunction
   parent: Optional[CallInstance]
-  children: Dict[Call, CallInstance]
+  children: List[CallInstance]
   parameter_values: Dict[Name, Any]
 
   def __hash__(self) -> int:
@@ -217,7 +208,7 @@ class CallInstance:
       self, seen=arg_factory.default_factory(set)
   ) -> List[FixtureFunction]:
     result = [] if self.fn in seen else [self.fn]
-    for child in self.children.values():
+    for child in self.children:
       result.extend(child.all_fixture_functions(seen))
     return result
 

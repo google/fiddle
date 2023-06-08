@@ -100,7 +100,7 @@ def simple_ir() -> code_ir.CodegenTask:
       output_value=config,
   )
   call_instance = code_ir.CallInstance(
-      fn, parent=None, children={}, parameter_values={}
+      fn, parent=None, children=[], parameter_values={}
   )
   return code_ir.CodegenTask(config, top_level_call=call_instance)
 
@@ -164,7 +164,7 @@ def simple_shared_variable_ir() -> code_ir.CodegenTask:
       ],
   )
   call_instance = code_ir.CallInstance(
-      fn, parent=None, children={}, parameter_values={}
+      fn, parent=None, children=[], parameter_values={}
   )
   return code_ir.CodegenTask(config, top_level_call=call_instance)
 
