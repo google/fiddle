@@ -96,6 +96,10 @@ def move_complex_nodes_to_variables(
       if not state.is_traversable(value):
         return value
 
+      if isinstance(value, code_ir.Call):
+        value.arg_expressions = state.map_children(value.arg_expressions)
+        return value
+
       if isinstance(value, code_ir.VariableDeclaration):
         value.expression = state.map_children(value.expression)
         return value

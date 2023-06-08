@@ -177,6 +177,9 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
 
   def test_sub_fixtures_interaction_w_move_complex_nodes_to_variables(self):
     config = fake_encoder_decoder.fixture.as_buildable()
+    # Let the sub-fixture has two shared nodes so that the interaction between
+    # move_complex_nodes_to_variables pass and sub-fixture args can be tested.
+    config.decoder.self_attention = config.encoder.attention
     for complexity in [None, 2, 3]:
       with self.subTest(f"max_complexity_as_{complexity}"):
         code = experimental_top_level_api.auto_config_codegen(
