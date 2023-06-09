@@ -18,7 +18,7 @@
 import enum
 import functools
 import inspect
-from typing import Any
+from typing import Any, Callable
 
 from fiddle import arg_factory
 from fiddle import daglish
@@ -62,10 +62,25 @@ def import_symbols(task: code_ir.CodegenTask) -> None:
       task.import_manager.add(value)
 
 
+def noop_history_comments(unused_buildable):
+  return code_ir.HistoryComments()
+
+
 def replace_callables_and_configs_with_symbols(
     task: code_ir.CodegenTask,
+    *,
+    format_history: Callable[
+        ..., code_ir.HistoryComments
+    ] = noop_history_comments,
 ) -> None:
-  """Replaces callables and Buildables with symbolic versions."""
+  """Replaces callables and Buildables with symbolic versions.
+
+  Args:
+    task: Codegen task.
+    format_history: Function used to format history for a buildable. Set to
+      get_history_comments.format_history_for_buildable (or a functools.partial
+      variant) to populate histories.
+  """
 
   fn_name = None
 
@@ -108,6 +123,7 @@ def replace_callables_and_configs_with_symbols(
           task.import_manager.add(arg_factory.partial),
           positional_arg_expressions=[symbol_ref],
           arg_expressions=arg_factory_args,
+          history_comments=format_history(value),
       )
 
     if not arg_factory_args:
@@ -120,6 +136,7 @@ def replace_callables_and_configs_with_symbols(
           task.import_manager.add(functools.partial),
           positional_arg_expressions=[symbol_ref],
           arg_expressions=regular_args,
+          history_comments=format_history(value),
       )
     elif not regular_args:
       # There are only arg_factory args, so we can emit an arg_factory.partial.
@@ -132,6 +149,7 @@ def replace_callables_and_configs_with_symbols(
           task.import_manager.add(functools.partial),
           positional_arg_expressions=[_arg_factory_partial()],
           arg_expressions=regular_args,
+          history_comments=format_history(value),
       )
 
   def traverse(value, state: daglish.State):
@@ -158,6 +176,7 @@ def replace_callables_and_configs_with_symbols(
             symbol_expression=symbol,
             positional_arg_expressions=[],
             arg_expressions=config_lib.ordered_arguments(value),
+            history_comments=format_history(value),
         )
       elif isinstance(value, config_lib.Partial):
         return _handle_partial(value, state, symbol)

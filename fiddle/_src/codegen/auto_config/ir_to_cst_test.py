@@ -15,8 +15,10 @@
 
 """Tests for ir_to_cst."""
 
-from absl.testing import absltest
+import inspect
 
+from absl.testing import absltest
+from fiddle._src.codegen.auto_config import get_history_comments
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_to_cst
 from fiddle._src.codegen.auto_config import make_symbolic_references
@@ -46,18 +48,31 @@ class IrToCstTest(absltest.TestCase):
     task = test_fixtures.unprocessed_two_shared_config()
     make_symbolic_references.import_symbols(task)
     shared_to_variables.move_shared_nodes_to_variables(task)
-    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    make_symbolic_references.replace_callables_and_configs_with_symbols(
+        task, format_history=get_history_comments.format_history_for_buildable
+    )
     code = ir_to_cst.code_for_task(task).code
-    expected = """
+    (base_line,) = (
+        i
+        for i, line in enumerate(inspect.getsource(test_fixtures).splitlines())
+        if "def unprocessed_two_shared_config(" in line
+    )
+    line = base_line + 11  # Feel free to adjust if the test fixture is changed.
+    expected = f"""
     from fiddle._src.codegen.auto_config import test_fixtures
     from fiddle.experimental import auto_config
 
 
     @auto_config.auto_config
     def unprocessed_two_shared_fixture():
-        foo = test_fixtures.foo(x=3)
-        shared_type = test_fixtures.SharedType(x=foo, z=7.0)
-        return [shared_type, shared_type, foo]
+      foo = test_fixtures.foo(
+        x=3,  # Set in .../auto_config/test_fixtures.py:{line}:unprocessed_two_shared_config
+        )
+      shared_type = test_fixtures.SharedType(
+        x=foo,  # Set in .../auto_config/test_fixtures.py:{line + 1}:unprocessed_two_shared_config
+        z=7.0,  # Set in .../auto_config/test_fixtures.py:{line + 1}:unprocessed_two_shared_config
+        )
+      return [shared_type, shared_type, foo]
     """
     self.assertEqual(code.split(), expected.split(), msg=code)
 

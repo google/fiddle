@@ -15,10 +15,13 @@
 
 """Tests for make_symbolic_references pass."""
 
+import inspect
+
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import complex_to_variables
+from fiddle._src.codegen.auto_config import get_history_comments
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_to_cst
 from fiddle._src.codegen.auto_config import make_symbolic_references
@@ -51,7 +54,15 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
   def test_replace_config_callable(self):
     task = test_fixtures.simple_ir()
     make_symbolic_references.import_symbols(task)
-    make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    make_symbolic_references.replace_callables_and_configs_with_symbols(
+        task, format_history=get_history_comments.format_history_for_buildable
+    )
+    (base_line,) = (
+        i
+        for i, line in enumerate(inspect.getsource(test_fixtures).splitlines())
+        if 'def simple_ir(' in line
+    )
+    line = base_line + 9  # Feel free to adjust if the test fixture is changed.
     self.assertEqual(
         task.top_level_call.fn,
         code_ir.FixtureFunction(
@@ -64,6 +75,18 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
                 symbol_expression='test_fixtures.foo',
                 positional_arg_expressions=[],
                 arg_expressions={'x': 4},
+                history_comments=code_ir.HistoryComments(
+                    per_field={
+                        '__fn_or_cls__': (
+                            f'Set in .../auto_config/test_fixtures.py:{line}'
+                            ':simple_ir'
+                        ),
+                        'x': (
+                            f'Set in .../auto_config/test_fixtures.py:{line}'
+                            ':simple_ir'
+                        ),
+                    }
+                ),
             ),
         ),
     )

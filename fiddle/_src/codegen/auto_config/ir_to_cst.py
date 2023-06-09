@@ -19,7 +19,7 @@ Note: We do not generally do a lot of formatting, instead relying on existing
 source code formatters (pyformat, yapf, etc.).
 """
 
-from typing import Any, List
+from typing import Any, List, Optional
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
@@ -41,12 +41,29 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
   def traverse(value, state: daglish.State) -> cst.CSTNode:
 
     def _prepare_args_helper(
-        names: List[str], values: List[Any], attr: daglish.Attr
+        names: List[str],
+        values: List[Any],
+        attr: daglish.Attr,
+        *,
+        history: Optional[code_ir.HistoryComments] = None,
     ) -> List[cst.Arg]:
       """Prepare code_ir.Arg node based on names and values."""
       args = []
       for arg_name, arg_value in zip(names, values):
+        assert isinstance(arg_name, str)
         arg_value = state.call(arg_value, attr, daglish.Key(arg_name))
+        kwargs = {}
+        if history and arg_name in history.per_field:
+          kwargs["comma"] = cst.Comma(
+              whitespace_after=cst.ParenthesizedWhitespace(
+                  first_line=cst.TrailingWhitespace(
+                      whitespace=cst.SimpleWhitespace("  "),
+                      comment=cst.Comment(f"# {history.per_field[arg_name]}"),
+                      newline=cst.Newline(),
+                  ),
+                  last_line=cst.SimpleWhitespace(" " * 6),
+              )
+          )
         args.append(
             cst.Arg(
                 arg_value,
@@ -55,6 +72,7 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
                     whitespace_before=cst.SimpleWhitespace(""),
                     whitespace_after=cst.SimpleWhitespace(""),
                 ),
+                **kwargs,
             )
         )
       return args
@@ -86,12 +104,29 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       for i, arg_value in enumerate(value.positional_arg_expressions):
         arg_value = state.call(arg_value, attr, daglish.Key(i))
         args.append(cst.Arg(arg_value))
+
+      any_args_have_history = False
       if value.arg_expressions:
         names, values = zip(*value.arg_expressions.items())
-        args.extend(_prepare_args_helper(names, values, attr))
+        any_args_have_history = set(names) & set(
+            value.history_comments.per_field
+        )
+        args.extend(
+            _prepare_args_helper(
+                names, values, attr, history=value.history_comments
+            )
+        )
+      if any_args_have_history:
+        whitespace_before_args = cst.ParenthesizedWhitespace(
+            first_line=cst.TrailingWhitespace(newline=cst.Newline()),
+            last_line=cst.SimpleWhitespace(" " * 6),
+        )
+      else:
+        whitespace_before_args = cst.SimpleWhitespace("")
       return cst.Call(
           cst.parse_expression(value.symbol_expression),
           args=args,
+          whitespace_before_args=whitespace_before_args,
       )
     elif isinstance(value, code_ir.WithTagsCall):
       attr = daglish.Attr("item_to_tag")

@@ -102,7 +102,21 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
     generated_config = module.config_fixture.as_buildable()
     self.assertDagEqual(config, generated_config)
 
-  def test_fuzz(self):
+  @parameterized.named_parameters([
+      {
+          "testcase_name": "basic",
+          "kwargs": {},
+      },
+      {
+          "testcase_name": "all_variables",
+          "kwargs": {"max_expression_complexity": 1},
+      },
+      {
+          "testcase_name": "with_history",
+          "kwargs": {"include_history": True},
+      },
+  ])
+  def test_fuzz(self, kwargs):
     # TODO(b/272826193): Test on more RNG seeds.
     for i in range(10):
       config = tagging.materialize_tags(
@@ -115,7 +129,9 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
       )
       if has_buildables:
         with self.subTest(f"rng_{i}"):
-          code = experimental_top_level_api.auto_config_codegen(config)
+          code = experimental_top_level_api.auto_config_codegen(
+              config, **kwargs
+          )
           module = self._load_code_as_module(code)
           generated_config = module.config_fixture.as_buildable()
           self.assertDagEqual(config, generated_config)

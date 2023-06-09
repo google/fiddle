@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, Optional
 
 from fiddle._src.codegen import namespace as namespace_lib
 from fiddle._src.codegen.auto_config import complex_to_variables
+from fiddle._src.codegen.auto_config import get_history_comments
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_printer
 from fiddle._src.codegen.auto_config import ir_to_cst
@@ -41,9 +42,31 @@ def auto_config_codegen(
     variable_namer: Callable[
         [namespace_lib.Namespace], naming.Namer
     ] = naming.PathFirstNamer,
+    include_history: bool = False,
     debug_print: bool = False,
 ) -> str:
-  """Generates code for an auto_config fixture."""
+  """Generates code for an auto_config fixture.
+
+  Args:
+    config: Configuration to generate auto_config code for.
+    top_level_fixture_name: Name of the top-level fixture. When its as_buildable
+      path is called, e.g. `config_fixture.as_buildable()`, this should return a
+      config equivalent to `config`.
+    sub_fixtures: Dictionary from function name to sub-configuration object,
+      declaring sub-functions to create. This helps manage complexity of huge
+      configurations.
+    max_expression_complexity: Breaks complex expressions into variables for
+      readability.
+    variable_namer: Determines how variables are named when created for shared
+      nodes or complex expressions.
+    include_history: Whether history should be included. These currently appear
+      as trailing comments in the field of Buildable's.
+    debug_print: Whether to use the IR printer to print intermediate
+      representations as various passes run to generate code.
+
+  Returns:
+    Python module code.
+  """
   task = init_task.init_task(
       config, top_level_fixture_name=top_level_fixture_name
   )
@@ -95,7 +118,13 @@ def auto_config_codegen(
           sep="\n",
       )
 
-  make_symbolic_references.replace_callables_and_configs_with_symbols(task)
+  if include_history:
+    format_history = get_history_comments.format_history_for_buildable
+  else:
+    format_history = make_symbolic_references.noop_history_comments
+  make_symbolic_references.replace_callables_and_configs_with_symbols(
+      task, format_history=format_history
+  )
   if debug_print:
     print(
         "\n\nAfter replacing callables with symbols:",

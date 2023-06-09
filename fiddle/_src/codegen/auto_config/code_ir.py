@@ -126,6 +126,18 @@ class ArgFactoryExpr(CodegenNode):
 
 
 @dataclasses.dataclass
+class HistoryComments:
+  """Brief assignment history, currently for buildables.
+
+  Note: This is intentionally a plain dataclass and not traversed by daglish
+  by default.
+  """
+
+  # For fdl.Config-like objects, attr name --> history string.
+  per_field: Dict[str, str] = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass
 class SymbolOrFixtureCall(CodegenNode):
   """Reference to a call of a library symbol/fixture, like MyEncoderLayer()."""
 
@@ -133,6 +145,9 @@ class SymbolOrFixtureCall(CodegenNode):
   # Values for args can involve VariableReference's, Calls, etc.
   positional_arg_expressions: List[Any]
   arg_expressions: Dict[str, Any]
+  history_comments: HistoryComments = dataclasses.field(
+      default_factory=HistoryComments
+  )
 
 
 @dataclasses.dataclass
