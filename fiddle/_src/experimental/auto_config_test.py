@@ -41,8 +41,21 @@ def fn_with_kwargs(**kwargs):
   return {'kwargs': kwargs}
 
 
+class NonDataclassSampleClass:
+
+  def __init__(self, arg1, arg2):
+    self.arg1 = arg1
+    self.arg2 = arg2
+
+
+@dataclasses.dataclass(frozen=False)
+class MutableSampleClass:
+  arg1: Any
+  arg2: Any
+
+
 @dataclasses.dataclass(frozen=True)
-class SampleClass:
+class FrozenSampleClass:
   arg1: Any
   arg2: Any
 
@@ -85,24 +98,24 @@ def _line_number():
 class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_create_basic_config(self):
-    expected_config = fdl.Config(SampleClass, 1, arg2=2)
+    expected_config = fdl.Config(FrozenSampleClass, 1, arg2=2)
 
     @auto_config.auto_config
     def test_class_config():
-      return SampleClass(1, 2)
+      return FrozenSampleClass(1, 2)
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
-    self.assertEqual(SampleClass(1, 2), test_class_config())
+    self.assertEqual(FrozenSampleClass(1, 2), test_class_config())
 
   def test_create_basic_config_parents(self):
-    expected_config = fdl.Config(SampleClass, 1, arg2=2)
+    expected_config = fdl.Config(FrozenSampleClass, 1, arg2=2)
 
     @auto_config.auto_config()  # Note the parenthesis!
     def test_class_config():
-      return SampleClass(1, 2)
+      return FrozenSampleClass(1, 2)
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
-    self.assertEqual(SampleClass(1, 2), test_class_config())
+    self.assertEqual(FrozenSampleClass(1, 2), test_class_config())
 
   def test_create_basic_partial(self):
     expected_config = fdl.Partial(basic_fn, 1, kwarg='kwarg')
@@ -129,7 +142,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_nested_functools_partial_unsupported_positional_args(self):
     @auto_config.auto_config
     def test_fn_config():
-      return functools.partial(functools.partial(SampleClass, 1), 2)
+      return functools.partial(functools.partial(FrozenSampleClass, 1), 2)
 
     with self.assertRaisesRegex(
         ValueError, 'chained.*partial.*calls.*only.*keyword'
@@ -198,69 +211,77 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(expected_config, test_fn_config_2.as_buildable())
 
   def test_create_config_with_args(self):
-    expected_config = fdl.Config(SampleClass, 'positional', arg2='default')
+    expected_config = fdl.Config(
+        FrozenSampleClass, 'positional', arg2='default'
+    )
 
     @auto_config.auto_config
     def test_class_config(arg1, arg2='default'):
-      return SampleClass(arg1, arg2)
+      return FrozenSampleClass(arg1, arg2)
 
     self.assertEqual(expected_config,
                      test_class_config.as_buildable('positional'))
     self.assertEqual(
-        SampleClass('positional', 'default'), test_class_config('positional'))
+        FrozenSampleClass('positional', 'default'),
+        test_class_config('positional'),
+    )
 
   def test_create_config_with_kwonly_args(self):
-    expected_config = fdl.Config(SampleClass, 'positional', arg2='default')
+    expected_config = fdl.Config(
+        FrozenSampleClass, 'positional', arg2='default'
+    )
 
     @auto_config.auto_config
     def test_class_config(arg1, *, arg2='default'):
-      return SampleClass(arg1, arg2)
+      return FrozenSampleClass(arg1, arg2)
 
     self.assertEqual(expected_config,
                      test_class_config.as_buildable('positional'))
     self.assertEqual(
-        SampleClass('positional', 'default'), test_class_config('positional'))
+        FrozenSampleClass('positional', 'default'),
+        test_class_config('positional'),
+    )
 
   def test_calling_auto_config(self):
     expected_config = fdl.Config(
-        basic_fn, 1, kwarg=fdl.Config(SampleClass, 1, 2))
+        basic_fn, 1, kwarg=fdl.Config(FrozenSampleClass, 1, 2)
+    )
 
     @auto_config.auto_config(experimental_always_inline=True)
     def test_class_config():
-      return SampleClass(1, arg2=2)
+      return FrozenSampleClass(1, arg2=2)
 
     @auto_config.auto_config
     def test_fn_config():
       return basic_fn(1, test_class_config())
 
     self.assertEqual(expected_config, test_fn_config.as_buildable())
-    self.assertEqual({
-        'arg': 1,
-        'kwarg': SampleClass(1, arg2=2)
-    }, test_fn_config())
+    self.assertEqual(
+        {'arg': 1, 'kwarg': FrozenSampleClass(1, arg2=2)}, test_fn_config()
+    )
 
   def test_nested_calls(self):
     expected_config = fdl.Config(
-        SampleClass, 1, arg2=fdl.Config(basic_fn, 2, 'kwarg'))
+        FrozenSampleClass, 1, arg2=fdl.Config(basic_fn, 2, 'kwarg')
+    )
 
     @auto_config.auto_config
     def test_class_config():
-      return SampleClass(1, basic_fn(2, 'kwarg'))
+      return FrozenSampleClass(1, basic_fn(2, 'kwarg'))
 
     self.assertEqual(expected_config, test_class_config.as_buildable())
     self.assertEqual(
-        SampleClass(1, {
-            'arg': 2,
-            'kwarg': 'kwarg'
-        }), test_class_config())
+        FrozenSampleClass(1, {'arg': 2, 'kwarg': 'kwarg'}), test_class_config()
+    )
 
   def test_calling_explicit_function(self):
     expected_config = fdl.Config(
-        SampleClass, 1, arg2=fdl.Config(basic_fn, 5, 10))
+        FrozenSampleClass, 1, arg2=fdl.Config(basic_fn, 5, 10)
+    )
 
     @auto_config.auto_config
     def test_nested_call():
-      return SampleClass(1, explicit_config_building_fn(10))
+      return FrozenSampleClass(1, explicit_config_building_fn(10))
 
     self.assertEqual(expected_config, test_nested_call.as_buildable())
 
@@ -295,11 +316,11 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(expected_result, fdl.build(cfg))
 
   def test_calling_builtins(self):
-    expected_config = fdl.Config(SampleClass, [0, 1, 2], ['a', 'b'])
+    expected_config = fdl.Config(FrozenSampleClass, [0, 1, 2], ['a', 'b'])
 
     @auto_config.auto_config
     def test_config():
-      return SampleClass(list(range(3)), list({'a': 0, 'b': 1}.keys()))
+      return FrozenSampleClass(list(range(3)), list({'a': 0, 'b': 1}.keys()))
 
     self.assertEqual(expected_config, test_config.as_buildable())
 
@@ -313,7 +334,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertTrue(auto_config_policy.v1([].append))
     self.assertTrue(auto_config_policy.v1({}.keys))
     # A method.
-    test_class = SampleClass(1, 2)
+    test_class = FrozenSampleClass(1, 2)
     self.assertFalse(auto_config_policy.v1(test_class.method))
     # Buildable subclasses.
     self.assertTrue(auto_config_policy.v1(fdl.Config))
@@ -323,11 +344,12 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_autobuilders_in_auto_config(self):
     expected_config = fdl.Config(
-        basic_fn, arg=ab.config(SampleClass, require_skeleton=False))
+        basic_fn, arg=ab.config(FrozenSampleClass, require_skeleton=False)
+    )
 
     @auto_config.auto_config
     def autobuilder_using_fn():
-      x = ab.config(SampleClass, require_skeleton=False)
+      x = ab.config(FrozenSampleClass, require_skeleton=False)
       return basic_fn(x)
 
     self.assertEqual(expected_config, autobuilder_using_fn.as_buildable())
@@ -338,16 +360,16 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_return_structure(self):
     expected_config = {
-        'test_key1': fdl.Config(SampleClass, 1, arg2=2),
-        'test_key2': [fdl.Config(SampleClass, 3, 4), 5],
+        'test_key1': fdl.Config(FrozenSampleClass, 1, arg2=2),
+        'test_key2': [fdl.Config(FrozenSampleClass, 3, 4), 5],
         'test_key3': (fdl.Partial(pass_through, 'arg'), 6),
     }
 
     @auto_config.auto_config
     def test_config():
       return {
-          'test_key1': SampleClass(1, 2),
-          'test_key2': [SampleClass(3, 4), 5],
+          'test_key1': FrozenSampleClass(1, 2),
+          'test_key2': [FrozenSampleClass(3, 4), 5],
           'test_key3': (functools.partial(pass_through, 'arg'), 6),
       }
 
@@ -373,9 +395,11 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
     @auto_config.auto_config(experimental_config_cls=CustomConfig)
     def fn():
-      return SampleClass(arg1=basic_fn(3), arg2=4)
+      return FrozenSampleClass(arg1=basic_fn(3), arg2=4)
 
-    expected = CustomConfig(SampleClass, arg1=CustomConfig(basic_fn, 3), arg2=4)
+    expected = CustomConfig(
+        FrozenSampleClass, arg1=CustomConfig(basic_fn, 3), arg2=4
+    )
     cfg = fn.as_buildable()
     self.assertDagEqual(cfg, expected)
     self.assertIsInstance(cfg, CustomConfig)
@@ -388,16 +412,18 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       @auto_config.auto_config
       @staticmethod
       def my_fn():
-        return SampleClass(2, 1)
+        return FrozenSampleClass(2, 1)
 
     self.assertEqual(
-        fdl.Config(SampleClass, 2, 1), MyClass.my_fn.as_buildable())
-    self.assertEqual(SampleClass(2, 1), MyClass.my_fn())
+        fdl.Config(FrozenSampleClass, 2, 1), MyClass.my_fn.as_buildable()
+    )
+    self.assertEqual(FrozenSampleClass(2, 1), MyClass.my_fn())
 
     instance = MyClass()
     self.assertEqual(
-        fdl.Config(SampleClass, 2, 1), instance.my_fn.as_buildable())
-    self.assertEqual(SampleClass(2, 1), instance.my_fn())
+        fdl.Config(FrozenSampleClass, 2, 1), instance.my_fn.as_buildable()
+    )
+    self.assertEqual(FrozenSampleClass(2, 1), instance.my_fn())
 
   def test_staticmethod_arguments(self):
 
@@ -406,17 +432,19 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       @auto_config.auto_config
       @staticmethod
       def my_fn(x):
-        return SampleClass(x, x + 1)
+        return FrozenSampleClass(x, x + 1)
 
     self.assertEqual(
-        fdl.Config(SampleClass, 5, 6), MyClass.my_fn.as_buildable(5))
-    self.assertEqual(SampleClass(5, 6), MyClass.my_fn(5))
+        fdl.Config(FrozenSampleClass, 5, 6), MyClass.my_fn.as_buildable(5)
+    )
+    self.assertEqual(FrozenSampleClass(5, 6), MyClass.my_fn(5))
 
     instance = MyClass()
 
     self.assertEqual(
-        fdl.Config(SampleClass, 5, 6), instance.my_fn.as_buildable(5))
-    self.assertEqual(SampleClass(5, 6), instance.my_fn(5))
+        fdl.Config(FrozenSampleClass, 5, 6), instance.my_fn.as_buildable(5)
+    )
+    self.assertEqual(FrozenSampleClass(5, 6), instance.my_fn(5))
 
   def test_staticmethod_on_top(self):
 
@@ -527,7 +555,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
     @auto_config.auto_config
     def test_fn():
-      return SampleClass(1, 2)
+      return FrozenSampleClass(1, 2)
 
     with self.subTest('shallow_copy'):
       shallow_copy = copy.copy(test_fn)
@@ -569,7 +597,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_call_super(self):
 
-    class MyClass(SampleClass):  # pylint: disable=unused-variable
+    class MyClass(FrozenSampleClass):  # pylint: disable=unused-variable
 
       def __init__(self):
         super().__init__(1, 2)
@@ -595,16 +623,17 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       return auto_config_policy.v1(fn)
 
     def make_sample(max_value):
-      return SampleClass(arg1=make_list(max_value), arg2=None)
+      return FrozenSampleClass(arg1=make_list(max_value), arg2=None)
 
     with_policy = auto_config.auto_config(
         experimental_exemption_policy=custom_policy)(
             make_sample)
     without_policy = auto_config.auto_config(make_sample)
 
-    expected_without_policy = fdl.Config(SampleClass, fdl.Config(make_list, 5),
-                                         None)
-    expected_with_policy = fdl.Config(SampleClass, list(range(5)), None)
+    expected_without_policy = fdl.Config(
+        FrozenSampleClass, fdl.Config(make_list, 5), None
+    )
+    expected_with_policy = fdl.Config(FrozenSampleClass, list(range(5)), None)
 
     self.assertEqual(with_policy.as_buildable(5), expected_with_policy)
     self.assertEqual(without_policy.as_buildable(5), expected_without_policy)
@@ -615,9 +644,9 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       # Test the case where we first create the function, then call.
       # It produces different AST.
       exempted_func = auto_config.exempt(pass_through)
-      return SampleClass(
+      return FrozenSampleClass(
           arg1=auto_config.exempt(pass_through)(max_value),
-          arg2=SampleClass(
+          arg2=FrozenSampleClass(
               arg1=pass_through(max_value), arg2=exempted_func(max_value)
           ),
       )
@@ -638,9 +667,9 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_function_metadata(self):
 
     @auto_config.auto_config
-    def my_helpful_function(x: int, y: str = 'y') -> SampleClass:
+    def my_helpful_function(x: int, y: str = 'y') -> FrozenSampleClass:
       """A docstring."""
-      return SampleClass(x, y)
+      return FrozenSampleClass(x, y)
 
     self.assertEqual('A docstring.', inspect.getdoc(my_helpful_function))
     param_kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
@@ -652,7 +681,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
                                default='y',
                                annotation=str))
     expected_signature = inspect.Signature(
-        expected_parameters, return_annotation=SampleClass)
+        expected_parameters, return_annotation=FrozenSampleClass
+    )
     self.assertEqual(expected_signature, inspect.signature(my_helpful_function))
     self.assertEqual('my_helpful_function', my_helpful_function.__name__)
 
@@ -712,7 +742,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     def test_config():
       layers = []
       for i in range(3):
-        layers.append(SampleClass(i, i))
+        layers.append(FrozenSampleClass(i, i))
       return pass_through(layers)
 
     with self.assertRaisesRegex(
@@ -721,7 +751,8 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       auto_config.auto_config(test_config)
 
     expected_config = fdl.Config(
-        pass_through, [fdl.Config(SampleClass, i, i) for i in range(3)])
+        pass_through, [fdl.Config(FrozenSampleClass, i, i) for i in range(3)]
+    )
     actual_config = auto_config.auto_config(
         test_config, experimental_allow_control_flow=True).as_buildable()
     self.assertEqual(expected_config, actual_config)
@@ -855,7 +886,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_disallow_lambda_definitions(self):
 
     def test_config():
-      return pass_through(lambda: SampleClass(1, 2))
+      return pass_through(lambda: FrozenSampleClass(1, 2))
 
     with self.assertRaisesRegex(
         auto_config.UnsupportedLanguageConstructError,
@@ -875,22 +906,24 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_access_autoconfig_method_via_class(self):
     # If we access an autoconfig via an instance, we get a bound method:
     self.assertIsInstance(
-        SampleClass(1, 2).autoconfig_method, auto_config.AutoConfig)
+        FrozenSampleClass(1, 2).autoconfig_method, auto_config.AutoConfig
+    )
 
     # But if we access it via the class, we get the (unbound) AutoConfig:
-    self.assertIsInstance(SampleClass.autoconfig_method, auto_config.AutoConfig)
+    self.assertIsInstance(
+        FrozenSampleClass.autoconfig_method, auto_config.AutoConfig
+    )
 
   @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_can_pass_self_as_keyword(self):
-    x = SampleClass(1, 2)
+    x = FrozenSampleClass(1, 2)
     self.assertEqual(
-        SampleClass.autoconfig_method(self=x), {
-            'arg': x,
-            'kwarg': 'test'
-        })
+        FrozenSampleClass.autoconfig_method(self=x), {'arg': x, 'kwarg': 'test'}
+    )
     self.assertDagEqual(
-        SampleClass.autoconfig_method.as_buildable(self=x),
-        fdl.Config(basic_fn, x))
+        FrozenSampleClass.autoconfig_method.as_buildable(self=x),
+        fdl.Config(basic_fn, x),
+    )
 
   def test_globals(self):
     # The following will fail with `NameError: name 'pass_through' is not
@@ -931,41 +964,88 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     cfg = make_dict.as_buildable([])
     self.assertEqual(fdl.build(cfg), {})
 
+  def test_illegal_attribute_access(self):
+    @auto_config.auto_config
+    def fixture():
+      foo = NonDataclassSampleClass(1, 2)
+      _ = foo.arg1
+      return foo
+
+    with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+      fixture.as_buildable()
+
+  def test_dataclass_attribute_access(self):
+    def fixture():
+      foo = MutableSampleClass(1, 2)
+      _ = foo.arg1
+      return foo
+
+    fixture_disable = auto_config.auto_config(
+        fixture, experimental_allow_dataclass_attribute_access=False
+    )
+    fixture_enable = auto_config.auto_config(
+        fixture, experimental_allow_dataclass_attribute_access=True
+    )
+
+    with self.subTest('disable'):
+      with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+        fixture_disable.as_buildable()
+
+    with self.subTest('enable'):
+      fixture_enable.as_buildable()
+
+  def test_nested_attribute_access(self):
+    @auto_config.auto_config
+    def fixture():
+      foo = NonDataclassSampleClass(1, 'ABC')
+      # To test if inner attribute calls are validated. foo.arg2 is not a
+      # Buildable but foo is. So if the attribute validation only inpsects
+      # the outermost attribute access, the error will not be raised.
+      lower = foo.arg2.lower
+      return NonDataclassSampleClass(2, lower)
+
+    with self.subTest('disable'):
+      with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+        fixture.as_buildable()
+
 
 class AutoUnconfigTest(absltest.TestCase):
 
   def test_simple_inline(self):
 
     @auto_config.auto_unconfig(experimental_always_inline=True)
-    def simple(x: int) -> fdl.Config[SampleClass]:
-      cfg = fdl.Config(SampleClass)
+    def simple(x: int) -> fdl.Config[FrozenSampleClass]:
+      cfg = fdl.Config(FrozenSampleClass)
       cfg.arg1 = x
       cfg.arg2 = str(x)
       return cfg
 
     @auto_config.auto_config
     def parent():
-      return SampleClass(arg1=simple(42), arg2=5)
+      return FrozenSampleClass(arg1=simple(42), arg2=5)
 
     expected = fdl.Config(
-        SampleClass, arg1=fdl.Config(SampleClass, 42, '42'), arg2=5)
+        FrozenSampleClass, arg1=fdl.Config(FrozenSampleClass, 42, '42'), arg2=5
+    )
 
     self.assertEqual(expected, parent.as_buildable())
 
   def test_simple_not_inline(self):
 
     @auto_config.auto_unconfig(experimental_always_inline=False)
-    def simple(x: int) -> fdl.Config[SampleClass]:
-      cfg = fdl.Config(SampleClass)
+    def simple(x: int) -> fdl.Config[FrozenSampleClass]:
+      cfg = fdl.Config(FrozenSampleClass)
       cfg.arg1 = x
       cfg.arg2 = str(x)
       return cfg
 
     @auto_config.auto_config
     def parent():
-      return SampleClass(arg1=simple(42), arg2=5)
+      return FrozenSampleClass(arg1=simple(42), arg2=5)
 
-    expected = fdl.Config(SampleClass, arg1=fdl.Config(simple, 42), arg2=5)
+    expected = fdl.Config(
+        FrozenSampleClass, arg1=fdl.Config(simple, 42), arg2=5
+    )
 
     self.assertEqual(expected, parent.as_buildable())
 
@@ -992,40 +1072,40 @@ class AutoUnconfigTest(absltest.TestCase):
   def test_python_execution(self):
 
     @auto_config.auto_unconfig
-    def simple(x: int) -> fdl.Config[SampleClass]:
-      cfg = fdl.Config(SampleClass)
+    def simple(x: int) -> fdl.Config[FrozenSampleClass]:
+      cfg = fdl.Config(FrozenSampleClass)
       cfg.arg1 = x
       cfg.arg2 = str(x)
       return cfg
 
     @auto_config.auto_config
     def parent():
-      return SampleClass(arg1=simple(42), arg2=5)
+      return FrozenSampleClass(arg1=simple(42), arg2=5)
 
-    expected = SampleClass(arg1=SampleClass(42, '42'), arg2=5)
+    expected = FrozenSampleClass(arg1=FrozenSampleClass(42, '42'), arg2=5)
 
     self.assertEqual(expected, parent())
 
   def test_nested_python_execution(self):
 
     @auto_config.auto_unconfig
-    def simple(x: int) -> fdl.Config[SampleClass]:
-      cfg = fdl.Config(SampleClass)
+    def simple(x: int) -> fdl.Config[FrozenSampleClass]:
+      cfg = fdl.Config(FrozenSampleClass)
       cfg.arg1 = x
       cfg.arg2 = str(x)
       return cfg
 
-    def regular_python_wrapper(x) -> SampleClass:
+    def regular_python_wrapper(x) -> FrozenSampleClass:
       return simple(x - 1)
 
     @auto_config.auto_unconfig
-    def parent() -> fdl.Config[SampleClass]:
-      cfg = fdl.Config(SampleClass)
+    def parent() -> fdl.Config[FrozenSampleClass]:
+      cfg = fdl.Config(FrozenSampleClass)
       cfg.arg1 = fdl.Config(regular_python_wrapper, 42)
       cfg.arg2 = 5
       return cfg
 
-    expected = SampleClass(SampleClass(41, '41'), 5)
+    expected = FrozenSampleClass(FrozenSampleClass(41, '41'), 5)
     self.assertEqual(expected, parent())
 
 
@@ -1035,13 +1115,13 @@ class InlineTest(test_util.TestCase):
 
     @auto_config.auto_config
     def my_fn(x: int, y: str):
-      return SampleClass(basic_fn(x), y)
+      return FrozenSampleClass(basic_fn(x), y)
 
     cfg = fdl.Config(my_fn, x=4, y='y')
     orig = fdl.build(cfg)
     auto_config.inline(cfg)
 
-    self.assertEqual(SampleClass, fdl.get_callable(cfg))
+    self.assertEqual(FrozenSampleClass, fdl.get_callable(cfg))
     self.assertEqual(cfg.arg2, 'y')
     self.assertIsInstance(cfg.arg1, fdl.Config)
     self.assertEqual(basic_fn, fdl.get_callable(cfg.arg1))
@@ -1073,20 +1153,20 @@ class InlineTest(test_util.TestCase):
 
     @auto_config.auto_config
     def inlined_fn():
-      return SampleClass(arg1=1, arg2=2)
+      return FrozenSampleClass(arg1=1, arg2=2)
 
     @auto_config.auto_config
     def calling_fn():
       return inlined_fn()
 
-    expected_config = fdl.Config(SampleClass, arg1=1, arg2=2)
+    expected_config = fdl.Config(FrozenSampleClass, arg1=1, arg2=2)
     actual_config = calling_fn.as_buildable()
     self.assertEqual(expected_config, actual_config)
 
   def test_inlining_nested_config(self):
 
     @auto_config.auto_config(experimental_always_inline=False)
-    def make_library_type(x: int, y: str) -> SampleClass:
+    def make_library_type(x: int, y: str) -> FrozenSampleClass:
       """A function that forms a configuration API boundary.
 
       These functions are often vended by libraries.
@@ -1099,18 +1179,19 @@ class InlineTest(test_util.TestCase):
         An instance of the sample class configured per the policy encapsulated
         by this function.
       """
-      return SampleClass(arg1=x + 1, arg2='Hello ' + y)
+      return FrozenSampleClass(arg1=x + 1, arg2='Hello ' + y)
 
     @auto_config.auto_config
     def make_experiment():
       thing1 = basic_fn(arg=5)
       thing2 = make_library_type(5, 'world')
-      return SampleClass(thing1, thing2)
+      return FrozenSampleClass(thing1, thing2)
 
     expected_config = fdl.Config(
-        SampleClass,
+        FrozenSampleClass,
         arg1=fdl.Config(basic_fn, arg=5),
-        arg2=fdl.Config(make_library_type, 5, 'world'))
+        arg2=fdl.Config(make_library_type, 5, 'world'),
+    )
 
     actual_config = make_experiment.as_buildable()
     self.assertEqual(expected_config, actual_config)
@@ -1118,9 +1199,10 @@ class InlineTest(test_util.TestCase):
     auto_config.inline(actual_config.arg2)
 
     inline_expected_config = fdl.Config(
-        SampleClass,
+        FrozenSampleClass,
         arg1=fdl.Config(basic_fn, arg=5),
-        arg2=fdl.Config(SampleClass, 6, 'Hello world'))
+        arg2=fdl.Config(FrozenSampleClass, 6, 'Hello world'),
+    )
 
     self.assertEqual(inline_expected_config, actual_config)
 
@@ -1130,21 +1212,21 @@ class InlineTest(test_util.TestCase):
 
     @auto_config.auto_config
     def my_fn(x: int):
-      return functools.partial(SampleClass, arg1=x)
+      return functools.partial(FrozenSampleClass, arg1=x)
 
     cfg = fdl.Config(my_fn, x=2)
     auto_config.inline(cfg)
-    expected = fdl.Partial(SampleClass, arg1=2)
+    expected = fdl.Partial(FrozenSampleClass, arg1=2)
 
     self.assertDagEqual(cfg, expected)
-    self.assertEqual(fdl.build(cfg)(4), SampleClass(2, 4))
+    self.assertEqual(fdl.build(cfg)(4), FrozenSampleClass(2, 4))
 
   @absltest.skip('Cannot inline a function that returns a non-buildable.')
   def test_inlined_func_returns_list(self):
 
     @auto_config.auto_config
     def my_fn(x: int):
-      return [SampleClass(x, x), SampleClass(x + 1, x + 2)]
+      return [FrozenSampleClass(x, x), FrozenSampleClass(x + 1, x + 2)]
 
     cfg = fdl.Config(my_fn, x=2)
     auto_config.inline(cfg)

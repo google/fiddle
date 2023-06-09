@@ -41,6 +41,7 @@ from fiddle._src.experimental import daglish_legacy
 import libcst as cst
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
+_ATTR_LOAD_HANDLER_ID = '__auto_config_attr_load_handler__'
 _CLOSURE_WRAPPER_ID = '__auto_config_closure_wrapper__'
 _EMPTY_ARGUMENTS = ast.arguments(
     posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])
@@ -194,6 +195,15 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
         keywords=[self.visit(keyword) for keyword in node.keywords],
     )
 
+  def visit_Attribute(self, node: ast.Attribute):
+    if isinstance(node.ctx, ast.Load):
+      return ast.Call(
+          func=ast.Name(id=_ATTR_LOAD_HANDLER_ID, ctx=ast.Load()),
+          args=[self.visit(node.value), ast.Str(s=node.attr)],
+          keywords=[],
+      )
+    return self.generic_visit(node)
+
   def visit_For(self, node: ast.For):
     return self._handle_control_flow(node, activatable=True)
 
@@ -329,7 +339,8 @@ def _wrap_ast_for_fn_with_closure_vars(
   ast_none = ast.Constant(value=None)
   closure_var_definitions = [
       ast.Assign(targets=[ast_name(var_name)], value=ast_none)
-      for var_name in fn.__code__.co_freevars + (_CALL_HANDLER_ID,)
+      for var_name in fn.__code__.co_freevars
+      + (_CALL_HANDLER_ID, _ATTR_LOAD_HANDLER_ID)
   ]
 
   wrapper_module = ast.Module(
@@ -489,9 +500,11 @@ def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
   )
 
 
+# TODO(b/286559744): Change allow_dataclass_attribute_access default as False.
 def auto_config(
     fn=None,
     *,
+    experimental_allow_dataclass_attribute_access=True,
     experimental_allow_control_flow: bool = False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
@@ -566,6 +579,10 @@ def auto_config(
 
   Args:
     fn: The function to create a config-generating function from.
+    experimental_allow_dataclass_attribute_access: Whether to allow attribute
+      access on dataclasses within auto_config. Note that access to dataclass
+      attribute is transformed into access to fdl.Config attributes in the
+      as_buildable path.
     experimental_allow_control_flow: Whether to allow control flow constructs in
       ``fn``. By default, control flow constructs will cause an
       ``UnsupportedLanguageConstructError`` to be thrown.
@@ -638,6 +655,19 @@ def auto_config(
 
     return experimental_config_cls(fn_or_cls, *args, **kwargs)
 
+  def auto_config_attr_access_handler(value, attr, allow_dataclass):
+    """Handles attribute access in auto_config'ed functions."""
+    if isinstance(value, config.Buildable):
+      fn_or_cls = value.__fn_or_cls__
+      if allow_dataclass and dataclasses.is_dataclass(fn_or_cls):
+        return getattr(value, attr)
+      raise ValueError(
+          f'Cannot access attribute {attr!r} on object of type {type(value)}'
+          ' within auto_config, as this could lead to inconsistent behavior'
+          ' between the Python and as_buildable code paths.'
+      )
+    return getattr(value, attr)
+
   def make_auto_config(fn):
     if not isinstance(fn, (types.FunctionType, classmethod, staticmethod)):
       raise ValueError('`auto_config` is only compatible with functions, '
@@ -683,14 +713,30 @@ def auto_config(
     code = compile(node, inspect.getsourcefile(fn), 'exec')
     code = _unwrap_code_for_fn(code, fn)
 
-    # Insert auto_config_call_handler into `fn.__closure__` at the index where
-    # _CALL_HANDLER_ID occurs in the freevars.  (_CALL_HANDLER_ID was added to
-    # freevars by _wrap_ast_for_fn_with_closure_vars).
+    # Insert auto_config_attr_access_handler/auto_config_call_handler into
+    # `fn.__closure__` at the index where _ATTR_LOAD_HANDLER_ID/_CALL_HANDLER_ID
+    # occur in the freevars. Both of them were added to freevars by
+    # _wrap_ast_for_fn_with_closure_vars.
     closure = list(fn.__closure__ or ())
+    indexed_handlers = []
+    if _ATTR_LOAD_HANDLER_ID in code.co_freevars:
+      handler_idx = code.co_freevars.index(_ATTR_LOAD_HANDLER_ID)
+      handler = _make_closure_cell(
+          functools.partial(
+              auto_config_attr_access_handler,
+              allow_dataclass=experimental_allow_dataclass_attribute_access,
+          )
+      )
+      indexed_handlers.append((handler_idx, handler))
     if _CALL_HANDLER_ID in code.co_freevars:
-      closure.insert(
-          code.co_freevars.index(_CALL_HANDLER_ID),
-          _make_closure_cell(auto_config_call_handler))
+      handler_idx = code.co_freevars.index(_CALL_HANDLER_ID)
+      handler = _make_closure_cell(auto_config_call_handler)
+      indexed_handlers.append((handler_idx, handler))
+
+    # Insert handler from small index to ensure the content of closures will
+    # not be mismatched.
+    for handler_idx, handler in sorted(indexed_handlers):
+      closure.insert(handler_idx, handler)
     closure = tuple(closure)
 
     # Then, create a function from the compiled function code object, providing
