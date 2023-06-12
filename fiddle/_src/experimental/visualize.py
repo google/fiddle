@@ -30,7 +30,6 @@ from fiddle import daglish
 from fiddle import diffing
 from fiddle._src import config as config_lib
 from fiddle._src import graphviz_custom_object
-from fiddle._src.experimental import daglish_legacy
 
 Trimmed = graphviz_custom_object.Trimmed
 
@@ -60,33 +59,114 @@ def trimmed(config: _T, trim: List[config_lib.Buildable]) -> _T:
   )
 
 
-def with_defaults_trimmed(config: _T) -> _T:
+def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
   """Trims arguments that match their default values.
 
   Args:
     config: Root buildable object, or nested structure of Buildables.
+    remove_deep_defaults: Whether to remove defaults that are equal to
+      dataclass.field(default_factory=auto_config_fn) defaults. If any of these
+      default values have external references, i.e. they are shared, then they
+      will not be removed.
 
   Returns:
     Copy of the Buildable with args matching defaults removed.
   """
 
-  # TODO(b/241261427): Remove args matching dataclasses' default_factory too.
-  def traverse_fn(_, value):
-    new_value = yield
-    if isinstance(value, config_lib.Buildable):
-      for name, attr_value in list(new_value.__arguments__.items()):
-        param = value.__signature__.parameters.get(name, None)
-        if (
-            param is not None
-            and param.kind != inspect.Parameter.VAR_KEYWORD
-            and param.default == attr_value
-        ):
-          delattr(new_value, name)
-      return new_value
-    else:
-      return new_value
+  # We only need to run default initializers once per callable and config class.
+  # (buildable type, id(callable)) --> configuration object.
+  cached_deep_defaults = {}
 
-  return daglish_legacy.memoized_traverse(traverse_fn, config)
+  def _get_default(buildable: config_lib.Buildable) -> config_lib.Buildable:
+    fn_or_cls = config_lib.get_callable(buildable)
+    key = (type(buildable), id(fn_or_cls))
+    if key in cached_deep_defaults:
+      return cached_deep_defaults[key]
+    result = type(buildable)(fn_or_cls)  # pytype: disable=not-instantiable
+    cached_deep_defaults[key] = result
+    return result
+
+  def can_remove_deep_default(
+      node: Any,
+      attr_name: str,
+      parent_state: daglish.State,
+  ) -> bool:
+    """Returns whether we can safely delete a deep default.
+
+    (This function presumes we've already checked equality with the default, and
+    helps to check that sharing isn't altered.)
+
+    Args:
+      node: Default node to delete.
+      attr_name: Attribute referring to `node`.
+      parent_state: State from the traversal, which should correspond to
+        `parent`.
+    """
+    valid_paths_to_node = [
+        (*parent_path, daglish.Attr(attr_name))
+        for parent_path in parent_state.get_all_paths(allow_caching=True)
+    ]
+
+    def _goes_through_node(path):
+      return any(
+          path[: len(node_path)] == node_path
+          for node_path in valid_paths_to_node
+      )
+
+    def _helper(value, substate: daglish.State) -> bool:
+      if not substate.is_traversable(value) or daglish.is_immutable(value):
+        return True
+
+      for sub_path in substate.get_all_paths():
+        if not _goes_through_node(sub_path):
+          return False
+      return all(substate.flattened_map_children(value).values)
+
+    # Creates a sub-traversal using a different function. We eventually might
+    # make this part of the daglish API.
+    sub_traversal = daglish.MemoizedTraversal(
+        traversal_fn=_helper,
+        root_obj=parent_state.traversal.root_obj,
+        registry=parent_state.traversal.registry,
+        paths_cache=parent_state.traversal.paths_cache,  # pytype: disable=attribute-error
+    )
+    state = daglish.State(
+        sub_traversal,
+        (*parent_state.current_path, daglish.Attr(attr_name)),
+        node,
+        parent_state,
+    )
+    return _helper(node, state)
+
+  def traverse_fn(value, state: daglish.State):
+    if isinstance(value, config_lib.Buildable):
+      deep_defaults = {}
+      if remove_deep_defaults:
+        deep_defaults = _get_default(value).__arguments__
+
+      should_copy = True
+      for name, attr_value in list(value.__arguments__.items()):
+        param = value.__signature__.parameters.get(name, None)
+        if param is None:
+          continue
+        param_default = (
+            deep_defaults[name] if name in deep_defaults else param.default
+        )
+        if (
+            param.kind != inspect.Parameter.VAR_KEYWORD
+            and param_default == attr_value
+            # All paths must flow through both the parent config (`value`) and
+            # the specific attribute which is being defaulted, in order for us
+            # to safely remove it.
+            and can_remove_deep_default(attr_value, name, state)
+        ):
+          if should_copy:
+            value = copy.copy(value)
+            should_copy = False
+          delattr(value, name)
+    return state.map_children(value)
+
+  return daglish.MemoizedTraversal.run(traverse_fn, config)
 
 
 def depth_over(config: Any, depth: int) -> List[config_lib.Buildable]:
