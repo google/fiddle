@@ -500,11 +500,10 @@ def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
   )
 
 
-# TODO(b/286559744): Change allow_dataclass_attribute_access default as False.
 def auto_config(
     fn=None,
     *,
-    experimental_allow_dataclass_attribute_access=True,
+    experimental_allow_dataclass_attribute_access=False,
     experimental_allow_control_flow: bool = False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
@@ -659,8 +658,18 @@ def auto_config(
     """Handles attribute access in auto_config'ed functions."""
     if isinstance(value, config.Buildable):
       fn_or_cls = value.__fn_or_cls__
-      if allow_dataclass and dataclasses.is_dataclass(fn_or_cls):
-        return getattr(value, attr)
+      if dataclasses.is_dataclass(fn_or_cls):
+        if allow_dataclass:
+          return getattr(value, attr)
+        else:
+          raise ValueError(
+              f'Trying to access attribute {attr!r} on a dataclasss of type '
+              f'{type(value)} within auto_config. This may lead to inconsistent'
+              ' behavior between the Python and as_buildable code paths. If you'
+              ' are confident about the correctness, you can turn on the '
+              '`experimental_allow_dataclass_attribute_access` flag of '
+              'auto_config to enable accessing dataclass attribute.'
+          )
       raise ValueError(
           f'Cannot access attribute {attr!r} on object of type {type(value)}'
           ' within auto_config, as this could lead to inconsistent behavior'

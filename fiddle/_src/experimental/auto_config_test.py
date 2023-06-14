@@ -988,7 +988,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     )
 
     with self.subTest('disable'):
-      with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+      with self.assertRaisesRegex(ValueError, 'Trying to access attribute'):
         fixture_disable.as_buildable()
 
     with self.subTest('enable'):
