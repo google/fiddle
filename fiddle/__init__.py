@@ -27,6 +27,7 @@ from fiddle._src.config import copy_with
 from fiddle._src.config import deepcopy_with
 from fiddle._src.config import get_callable
 from fiddle._src.config import get_tags
+from fiddle._src.config import MethodCall
 from fiddle._src.config import NO_VALUE
 from fiddle._src.config import ordered_arguments
 from fiddle._src.config import Partial

@@ -1036,6 +1036,50 @@ class ArgFactory(Generic[T], Buildable[T]):
       return _BuiltArgFactory(self.__fn_or_cls__)
 
 
+def _fn_for_generic_method(self, *args, **kwargs):
+  raise NotImplementedError()
+
+
+def _get_function_for_method(base_object: Any, method_name: str):
+  """Try to get the base object signature."""
+  if isinstance(base_object, Buildable):
+    fn_or_cls = get_callable(base_object)
+    if inspect.isfunction(fn_or_cls):
+      fn_or_cls = inspect.signature(fn_or_cls).return_annotation
+    if isinstance(fn_or_cls, type):
+      return getattr(fn_or_cls, method_name)
+  return _fn_for_generic_method
+
+
+class MethodCall(Generic[T], Buildable[T]):
+  """Configuration representing a method call."""
+
+  # NOTE(b/201159339): We currently need to repeat this annotation for pytype.
+  __fn_or_cls__: TypeOrCallableProducingT[T]
+  __method_name__: str
+
+  def __init__(
+      self, base_object: Any, method_name: str, *args: Any, **kwargs: Any
+  ) -> Any:
+    fn_or_cls = _get_function_for_method(base_object, method_name)
+    if 'self' not in inspect.signature(fn_or_cls).parameters:
+      raise ValueError('Expected `self` to be in parameters.')
+    super().__init__(fn_or_cls, base_object, *args, **kwargs)
+    # self.self = base_object
+    object.__setattr__(self, '__method_name__', method_name)
+
+  def __build__(self, /, *args: Any, **kwargs: Any) -> Any:
+    assert not args, 'Args should not be passed by Fiddle'
+    kwargs = kwargs.copy()
+    self_obj = kwargs.pop('self')
+    method = getattr(self_obj, self.__method_name__)
+    if not inspect.ismethod(method):
+      logging.warning(
+          'Expected %s to be a method in %s', self.__method_name__, self_obj
+      )
+    return method(**kwargs)
+
+
 def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
   """Returns true if <dataclass_type>.<field_name> uses a default_factory."""
   for field in dataclasses.fields(dataclass_type):

@@ -54,6 +54,9 @@ class SampleClass:
   def a_method(self):
     return 4  # A random number (https://xkcd.com/221/)
 
+  def sum_and_multiply(self, factor: float = 1.0):
+    return factor * (self.arg1 + self.arg2)
+
   @classmethod
   def a_classmethod(cls):
     return cls(1, 2)
@@ -1440,6 +1443,29 @@ class ArgFactoryTest(absltest.TestCase):
     # functools.partial to be different even if they have the same function
     # and args.
     self.assertEqual(repr(x), repr(y))
+
+
+class MethodCallTest(absltest.TestCase):
+
+  def test_no_args_method(self):
+    instance = fdl.Config(SampleClass, 1, 2)
+    config = fdl.MethodCall(instance, 'a_method')
+    with self.assertRaisesRegex(TypeError, "No parameter named 'x' exists"):
+      config.x = 1
+    self.assertEqual(fdl.build(config), 4)
+
+  def test_method_with_args(self):
+    instance = fdl.Config(SampleClass, 1, 2)
+    config = fdl.MethodCall(instance, 'sum_and_multiply')
+    with self.assertRaisesRegex(TypeError, "No parameter named 'x' exists"):
+      config.x = 1
+    self.assertEqual(fdl.build(config), 3)
+
+    config.factor = 2
+    self.assertEqual(fdl.build(config), 6)
+
+    config.self.arg1 = 3
+    self.assertEqual(fdl.build(config), 10)
 
 
 if __name__ == '__main__':
