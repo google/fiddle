@@ -191,7 +191,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
   def visit_Call(self, node: ast.Call):
     return ast.Call(
         func=ast.Name(id=_CALL_HANDLER_ID, ctx=ast.Load()),
-        args=[node.func, *(self.visit(arg) for arg in node.args)],
+        args=[self.visit(node.func), *(self.visit(arg) for arg in node.args)],
         keywords=[self.visit(keyword) for keyword in node.keywords],
     )
 
@@ -500,6 +500,17 @@ def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
   )
 
 
+@dataclasses.dataclass(frozen=True)
+class _MethodCallStub:
+  """Intermediate object representing a not-yet-called method."""
+
+  value: Any
+  method_name: str
+
+  def __call__(self, *args, **kwargs):
+    return config.MethodCall(self.value, self.method_name, *args, **kwargs)
+
+
 # TODO(b/286559744): Change allow_dataclass_attribute_access default as False.
 def auto_config(
     fn=None,
@@ -510,6 +521,7 @@ def auto_config(
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
     experimental_config_cls=config.Config,
     experimental_result_must_contain_buildable: bool = True,
+    experimental_method_calls: bool = False,
 ) -> Any:  # TODO(b/272377821): More precise return type.
   """Rewrites the given function to make it generate a ``Config``.
 
@@ -602,6 +614,8 @@ def auto_config(
     experimental_result_must_contain_buildable: If true, then raise an error if
       `fn.as_buildable` returns a result that does not contain any `Buildable`
       values -- e.g., if it returns an empty dict.
+    experimental_method_calls: Whether to rewrite method calls into
+      fdl.MethodCall objects.
 
   Returns:
     A wrapped version of ``fn``, but with an additional ``as_buildable``
@@ -650,6 +664,8 @@ def auto_config(
 
     if fn_or_cls is exempt:
       return fn_or_cls(*args, **kwargs)
+    if isinstance(fn_or_cls, _MethodCallStub):
+      return fn_or_cls(*args, **kwargs)
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
 
@@ -659,8 +675,15 @@ def auto_config(
     """Handles attribute access in auto_config'ed functions."""
     if isinstance(value, config.Buildable):
       fn_or_cls = value.__fn_or_cls__
-      if allow_dataclass and dataclasses.is_dataclass(fn_or_cls):
+      if (
+          allow_dataclass
+          and dataclasses.is_dataclass(fn_or_cls)
+          and attr in {field.name for field in dataclasses.fields(fn_or_cls)}
+      ):
+        # Note: Maybe we should check if it is a field?
         return getattr(value, attr)
+      if experimental_method_calls:
+        return _MethodCallStub(value, attr)
       raise ValueError(
           f'Cannot access attribute {attr!r} on object of type {type(value)}'
           ' within auto_config, as this could lead to inconsistent behavior'

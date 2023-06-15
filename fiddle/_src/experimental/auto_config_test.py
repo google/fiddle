@@ -62,6 +62,9 @@ class FrozenSampleClass:
   def method(self):
     return 42
 
+  def sum_and_multiply(self, factor: float = 1.0):
+    return factor * (self.arg1 + self.arg2)
+
   @auto_config.auto_config
   def autoconfig_method(self):
     return basic_fn(self)
@@ -1007,6 +1010,25 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     with self.subTest('disable'):
       with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
         fixture.as_buildable()
+
+  def test_method_calls(self):
+    @auto_config.auto_config(experimental_method_calls=True)
+    # @auto_config.auto_config
+    def method_call():
+      return FrozenSampleClass(4, 5).sum_and_multiply(2)
+
+    self.assertEqual(method_call(), 18)
+
+    config = method_call.as_buildable()
+    self.assertEqual(config.factor, 2)
+    self.assertEqual(config.self.arg1, 4)
+    self.assertEqual(config.self.arg2, 5)
+    self.assertEqual(fdl.build(config), 18)
+
+    config.self.arg1 = 1
+    config.self.arg2 = 2
+    config.factor = 4
+    self.assertEqual(fdl.build(config), 12)
 
 
 class AutoUnconfigTest(absltest.TestCase):
