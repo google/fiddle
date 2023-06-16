@@ -24,6 +24,8 @@ rest of Fiddle.
 """
 
 # pylint: disable=unused-import
+from fiddle._src.experimental.dataclasses import convert_dataclasses_to_configs
+from fiddle._src.experimental.dataclasses import daglish_dataclass_registry
 from fiddle._src.experimental.dataclasses import field
 from fiddle._src.experimental.dataclasses import field_has_tag
 from fiddle._src.experimental.dataclasses import FieldMetadata

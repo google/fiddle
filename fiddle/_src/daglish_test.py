@@ -20,14 +20,14 @@ import dataclasses
 import enum
 import json
 import random
-from typing import Any, List, NamedTuple, Optional, Type, cast
+from typing import Any, List, NamedTuple, Optional, cast
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
 import fiddle as fdl
 from fiddle import daglish
 from fiddle import history
+from fiddle._src.experimental import dataclasses as fdl_dc
 from fiddle._src.testing import nested_values
 from fiddle._src.testing import test_util
 
@@ -89,47 +89,6 @@ def switch_buildables_to_args(value, state: Optional[daglish.State] = None):
     return str(value)
   else:
     return value
-
-
-def _names(value_or_type):
-  return [field.name for field in dataclasses.fields(value_or_type)]
-
-
-def _flatten_dataclass(value):
-  names = _names(value)
-  return [getattr(value, name) for name in names], (type(value), names)
-
-
-def _unflatten_dataclass(values, metadata):
-  typ, names = metadata
-  assert len(names) == len(values)
-  values_dict = {name: value for name, value in zip(names, values)}
-  return typ(**values_dict)
-
-
-def _path_elements_fn(value):
-  return tuple(daglish.Attr(name) for name in _names(value))
-
-
-dataclass_traverser = daglish.NodeTraverser(
-    flatten=_flatten_dataclass,
-    unflatten=_unflatten_dataclass,
-    path_elements=_path_elements_fn,
-)
-
-
-class DataclassTraverserRegistry(daglish.NodeTraverserRegistry):
-
-  def find_node_traverser(
-      self, node_type: Type[Any]
-  ) -> Optional[daglish.NodeTraverser]:
-    traverser = self.fallback_registry.find_node_traverser(node_type)
-    if traverser is None and dataclasses.is_dataclass(node_type):
-      traverser = dataclass_traverser
-    return traverser
-
-
-dataclass_registry = DataclassTraverserRegistry(use_fallback=True)
 
 
 class PathTest(parameterized.TestCase):
@@ -512,13 +471,17 @@ class IterateTest(absltest.TestCase):
   def test_walk_dataclass_dataclass_aware_traverser(self):
     config = {"dataclass": Foo(3, fdl.Config(sample_fn, "arg"))}
     self.assertEqual(
-        _iterate_path_strings(config, registry=dataclass_registry), [
+        _iterate_path_strings(
+            config, registry=fdl_dc.daglish_dataclass_registry
+        ),
+        [
             (config, ""),
             (config["dataclass"], "['dataclass']"),
             (3, "['dataclass'].bar"),
             (fdl.Config(sample_fn, "arg"), "['dataclass'].baz"),
             ("arg", "['dataclass'].baz.arg"),
-        ])
+        ],
+    )
 
 
 class MemoizedTraversalTest(absltest.TestCase):
@@ -583,7 +546,9 @@ class MemoizedTraversalTest(absltest.TestCase):
       else:
         return "leaf value"
 
-    traverser = daglish.MemoizedTraversal(traverse, config, dataclass_registry)
+    traverser = daglish.MemoizedTraversal(
+        traverse, config, fdl_dc.daglish_dataclass_registry
+    )
     result = traverse(config, traverser.initial_state())
     self.assertDictEqual(
         result,

@@ -18,13 +18,15 @@
 import dataclasses
 import functools
 import types
-from typing import Any, Dict, Callable
+from typing import Any, Callable, Dict
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import daglish
 from fiddle._src.experimental import auto_config
-from fiddle._src.experimental import dataclasses as fdl_dc
 from fiddle._src.testing import test_util
+from fiddle._src.testing.example import fake_encoder_decoder
+from fiddle.experimental import dataclasses as fdl_dc
 
 
 class SampleTag(fdl.Tag):
@@ -158,6 +160,17 @@ class D2:
 @dataclasses.dataclass
 class E:
   d_factory: Callable[..., D2] = fdl_dc.field(default_factory=D2.factory)
+
+
+@dataclasses.dataclass
+class PostInitDataclass:
+  a: int = 1
+  b: int = 2
+  c: int = dataclasses.field(init=False)
+
+  def __post_init__(self):
+    self.b += 1
+    self.c = self.a + 30
 
 
 class DataclassesTest(test_util.TestCase):
@@ -368,6 +381,54 @@ class DataclassesTest(test_util.TestCase):
       cfg = fdl.Config(ParentWithATaggedTypeChild)
       fdl.update_callable(cfg, ParentWithOptionalChild)
       self.assertEqual(fdl.get_callable(cfg.child), ATaggedType)
+
+  def test_convert_dataclasses_to_configs(self):
+    model = fake_encoder_decoder.fixture()
+    config = fdl_dc.convert_dataclasses_to_configs(model)
+    self.assertIsInstance(model, fake_encoder_decoder.FakeEncoderDecoder)
+    self.assertIsInstance(config, fdl.Config)
+    self.assertEqual(
+        fdl.get_callable(config), fake_encoder_decoder.FakeEncoderDecoder
+    )
+    self.assertIsInstance(config.encoder.mlp, fdl.Config)
+    self.assertEqual(
+        fdl.get_callable(config.encoder.mlp), fake_encoder_decoder.Mlp
+    )
+    self.assertEqual(model, fdl.build(config))
+
+  def test_post_init_dataclass_conversion(self):
+    dc = PostInitDataclass()
+    with self.assertRaisesRegex(ValueError, 'Dataclasses.*__post_init__.*'):
+      fdl_dc.convert_dataclasses_to_configs(dc)
+
+    config = fdl_dc.convert_dataclasses_to_configs(dc, allow_post_init=True)
+    self.assertNotEqual(dc, fdl.build(config))
+
+  def test_convert_reference_to_dataclass(self):
+    value = {'foo': PostInitDataclass}
+    self.assertEqual(fdl_dc.convert_dataclasses_to_configs(value), value)
+
+  def test_traverse_dataclass_values(self):
+    dc = fake_encoder_decoder.Mlp(
+        dtype=32, use_bias=False, sharding_axes=['foo', 'bar']
+    )
+
+    def traverse(value, state: daglish.State):
+      if isinstance(value, int) and not isinstance(value, bool):
+        return {'value': value}
+      else:
+        return state.map_children(value)
+
+    state = daglish.MemoizedTraversal(
+        traverse, dc, fdl_dc.daglish_dataclass_registry
+    ).initial_state()
+    transformed = traverse(dc, state)
+    self.assertEqual(
+        transformed,
+        fake_encoder_decoder.Mlp(
+            dtype={'value': 32}, use_bias=False, sharding_axes=['foo', 'bar']
+        ),
+    )
 
 
 if __name__ == '__main__':
