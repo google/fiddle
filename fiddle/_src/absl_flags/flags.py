@@ -139,8 +139,11 @@ _FDL_CONFIG = flags.DEFINE_string(
 _FDL_CONFIG_FILE = epath.DEFINE_path(
     'fdl_config_file',
     default=None,
-    help='The path to a file containing a serialized base Fiddle config in '
-    'JSON format.')
+    help=(
+        'The path to a file containing a serialized base Fiddle config in '
+        'JSON format. '
+    ),
+)
 _FIDDLER = flags.DEFINE_multi_string(
     'fiddler',
     default=[],
@@ -535,14 +538,22 @@ def _print_help(module, allow_imports):
 
   if allow_imports:
     _print_stderr()
-    _print_stderr('Base configs and fiddlers may be specified using '
-                  'fully-qualified dotted names.')
+    _print_stderr(
+        'Base configs and fiddlers may be specified using '
+        'fully-qualified dotted names.'
+    )
+
+
+def fdl_flags_supplied() -> bool:
+  """Returns True if if required Fiddle flags are defined."""
+  config_defined = bool(_FDL_CONFIG.value or _FDL_CONFIG_FILE.value)
+  return config_defined or _FDL_HELP.value
 
 
 def create_buildable_from_flags(
     module: Optional[Any],
     allow_imports=False,
-    pyref_policy: Optional[serialization.PyrefPolicy] = None
+    pyref_policy: Optional[serialization.PyrefPolicy] = None,
 ) -> config.Buildable:
   """Returns a fdl.Buildable based on standardized flags.
 
