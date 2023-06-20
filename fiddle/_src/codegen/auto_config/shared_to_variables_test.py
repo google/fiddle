@@ -14,8 +14,10 @@
 # limitations under the License.
 
 """Tests for shared_to_variables."""
-
+import dataclasses
+from typing import Any
 from absl.testing import absltest
+import fiddle as fdl
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_printer
@@ -23,6 +25,12 @@ from fiddle._src.codegen.auto_config import make_symbolic_references
 from fiddle._src.codegen.auto_config import shared_to_variables
 from fiddle._src.codegen.auto_config import test_fixtures
 from fiddle._src.testing.example import fake_encoder_decoder
+
+
+@dataclasses.dataclass(frozen=True)
+class SampleClass:
+  x: Any
+  y: Any
 
 
 class SharedToVariablesTest(absltest.TestCase):
@@ -48,6 +56,17 @@ class SharedToVariablesTest(absltest.TestCase):
     task = init_task.init_task(fake_encoder_decoder.fixture.as_buildable())
     shared_to_variables.move_shared_nodes_to_variables(task)
     self.assertLen(task.top_level_call.fn.variables, 1)
+
+  def test_shared_node_w_one_attr_in_path(self):
+    d = {
+        "map_1d": (("replica", "data"),),
+        "map_2d": (("replica", "data"), None),
+        "map_3d": (("replica", "data"), None, None),
+        "map_4d": (("replica", "data"), None, None, None),
+    }
+    config = fdl.Config(SampleClass, d, 2)
+    task = init_task.init_task(config)
+    shared_to_variables.move_shared_nodes_to_variables(task)
 
   def test_avoids_name_collisions(self):
     task = test_fixtures.unprocessed_shared_config()

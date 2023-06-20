@@ -25,18 +25,14 @@ from fiddle._src.codegen.auto_config import naming
 from fiddle._src.codegen.auto_config import parents_first_traversal
 
 
-def _strip_paths(
-    paths: List[daglish.Path], depth: int = 1
-) -> List[daglish.Path]:
+def _strip_paths(paths: List[daglish.Path]) -> List[daglish.Path]:
   """Strips prefixes from paths."""
   seen = set()
   cleaned_paths = []
   for path in paths:
-    if len(path) > depth:
-      path = path[depth:]
-      if path not in seen:
-        seen.add(path)
-        cleaned_paths.append(path)
+    if path not in seen:
+      seen.add(path)
+      cleaned_paths.append(path)
   return cleaned_paths
 
 
