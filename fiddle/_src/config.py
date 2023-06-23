@@ -26,7 +26,7 @@ import inspect
 import itertools
 import logging
 import types
-from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, List, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
 
 from fiddle._src import arg_factory
 from fiddle._src import daglish
@@ -110,6 +110,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   __arguments__: Dict[str, Any]
   __argument_history__: history.History
   __argument_tags__: Dict[str, Set[tag_type.TagType]]
+  __positional_arg_names__: List[str]
+  __has_var_positional__: bool
   _has_var_keyword: bool
 
   def __init__(
@@ -132,16 +134,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__argument_history__', arg_history)
     super().__setattr__('__argument_tags__', collections.defaultdict(set))
 
+    positional_arguments = ()
     arguments = signature.bind_partial(*args, **kwargs).arguments
     for name in list(arguments.keys()):  # Make a copy in case we mutate.
       param = signature.parameters[name]
       if param.kind == param.VAR_POSITIONAL:
-        # TODO(b/197367863): Add *args support.
-        err_msg = (
-            'Variable positional arguments (aka `*args`) not supported. '
-            f'Found param `{name}` in `{fn_or_cls}`.'
-        )
-        raise NotImplementedError(err_msg)
+        positional_arguments = arguments.pop(param.name)
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
 
@@ -150,6 +148,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       _add_dataclass_tags(self, fields)
       _expand_dataclass_default_factories(self, fields, arguments)
 
+    for i, value in enumerate(positional_arguments):
+      self[i] = value
     for name, value in arguments.items():
       setattr(self, name, value)
 
@@ -178,10 +178,25 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__arguments__', {})
     signature = signatures.get_signature(fn_or_cls)
     super().__setattr__('__signature__', signature)
-    has_var_keyword = any(
-        param.kind == param.VAR_KEYWORD
-        for param in signature.parameters.values()
-    )
+
+    # If *args exists, we must pass things before it in positional format. This
+    # list tracks those arguments.
+    maybe_positional_args = []
+
+    positional_only_args = []
+    has_var_positional, has_var_keyword = False, False
+    for param in signature.parameters.values():
+      if param.kind == param.VAR_POSITIONAL:
+        has_var_positional = True
+        positional_only_args.extend(maybe_positional_args)
+      elif param.kind == param.VAR_KEYWORD:
+        has_var_keyword = True
+      elif param.kind == param.POSITIONAL_ONLY:
+        positional_only_args.append(param.name)
+      elif param.kind == param.POSITIONAL_OR_KEYWORD:
+        maybe_positional_args.append(param.name)
+    super().__setattr__('__positional_arg_names__', positional_only_args)
+    super().__setattr__('__has_var_positional__', has_var_positional)
     super().__setattr__('_has_var_keyword', has_var_keyword)
     return signature
 
@@ -299,6 +314,25 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
             f"{', '.join(valid_parameter_names)}."
         )
       raise TypeError(err_msg)
+
+  def __setitem__(self, key: Any, value: Any):
+    if not isinstance(key, int):
+      raise TypeError(
+          'Setting arguments by index is only supported for variadic '
+          "arguments (*args), like my_config[4] = 'foo'."
+      )
+    if not self.__has_var_positional__:
+      raise TypeError(
+          "This function doesn't have variadic positional arguments (*args). "
+          'Please set other (including positional-only) arguments by name.'
+      )
+
+    # In the future, use a specialized history-tracking list.
+    args = self.__arguments__.setdefault('__args__', [])
+    if key == len(args):
+      args.append(value)
+    else:
+      args[key] = value
 
   def __setattr__(self, name: str, value: Any):
     """Sets parameter ``name`` to ``value``."""
