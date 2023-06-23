@@ -15,6 +15,7 @@
 
 """Tests for auto_config."""
 
+import ast
 import copy
 import dataclasses
 import functools
@@ -24,7 +25,6 @@ from typing import Any
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
 import fiddle as fdl
 from fiddle import arg_factory
 from fiddle._src.experimental import auto_config
@@ -93,6 +93,90 @@ def pass_through(arg):
 
 def _line_number():
   return sys._getframe(1).f_lineno
+
+
+class AutoConfigTransformerTest(parameterized.TestCase, test_util.TestCase):
+
+  @parameterized.parameters(
+      (
+          'a.b = x, y',
+          "__auto_config_attr_save_handler__(a, 'b', (x, y))",
+      ),
+      (
+          'x.y.z = v',
+          (
+              '__auto_config_attr_save_handler__('
+              "__auto_config_attr_load_handler__(x, 'y'), 'z', v)"
+          ),
+      ),
+      (
+          'a.b.c = c.d',
+          (
+              '__auto_config_attr_save_handler__('
+              "__auto_config_attr_load_handler__(a, 'b'), 'c', "
+              "__auto_config_attr_load_handler__(c, 'd'))"
+          ),
+      ),
+      (
+          'a, b.c = v',
+          (
+              '(a, _attr_save_temp_0) = v\n'
+              "__auto_config_attr_save_handler__(b, 'c', _attr_save_temp_0)"
+          ),
+      ),
+      (
+          'a = b = c',
+          'a = b = c',
+      ),
+      (
+          'a, b.c = x.y.z = foo.bar',
+          (
+              '(a, _attr_save_temp_0) = _attr_save_temp_1 = '
+              "__auto_config_attr_load_handler__(foo, 'bar')\n"
+              "__auto_config_attr_save_handler__(b, 'c', _attr_save_temp_0)\n"
+              '__auto_config_attr_save_handler__('
+              "__auto_config_attr_load_handler__(x, 'y'), "
+              "'z', _attr_save_temp_1)"
+          ),
+      ),
+      # Test transformations when Assign.value is a function call.
+      # This test will ensure calls to ``functools.partial`` are replaced by
+      # ``fdl.Partial`` properly.
+      (
+          'a.b.c = functools.partial(foo, x.y)',
+          (
+              '__auto_config_attr_save_handler__('
+              "__auto_config_attr_load_handler__(a, 'b'), 'c', "
+              '__auto_config_call_handler__(functools.partial, foo, '
+              "__auto_config_attr_load_handler__(x, 'y')))"
+          ),
+      ),
+      (
+          'a.b.c = bar = functools.partial(foo, x.y)',
+          (
+              '_attr_save_temp_0 = bar = __auto_config_call_handler__('
+              'functools.partial, foo, __auto_config_attr_load_handler__('
+              "x, 'y'))\n"
+              '__auto_config_attr_save_handler__('
+              "__auto_config_attr_load_handler__(a, 'b'), 'c', "
+              '_attr_save_temp_0)'
+          ),
+      ),
+      ('a.b[1] = 123', "__auto_config_attr_load_handler__(a, 'b')[1] = 123"),
+      (
+          # TODO(b/288479702): Add validation for ast.Starred pattern.
+          'a, *a.b = foo.bar',
+          "(a, *a.b) = __auto_config_attr_load_handler__(foo, 'bar')",
+      ),
+  )
+  def test_attribute_save(self, source, expected):
+    version = sys.version_info
+    # ast.unparse is available only after Python 3.9
+    if version.major >= 3 and version.minor >= 9:
+      transfomer = auto_config._AutoConfigNodeTransformer(source, 'dummy.py', 0)
+      node = ast.parse(source)
+      node = transfomer.visit(node)
+      self.assertEqual(ast.unparse(node), expected)
 
 
 class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
@@ -964,17 +1048,17 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     cfg = make_dict.as_buildable([])
     self.assertEqual(fdl.build(cfg), {})
 
-  def test_illegal_attribute_access(self):
+  def test_non_dataclass_attribute_load(self):
     @auto_config.auto_config
     def fixture():
       foo = NonDataclassSampleClass(1, 2)
       _ = foo.arg1
       return foo
 
-    with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+    with self.assertRaisesRegex(ValueError, 'Cannot load attribute'):
       fixture.as_buildable()
 
-  def test_dataclass_attribute_access(self):
+  def test_dataclass_attribute_load(self):
     def fixture():
       foo = MutableSampleClass(1, 2)
       _ = foo.arg1
@@ -988,13 +1072,13 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     )
 
     with self.subTest('disable'):
-      with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+      with self.assertRaisesRegex(ValueError, 'Cannot load attribute'):
         fixture_disable.as_buildable()
 
     with self.subTest('enable'):
       fixture_enable.as_buildable()
 
-  def test_nested_attribute_access(self):
+  def test_nested_attribute_load(self):
     @auto_config.auto_config
     def fixture():
       foo = NonDataclassSampleClass(1, 'ABC')
@@ -1005,8 +1089,62 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       return NonDataclassSampleClass(2, lower)
 
     with self.subTest('disable'):
-      with self.assertRaisesRegex(ValueError, 'Cannot access attribute'):
+      with self.assertRaisesRegex(ValueError, 'Cannot load attribute'):
         fixture.as_buildable()
+
+  def test_non_dataclass_attribute_save(self):
+    @auto_config.auto_config
+    def fixture():
+      foo = NonDataclassSampleClass(1, 2)
+      foo.arg1 = 2
+      return foo
+
+    with self.assertRaisesRegex(ValueError, 'Cannot save attribute'):
+      fixture.as_buildable()
+
+  def test_dataclass_attribute_save(self):
+    def fixture():
+      foo = MutableSampleClass(1, 2)
+      foo.arg1 = 3
+      return foo
+
+    fixture_disable = auto_config.auto_config(
+        fixture, experimental_allow_dataclass_attribute_access=False
+    )
+    fixture_enable = auto_config.auto_config(
+        fixture, experimental_allow_dataclass_attribute_access=True
+    )
+
+    with self.subTest('disable'):
+      with self.assertRaisesRegex(ValueError, 'Cannot save attribute'):
+        fixture_disable.as_buildable()
+
+    with self.subTest('enable'):
+      config = fixture_enable.as_buildable()
+      self.assertEqual(config.arg1, 3)
+      self.assertEqual(config.arg2, 2)
+
+  def test_nested_attribute_save(self):
+    @auto_config.auto_config(experimental_allow_dataclass_attribute_access=True)
+    def fixture():
+      foo = NonDataclassSampleClass(0, 'foo')
+      bar = MutableSampleClass(foo, 'bar')
+      bar.arg1.arg2 = 'baz'
+      return NonDataclassSampleClass(0, bar)
+
+    with self.assertRaisesRegex(ValueError, 'Cannot save attribute'):
+      fixture.as_buildable()
+
+  def test_nested_dataclass_attribute_save(self):
+    @auto_config.auto_config(experimental_allow_dataclass_attribute_access=True)
+    def fixture():
+      foo = MutableSampleClass(0, 'foo')
+      bar = MutableSampleClass(foo, 'bar')
+      bar.arg1.arg2 = 'baz'
+      return MutableSampleClass(0, bar)
+
+    config = fixture.as_buildable()
+    self.assertEqual(config.arg2.arg1.arg2, 'baz')
 
 
 class AutoUnconfigTest(absltest.TestCase):

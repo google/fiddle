@@ -42,6 +42,8 @@ import libcst as cst
 
 _CALL_HANDLER_ID = '__auto_config_call_handler__'
 _ATTR_LOAD_HANDLER_ID = '__auto_config_attr_load_handler__'
+_ATTR_SAVE_HANDLER_ID = '__auto_config_attr_save_handler__'
+_ATTR_SAVE_TEMP_VAR_ID = '_attr_save_temp'
 _CLOSURE_WRAPPER_ID = '__auto_config_closure_wrapper__'
 _EMPTY_ARGUMENTS = ast.arguments(
     posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[])
@@ -134,6 +136,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     self._allow_control_flow = allow_control_flow
 
     self._function_def_depth = 0
+    self._temp_var_count = 0
 
   def _location_for(self, node: ast.AST):
     line_number = self._line_number + node.lineno - 1
@@ -203,6 +206,80 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
           keywords=[],
       )
     return self.generic_visit(node)
+
+  def visit_Assign(self, node: ast.Assign):
+    """Handler assignment transformation."""
+
+    def make_expr_call(obj, attr, value):
+      if isinstance(obj, ast.Attribute):
+        obj = self.visit_Attribute(obj)
+      return ast.Expr(
+          ast.Call(
+              func=ast.Name(id=_ATTR_SAVE_HANDLER_ID, ctx=ast.Load()),
+              args=[obj, ast.Str(s=attr), value],
+              keywords=[],
+          )
+      )
+
+    node.value = self.visit(node.value)
+    if len(node.targets) == 1 and isinstance(node.targets[0], ast.Attribute):
+      return make_expr_call(
+          node.targets[0].value, node.targets[0].attr, node.value
+      )
+
+    # Avoid creating temp var for single target ast.Assign expression,
+    # like `a.b = c.d.e`, to improve simplicity.
+    # For multiple targets ast.Assign expression, temporary variables will be
+    # created to facilitate set attribute validation.
+    # For example, `a.b = c.d = foo` will be transformed into:
+    # ```
+    # temp_var_0 = temp_var_1 = foo
+    # __auto_config_attr_save_handler__(a, b, temp_var_0)
+    # __auto_config_attr_save_handler__(c, d, temp_var_1)
+    # ```
+
+    def make_temp_var():
+      temp_var = ast.Name(
+          id=f'{_ATTR_SAVE_TEMP_VAR_ID}_{self._temp_var_count}',
+          ctx=ast.Store(),
+      )
+      return temp_var
+
+    transformed_nodes = []
+    for target in node.targets:
+      if isinstance(target, ast.Tuple) or isinstance(target, ast.List):
+        new_elts = []
+        for elt in target.elts:
+          if isinstance(elt, ast.Attribute):
+            temp_var = make_temp_var()
+            new_elts.append(temp_var)
+            expr_node = make_expr_call(elt.value, elt.attr, temp_var)
+            transformed_nodes.append(expr_node)
+            self._temp_var_count += 1
+          else:
+            new_elts.append(elt)
+        target.elts = new_elts
+      elif isinstance(target, ast.Attribute):
+        temp_var = make_temp_var()
+        expr_node = make_expr_call(target.value, target.attr, temp_var)
+        transformed_nodes.append(expr_node)
+        node.targets[node.targets.index(target)] = temp_var
+        self._temp_var_count += 1
+      elif isinstance(target, ast.Subscript):
+        target.value = self.visit(target.value)
+        target.slice = self.visit(target.slice)
+      elif isinstance(target, ast.Starred):
+        # TODO(b/288479702): Add validation when target is ast.Starred.
+        pass
+      elif isinstance(target, ast.Name):
+        pass
+      else:
+        raise NotImplementedError(
+            f'Cannot handle Assign statement with {target} as target.'
+        )
+
+    transformed_nodes.insert(0, node)
+    return transformed_nodes
 
   def visit_For(self, node: ast.For):
     return self._handle_control_flow(node, activatable=True)
@@ -340,7 +417,7 @@ def _wrap_ast_for_fn_with_closure_vars(
   closure_var_definitions = [
       ast.Assign(targets=[ast_name(var_name)], value=ast_none)
       for var_name in fn.__code__.co_freevars
-      + (_CALL_HANDLER_ID, _ATTR_LOAD_HANDLER_ID)
+      + (_CALL_HANDLER_ID, _ATTR_LOAD_HANDLER_ID, _ATTR_SAVE_HANDLER_ID)
   ]
 
   wrapper_module = ast.Module(
@@ -655,18 +732,31 @@ def auto_config(
 
     return experimental_config_cls(fn_or_cls, *args, **kwargs)
 
-  def auto_config_attr_access_handler(value, attr, allow_dataclass):
+  def auto_config_attr_load_handler(value, attr, allow_dataclass=True):
     """Handles attribute access in auto_config'ed functions."""
     if isinstance(value, config.Buildable):
       fn_or_cls = value.__fn_or_cls__
       if allow_dataclass and dataclasses.is_dataclass(fn_or_cls):
         return getattr(value, attr)
       raise ValueError(
-          f'Cannot access attribute {attr!r} on object of type {type(value)}'
+          f'Cannot load attribute {attr!r} on object of type {type(value)}'
           ' within auto_config, as this could lead to inconsistent behavior'
           ' between the Python and as_buildable code paths.'
       )
     return getattr(value, attr)
+
+  def auto_config_attr_save_handler(obj, attr, value, allow_dataclass=True):
+    """Handles saving attributes in auto_config'ed functions."""
+    if isinstance(obj, config.Buildable):
+      fn_or_cls = obj.__fn_or_cls__
+      if allow_dataclass and dataclasses.is_dataclass(fn_or_cls):
+        setattr(obj, attr, value)
+        return
+      raise ValueError(
+          f'Cannot save attribute {attr!r} on object of type {type(obj)}'
+          ' within auto_config, as this could lead to inconsistent behavior'
+          ' between the Python and as_buildable code paths.'
+      )
 
   def make_auto_config(fn):
     if not isinstance(fn, (types.FunctionType, classmethod, staticmethod)):
@@ -713,21 +803,26 @@ def auto_config(
     code = compile(node, inspect.getsourcefile(fn), 'exec')
     code = _unwrap_code_for_fn(code, fn)
 
-    # Insert auto_config_attr_access_handler/auto_config_call_handler into
-    # `fn.__closure__` at the index where _ATTR_LOAD_HANDLER_ID/_CALL_HANDLER_ID
+    # Insert auto_config_attr_load_handler, auto_config_attr_save_handler,
+    # auto_config_call_handler into `fn.__closure__` at the index where
+    # _ATTR_LOAD_HANDLER_ID, _ATTR_SAVE_HANDLER_ID, _CALL_HANDLER_ID
     # occur in the freevars. Both of them were added to freevars by
     # _wrap_ast_for_fn_with_closure_vars.
     closure = list(fn.__closure__ or ())
     indexed_handlers = []
-    if _ATTR_LOAD_HANDLER_ID in code.co_freevars:
-      handler_idx = code.co_freevars.index(_ATTR_LOAD_HANDLER_ID)
-      handler = _make_closure_cell(
-          functools.partial(
-              auto_config_attr_access_handler,
-              allow_dataclass=experimental_allow_dataclass_attribute_access,
-          )
-      )
-      indexed_handlers.append((handler_idx, handler))
+    for handler_id, handler in (
+        (_ATTR_LOAD_HANDLER_ID, auto_config_attr_load_handler),
+        (_ATTR_SAVE_HANDLER_ID, auto_config_attr_save_handler),
+    ):
+      if handler_id in code.co_freevars:
+        handler_idx = code.co_freevars.index(handler_id)
+        handler = _make_closure_cell(
+            functools.partial(
+                handler,
+                allow_dataclass=experimental_allow_dataclass_attribute_access,
+            )
+        )
+        indexed_handlers.append((handler_idx, handler))
     if _CALL_HANDLER_ID in code.co_freevars:
       handler_idx = code.co_freevars.index(_CALL_HANDLER_ID)
       handler = _make_closure_cell(auto_config_call_handler)
