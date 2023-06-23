@@ -224,6 +224,25 @@ class ConfigTest(parameterized.TestCase):
         'kwargs': 'kwarg_called_kwarg'
     })
 
+  def test_var_arg_config(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    self.assertEqual(
+        fdl.ordered_arguments(fn_config),
+        {
+            'arg1': 'foo',
+            '__args__': ['bar', 'baz'],
+        },
+    )
+    fn_args = fdl.build(fn_config)
+    self.assertEqual(
+        fn_args,
+        {
+            'arg1': 'foo',
+            'args': ('bar', 'baz'),
+            'kwarg1': None,
+        },
+    )
+
   def test_config_for_dicts(self):
     dict_config = fdl.Config(dict, a=1, b=2)
     dict_config.c = 3
@@ -831,12 +850,6 @@ class ConfigTest(parameterized.TestCase):
     expected_msg = (r'Variadic arguments \(e.g. \*args\) are not supported\.')
     with self.assertRaisesRegex(TypeError, expected_msg):
       fn_config.args = (1, 2, 3)
-
-  def test_unsupported_var_args_error(self):
-    expected_msg = (r'Variable positional arguments \(aka `\*args`\) not '
-                    r'supported\.')
-    with self.assertRaisesRegex(NotImplementedError, expected_msg):
-      fdl.Config(fn_with_var_args, 1, 2, 3)
 
   def test_build_inside_build(self):
 
