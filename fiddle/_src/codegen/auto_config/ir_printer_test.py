@@ -73,6 +73,20 @@ class IrPrinterTest(absltest.TestCase):
     attr = code_ir.AttributeExpression(self_var, "foo")
     self.assertEqual(ir_printer.format_expr(attr), "self.foo")
 
+  def test_format_calls(self):
+    call = code_ir.SymbolOrFixtureCall(
+        symbol_expression=code_ir.Name("foo"),
+        positional_arg_expressions=[code_ir.Name("bar")],
+        arg_expressions={"baz": code_ir.Name("qux")},
+    )
+    self.assertEqual(
+        ir_printer.format_expr(call), 'call:<foo(*[[bar]], **{"baz": qux})>'
+    )
+
+  def test_format_module_reference(self):
+    module_reference = code_ir.ModuleReference(code_ir.Name("foo"))
+    self.assertEqual(ir_printer.format_expr(module_reference), "foo")
+
   def test_format_simple_ir(self):
     task = test_fixtures.simple_ir()
     code = "\n".join(ir_printer.format_fn(task.top_level_call.fn))
