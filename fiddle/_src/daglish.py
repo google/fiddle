@@ -37,6 +37,15 @@ class PathElement(metaclass=abc.ABCMeta):
   def follow(self, container) -> Any:
     """Returns the element of `container` specified by this path element."""
 
+  def __lt__(self, other: PathElement) -> bool:
+    """Define the less than relation for PathElement."""
+    if type(self) is not type(other):
+      return str(type(self)) < str(type(other))
+    else:
+      raise NotImplementedError(
+          "__lt__ relation should be handled by subclasses of PathElement."
+      )
+
 
 @dataclasses.dataclass(frozen=True)
 class Index(PathElement):
@@ -49,6 +58,12 @@ class Index(PathElement):
 
   def follow(self, container: Union[List[Any], Tuple[Any, ...]]) -> Any:
     return container[self.index]
+
+  def __lt__(self, other: PathElement) -> bool:
+    if type(self) is type(other):
+      return self.index < other.index
+    else:
+      return super().__lt__(other)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -63,6 +78,12 @@ class Key(PathElement):
   def follow(self, container: Dict[Any, Any]) -> Any:
     return container[self.key]
 
+  def __lt__(self, other: PathElement) -> bool:
+    if type(self) is type(other):
+      return self.key < other.key
+    else:
+      return super().__lt__(other)
+
 
 @dataclasses.dataclass(frozen=True)
 class Attr(PathElement):
@@ -75,6 +96,12 @@ class Attr(PathElement):
 
   def follow(self, container: Any) -> Any:
     return getattr(container, self.name)
+
+  def __lt__(self, other: PathElement) -> bool:
+    if type(self) is type(other):
+      return self.name < other.name
+    else:
+      return super().__lt__(other)
 
 
 class BuildableAttr(Attr):
@@ -727,6 +754,7 @@ def collect_paths_by_id(
 def iterate(
     value: Any,
     memoized: bool = True,
+    memoize_internables: bool = True,
     registry: NodeTraverserRegistry = _default_traverser_registry,
 ) -> Iterable[Tuple[Any, Path]]:
   """Iterates through values in a DAG.
@@ -743,6 +771,8 @@ def iterate(
     memoized: Whether to yield shared nodes only once. Defaults to True. With
       this setting, you will only see one path (which is somewhat arbitrary) to
       shared nodes.
+    memoize_internables: Whether to memoize Python internable values. Check the
+      docstring of MemoizedTraversal for details.
     registry: Override to the NodeTraverserRegistry; this is a low-level setting
       for traversing into custom data types.
 
@@ -756,6 +786,13 @@ def iterate(
       for sub_result in state.flattened_map_children(node).values:
         yield from sub_result
 
-  traversal_cls = MemoizedTraversal if memoized else BasicTraversal
-  traversal: Traversal = traversal_cls(_traverse, value, registry=registry)
+  if memoized:
+    traversal = MemoizedTraversal(
+        _traverse,
+        value,
+        registry=registry,
+        memoize_internables=memoize_internables,
+    )
+  else:
+    traversal = BasicTraversal(_traverse, value, registry=registry)
   return _traverse(value, traversal.initial_state())
