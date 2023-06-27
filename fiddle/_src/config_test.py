@@ -517,6 +517,24 @@ class ConfigTest(parameterized.TestCase):
     self.assertIsInstance(value1, ClassWithDisabledEquality)
     self.assertIsInstance(value2, ClassWithDisabledEquality)
 
+  def test_config_dag_structure_comparison(self):
+    a = fdl.Config(SampleClass, 1, 2)
+    b = fdl.Config(SampleClass, 1, 2)
+    with self.subTest('python_list'):
+      x = [a, a]
+      y = [a, b]
+      self.assertEqual(x, y)
+
+    with self.subTest('node_sharing_detection'):
+      x = fdl.Config(SampleClass, a, b)
+      y = fdl.Config(SampleClass, a, a)
+      self.assertNotEqual(x, y)
+
+    with self.subTest('node_sharing_difference'):
+      x = fdl.Config(SampleClass, a, b, b)
+      y = fdl.Config(SampleClass, a, a, b)
+      self.assertNotEqual(x, y)
+
   def test_unsetting_argument(self):
     fn_config = fdl.Config(basic_fn)
     fn_config.arg1 = 3
