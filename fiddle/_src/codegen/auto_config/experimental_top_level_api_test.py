@@ -17,6 +17,7 @@ import dataclasses
 import importlib
 import os
 import random
+import re
 import sys
 import types
 from typing import Any
@@ -153,17 +154,51 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
     ):
       experimental_top_level_api.auto_config_codegen(config)
 
-  def test_sub_fixtures_with_shared_nodes(self):
+  @parameterized.named_parameters(
+      {"testcase_name": "basic", "api": "highlevel"},
+      {"testcase_name": "midlevel", "api": "midlevel"},
+  )
+  def test_sub_fixtures_with_shared_nodes(self, api: str):
     config = fake_encoder_decoder.fixture.as_buildable()
     for complexity in [None, 2, 3]:
       with self.subTest(f"max_complexity_as_{complexity}"):
-        code = experimental_top_level_api.auto_config_codegen(
-            config,
-            sub_fixtures={
-                "fake_encoder": config.encoder,
-                "fake_decoder": config.decoder,
-            },
-            max_expression_complexity=complexity,
+        # Run codegen with both APIs.
+        if api == "highlevel":
+          code = experimental_top_level_api.auto_config_codegen(
+              config,
+              sub_fixtures={
+                  "fake_encoder": config.encoder,
+                  "fake_decoder": config.decoder,
+              },
+              max_expression_complexity=complexity,
+          )
+        else:
+          assert api == "midlevel"
+          code_generator = fdl.build(
+              experimental_top_level_api.code_generator.as_buildable(
+                  max_expression_complexity=complexity
+              )
+          )
+          code = code_generator(
+              config,
+              sub_fixtures={
+                  "fake_encoder": config.encoder,
+                  "fake_decoder": config.decoder,
+              },
+          ).code
+
+        # Choose an arbitrary split point and check that there are more lines
+        # when we add more intermediate variables. This is just to ensure that
+        # the MoveComplexNodesToVariables pass is run.
+        num_lines = len(code.splitlines())
+        if complexity is None:
+          self.assertLessEqual(num_lines, 25)
+        else:
+          self.assertGreater(num_lines, 25)
+
+        matches = re.findall(r"def\ (?P<name>[\w_]+)\(", code)
+        self.assertEqual(
+            matches, ["config_fixture", "fake_encoder", "fake_decoder"]
         )
         module = self._load_code_as_module(code)
         generated_config = module.config_fixture.as_buildable()

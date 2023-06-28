@@ -20,3 +20,14 @@ Do NOT depend on these interfaces for non-experimental code.
 
 # pylint: disable=unused-import
 from fiddle._src.codegen.auto_config.experimental_top_level_api import auto_config_codegen
+from fiddle._src.codegen.auto_config.experimental_top_level_api import code_generator
+from fiddle._src.codegen.auto_config.experimental_top_level_api import CodegenPass
+from fiddle._src.codegen.auto_config.experimental_top_level_api import ImportSymbols
+from fiddle._src.codegen.auto_config.experimental_top_level_api import InitTask
+from fiddle._src.codegen.auto_config.experimental_top_level_api import IrToCst
+from fiddle._src.codegen.auto_config.experimental_top_level_api import LowerArgFactories
+from fiddle._src.codegen.auto_config.experimental_top_level_api import MakeSymbolicReferences
+from fiddle._src.codegen.auto_config.experimental_top_level_api import MoveComplexNodesToVariables
+from fiddle._src.codegen.auto_config.experimental_top_level_api import MoveSharedNodesToVariables
+from fiddle._src.codegen.auto_config.experimental_top_level_api import MutationCodegenPass
+from fiddle._src.codegen.auto_config.experimental_top_level_api import TransformSubFixtures
