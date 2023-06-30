@@ -20,7 +20,7 @@ from typing import List
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle._src.codegen import codegen
+from fiddle._src.codegen import legacy_codegen
 from fiddle._src.codegen import test_util
 from fiddle._src.codegen.test_submodule import test_util as submodule_test_util
 
@@ -106,15 +106,15 @@ if __name__ == "__main__":
   this_module_import = ""
   this_module_prefix = ""
 else:
-  this_module_import = "from fiddle._src.codegen import codegen_test"
-  this_module_prefix = "codegen_test."
+  this_module_import = "from fiddle._src.codegen import legacy_codegen_test"
+  this_module_prefix = "legacy_codegen_test."
 
 
 class CodegenTest(absltest.TestCase):
 
   def test_codegen_dot_syntax_shared(self):
     cfg = shared_config()
-    result = codegen.codegen_dot_syntax(cfg)
+    result = legacy_codegen.codegen_dot_syntax(cfg)
     expected = f"""
 import fiddle as fdl
 {this_module_import}
@@ -141,7 +141,7 @@ def build_config():
 
   def test_codegen_multi_shared(self):
     cfg = multi_shared_config()
-    result = codegen.codegen_dot_syntax(cfg)
+    result = legacy_codegen.codegen_dot_syntax(cfg)
     expected = f"""
 import fiddle as fdl
 {this_module_import}
@@ -174,7 +174,7 @@ def build_config():
   def test_codegen_import_and_exec(self):
     cfg = fdl.Config(
         test_util.Foo, a=1, leaves=[fdl.Config(test_util.Foo, a=2)])
-    result = codegen.codegen_dot_syntax(cfg)
+    result = legacy_codegen.codegen_dot_syntax(cfg)
     expected = """
 import fiddle as fdl
 from fiddle._src.codegen import test_util
@@ -208,7 +208,7 @@ def build_config():
 
   def test_codegen_unshared_child_of_shared(self):
     cfg = unshared_child_of_shared()
-    result = codegen.codegen_dot_syntax(cfg)
+    result = legacy_codegen.codegen_dot_syntax(cfg)
     expected = f"""
 import fiddle as fdl
 {this_module_import}
@@ -242,7 +242,7 @@ def build_config():
 
   def test_codegen_partial(self):
     cfg = partial_config()
-    result = codegen.codegen_dot_syntax(cfg)
+    result = legacy_codegen.codegen_dot_syntax(cfg)
     expected = f"""
 import fiddle as fdl
 {this_module_import}
@@ -266,7 +266,7 @@ def build_config():
 
   def test_codegen_inner_class_name(self):
     cfg = fdl.Config(test_util.NestedParent.Inner, a=4)
-    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(cfg).lines())
     expected = """
 import fiddle as fdl
 from fiddle._src.codegen import test_util
@@ -281,7 +281,7 @@ def build_config():
 
   def test_dict_value(self):
     cfg = fdl.Config(identity, x={"foo": fdl.Config(Foo, a=1)})
-    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(cfg).lines())
     expected = f"""
 import fiddle as fdl
 {this_module_import}
@@ -300,7 +300,7 @@ def build_config():
 
   def test_deeply_nested_constant(self):
     cfg = fdl.Config(identity, x={"bar": [3, 4], "foo": [1, 2]})
-    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(cfg).lines())
     expected = f"""
 import fiddle as fdl
 {this_module_import}
@@ -317,7 +317,7 @@ def build_config():
   def test_codegen_submodule(self):
     cfg = fdl.Config(
         submodule_test_util.Foo, a=1, leaves=[fdl.Config(test_util.Foo, a=4)])
-    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(cfg).lines())
     expected = """
 import fiddle as fdl
 from fiddle._src.codegen.test_submodule import test_util

@@ -19,7 +19,7 @@ from typing import List
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle._src.codegen import codegen
+from fiddle._src.codegen import legacy_codegen
 import fiddle.extensions.seqio
 import seqio
 
@@ -35,7 +35,7 @@ class SeqioTest(absltest.TestCase):
     cfg = fdl.Config(
         seqio.Evaluator,
         feature_converter=fdl.Config(seqio.DecoderFeatureConverter))
-    code = "\n".join(codegen.codegen_dot_syntax(cfg).lines())
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(cfg).lines())
     expected = """
 import fiddle as fdl
 import seqio

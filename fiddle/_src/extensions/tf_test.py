@@ -22,8 +22,8 @@ from absl.testing import parameterized
 import fiddle as fdl
 from fiddle import graphviz
 from fiddle import printing
-from fiddle._src.codegen import codegen
 from fiddle._src.codegen import formatting_utilities
+from fiddle._src.codegen import legacy_codegen
 from fiddle._src.codegen import py_val_to_cst_converter
 from fiddle._src.codegen import special_value_codegen
 from fiddle._src.experimental import serialization
@@ -69,7 +69,7 @@ class TfTest(parameterized.TestCase):
 
   def test_codegen(self):
     config = fdl.Config(foo, dtype=tf.bfloat16)
-    code = "\n".join(codegen.codegen_dot_syntax(config).lines())
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(config).lines())
     if __name__ == "__main__":
       tf_test_import = ""
       foo_name = "foo"

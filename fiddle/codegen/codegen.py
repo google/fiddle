@@ -16,7 +16,7 @@
 """Library for generating code from a Config or Partial object."""
 
 # pylint: disable=unused-import
-from fiddle._src.codegen.codegen import assignment_path
-from fiddle._src.codegen.codegen import codegen_dot_syntax
-from fiddle._src.codegen.codegen import mini_ast
-from fiddle._src.codegen.codegen import SharedBuildableManager
+from fiddle._src.codegen.legacy_codegen import assignment_path
+from fiddle._src.codegen.legacy_codegen import codegen_dot_syntax
+from fiddle._src.codegen.legacy_codegen import mini_ast
+from fiddle._src.codegen.legacy_codegen import SharedBuildableManager

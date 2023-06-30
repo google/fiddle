@@ -23,7 +23,7 @@ other string representations, such as graphviz or string serialization.
 
 from typing import Any
 
-from fiddle._src.codegen import codegen
+from fiddle._src.codegen import legacy_codegen
 from fiddle._src.codegen import special_value_codegen
 
 
@@ -37,8 +37,8 @@ class LazyImportManager(special_value_codegen.ImportManagerApi):
 
   def add_by_name(self, module_name: str) -> str:
     """Returns the usable name generated from an ephemeral import manager."""
-    namespace = codegen.Namespace()
-    import_manager = codegen.ImportManager(namespace)
+    namespace = legacy_codegen.Namespace()
+    import_manager = legacy_codegen.ImportManager(namespace)
     return import_manager.add_by_name(module_name)
 
 

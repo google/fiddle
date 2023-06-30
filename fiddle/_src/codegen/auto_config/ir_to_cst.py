@@ -168,9 +168,12 @@ def code_for_fn(
   Returns:
     LibCST FunctionDef node.
   """
-  auto_config_expr = cst.parse_expression(
-      task.import_manager.add(task.auto_config_fn)
-  )
+  if task.auto_config_fn:
+    auto_config_expr = cst.parse_expression(
+        task.import_manager.add(task.auto_config_fn)
+    )
+  else:
+    auto_config_expr = None
   params = cst.Parameters(
       params=[
           cst.Param(name=cst.Name(param.name.value)) for param in fn.parameters
@@ -204,7 +207,7 @@ def code_for_fn(
       cst.Name(fn.name.value),
       params,
       body,
-      decorators=[cst.Decorator(auto_config_expr)],
+      decorators=[cst.Decorator(auto_config_expr)] if auto_config_expr else [],
       whitespace_before_params=whitespace_before_params,
       leading_lines=[cst.EmptyLine(), cst.EmptyLine()],
   )
