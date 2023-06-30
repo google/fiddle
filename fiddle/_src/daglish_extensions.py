@@ -19,6 +19,8 @@ These are kept in a separate file so they can reference both the core Daglish
 implementation and Fiddle Buildable's.
 """
 
+import ast
+import re
 from typing import Any, Callable, Type, Union
 
 from fiddle._src import config as config_lib
@@ -114,3 +116,47 @@ def is_unshareable(value: Any) -> bool:
           in _FUNCTIONS_WITH_IMMUTABLE_RETURN_VALUES
       )
   )
+
+_PATH_PART = re.compile(
+    "(?:{})".format(
+        "|".join([
+            r"\.(?P<attr_name>[\w_]+)",
+            # future improvement: support escape sequences.
+            r"\[(?P<key>\d+|'[^']+'|\"[^\"]+\")\]",
+        ])
+    )
+)
+
+
+def parse_path(path: str) -> daglish.Path:
+  """Parses a string path into a path with Attr and Key elements.
+
+  Note that we can't distinguish between Index and Key or Attr and
+  BuildableAttr. We might eventually remove that distinction from Daglish
+  itself.
+
+  Args:
+    path: Path string. If appended to a symbol it should be a valid Python
+      expression; in particular if the first element is an attribute, the path
+      must start with ".attribute_name", not "attribute_name".
+
+  Returns:
+    Parsed Daglish path.
+  """
+  result = []
+  current_idx = 0
+  while current_idx < len(path):
+    match = _PATH_PART.match(path, current_idx)
+    if not match:
+      raise ValueError(
+          f"Could not parse {path!r} (starting at position {current_idx})"
+      )
+    match_dict = match.groupdict()
+    if match_dict["attr_name"]:
+      result.append(daglish.Attr(match_dict["attr_name"]))
+    elif match_dict["key"]:
+      result.append(daglish.Key(ast.literal_eval(match_dict["key"])))
+    else:
+      raise AssertionError(f"Unexpected regex match {match_dict}")
+    current_idx = match.end(0)
+  return tuple(result)

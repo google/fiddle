@@ -20,7 +20,9 @@ import dataclasses
 from typing import Any, NamedTuple
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import fiddle as fdl
+from fiddle import daglish
 from fiddle._src import daglish_extensions
 
 
@@ -44,7 +46,7 @@ class IsImmutableTest(absltest.TestCase):
     self.assertTrue(daglish_extensions.is_immutable(tuple_foo))
 
 
-class DaglishExtensionsTest(absltest.TestCase):
+class DaglishExtensionsTest(parameterized.TestCase):
 
   def test_register_immutable(self):
     obj = object()
@@ -66,6 +68,45 @@ class DaglishExtensionsTest(absltest.TestCase):
     # value would not.
     self.assertFalse(daglish_extensions.is_immutable(config))
     self.assertTrue(daglish_extensions.is_unshareable(config))
+
+  @parameterized.parameters(
+      {
+          "path": ".foo.bar",
+          "expected": (daglish.Attr("foo"), daglish.Attr("bar")),
+      },
+      {
+          "path": ".asd_fds_1",
+          "expected": (daglish.Attr("asd_fds_1"),),
+      },
+      {
+          "path": ".foo[3].bar",
+          "expected": (
+              daglish.Attr("foo"),
+              daglish.Key(3),
+              daglish.Attr("bar"),
+          ),
+      },
+      {
+          "path": "[0]['foo'][\"bar\"]",
+          "expected": (
+              daglish.Key(0),
+              daglish.Key("foo"),
+              daglish.Key("bar"),
+          ),
+      },
+  )
+  def test_parse_path(self, path, expected):
+    actual = daglish_extensions.parse_path(path)
+    self.assertEqual(actual, expected)
+
+  @parameterized.parameters(
+      "<foobar>.baz<qux>[3]",
+      "..fdsa",
+      ".[123]",
+  )
+  def test_bad_paths(self, path):
+    with self.assertRaises(ValueError):
+      daglish_extensions.parse_path(path)
 
 
 if __name__ == "__main__":

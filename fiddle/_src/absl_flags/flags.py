@@ -117,7 +117,7 @@ import re
 import sys
 import textwrap
 import typing
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from absl import app
 from absl import flags
@@ -126,6 +126,8 @@ from etils import epath
 from fiddle import printing
 from fiddle import selectors
 from fiddle._src import config
+from fiddle._src import daglish
+from fiddle._src import daglish_extensions
 from fiddle._src import module_reflection
 from fiddle._src import tagging
 from fiddle._src.experimental import auto_config
@@ -165,61 +167,16 @@ _FDL_HELP = flags.DEFINE_bool(
     'information on any loaded configuration) and exit.')
 
 
-@dataclasses.dataclass
-class _IndexKey:
-  """Wraps a string or integer index into a dictionary or list/tuple."""
-  key: Union[str, int]
-
-  def __post_init__(self):
-    try:
-      self.key = ast.literal_eval(self.key)
-    except Exception:  # pylint: disable=broad-except
-      pass  # leave self as-is.
-
-  def __call__(self, obj):
-    return obj[self.key]
-
-  def update(self, obj, new_value):
-    """Updates `obj`'s `self.key` to `new_value`."""
-    obj[self.key] = new_value
-
-
-@dataclasses.dataclass
-class _AttributeKey:
-  """Wraps the name of an attribute."""
-  __slots__ = ('name',)
-  name: str
-
-  def __call__(self, obj):
-    return getattr(obj, self.name)
-
-  def update(self, obj, new_value):
-    setattr(obj, self.name, new_value)
-
-
-_PATH_COMPONENT_REGEX = re.compile(r'(?:\.([A-Za-z_][^\.\[]*))|\[([^]]+)\]')
-
-
 def _print_stderr(*args, **kwargs):
   print(*args, **kwargs, file=sys.stderr)
 
 
-def _parse_path(path: str) -> List[Union[_AttributeKey, _IndexKey]]:
+def _parse_path(path: str) -> daglish.Path:
   """Parses a path into a list of either attributes or index lookups."""
-  path = f'.{path}'  # Add a leading `.` to make parsing work properly.
-  result = []
-  curr_index = 0
-  while curr_index < len(path):
-    match = _PATH_COMPONENT_REGEX.match(path, curr_index)
-    if match is None:
-      raise ValueError(
-          f'Could not parse {path[1:]!r} (failed index: {curr_index - 1}).')
-    curr_index = match.end(0)  # Advance
-    if match[1] is not None:
-      result.append(_AttributeKey(match[1]))
-    else:
-      result.append(_IndexKey(match[2]))
-  return result
+  if not path.startswith('[') and not path.startswith('.'):
+    path = f'.{path}'  # Add a leading `.` to make parsing work properly.
+
+  return daglish_extensions.parse_path(path)
 
 
 class _ImportDottedNameDebugContext(enum.Enum):
@@ -397,13 +354,18 @@ def apply_overrides_to(cfg: config.Buildable):
     walk = typing.cast(Any, cfg)
     try:
       for parent in parents:
-        walk = parent(walk)
+        walk = parent.follow(walk)
     except Exception as e:
       raise ValueError(f'Invalid path "{path}".') from e
 
     literal_value = parse_value(value=value, path=path)
     try:
-      last.update(walk, literal_value)
+      if isinstance(last, daglish.Attr):
+        setattr(walk, last.name, literal_value)
+      elif isinstance(last, daglish.Key):
+        walk[last.key] = literal_value
+      else:
+        raise ValueError(f'Unexpected path element {last}.')
     except Exception as e:
       raise ValueError(f'Could not set "{path}" to "{value}".') from e
 

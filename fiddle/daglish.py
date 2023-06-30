@@ -46,3 +46,4 @@ from fiddle._src.daglish import SubTraversalResult
 from fiddle._src.daglish import Traversal
 from fiddle._src.daglish_extensions import is_immutable
 from fiddle._src.daglish_extensions import is_unshareable
+from fiddle._src.daglish_extensions import parse_path
