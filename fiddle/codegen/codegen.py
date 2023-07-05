@@ -20,3 +20,5 @@ from fiddle._src.codegen.legacy_codegen import assignment_path
 from fiddle._src.codegen.legacy_codegen import codegen_dot_syntax
 from fiddle._src.codegen.legacy_codegen import mini_ast
 from fiddle._src.codegen.legacy_codegen import SharedBuildableManager
+from fiddle._src.codegen.new_codegen import code_generator
+from fiddle._src.codegen.new_codegen import new_codegen
