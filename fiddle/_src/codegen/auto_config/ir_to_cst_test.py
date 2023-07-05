@@ -18,15 +18,49 @@
 import inspect
 
 from absl.testing import absltest
+from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import get_history_comments
 from fiddle._src.codegen.auto_config import init_task
 from fiddle._src.codegen.auto_config import ir_to_cst
 from fiddle._src.codegen.auto_config import make_symbolic_references
 from fiddle._src.codegen.auto_config import shared_to_variables
 from fiddle._src.codegen.auto_config import test_fixtures
+import libcst as cst
+
+
+def _code_for_expr(node: cst.CSTNode) -> str:
+  """Returns Python code for a CST node.
+
+  This assumes two spaces of indentation. It is helpful because we CST nodes
+  don't seem to implement the equality operator very well.
+
+  Args:
+    node: CST node.
+  """
+  module = cst.parse_module("def foo():\n  return")
+  return module.code_for_node(node)
 
 
 class IrToCstTest(absltest.TestCase):
+
+  def test_code_for_expr(self):
+    self_var = code_ir.VariableReference(
+        code_ir.Name("self", is_generated=True)
+    )
+    attr = code_ir.AttributeExpression(self_var, "foo")
+    self.assertEqual(_code_for_expr(ir_to_cst.code_for_expr(attr)), "self.foo")
+
+  def test_code_for_expr_attribute_in_call_symbol_and_args(self):
+    self_var = code_ir.VariableReference(
+        code_ir.Name("self", is_generated=True)
+    )
+    attr = code_ir.AttributeExpression(self_var, "foo")
+    call = code_ir.SymbolOrFixtureCall(
+        attr, [], {"bar": code_ir.AttributeExpression(self_var, "bar")}
+    )
+    self.assertEqual(
+        _code_for_expr(ir_to_cst.code_for_expr(call)), "self.foo(bar=self.bar)"
+    )
 
   def test_basic_ir(self):
     task = test_fixtures.simple_ir()

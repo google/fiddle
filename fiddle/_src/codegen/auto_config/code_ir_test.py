@@ -41,6 +41,14 @@ class NameTest(absltest.TestCase):
 
 class CodegenNodeTest(parameterized.TestCase):
 
+  def test_symbol_expression_string_raises(self):
+    with self.assertRaisesRegex(TypeError, "Strings are no longer allowed.*"):
+      code_ir.FunctoolsPartialCall(
+          symbol_expression="functools.partial",
+          positional_arg_expressions=[],
+          arg_expressions={},
+      )
+
   def test_daglish_iteration(self):
     fn = code_ir.FixtureFunction(
         name=code_ir.Name("foo"),

@@ -71,9 +71,15 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
             parameters=[],
             variables=[],
             output_value=code_ir.SymbolOrFixtureCall(
-                symbol_expression='fdl.Config',
+                symbol_expression=code_ir.AttributeExpression(
+                    code_ir.ModuleReference(code_ir.Name('fdl')),
+                    'Config',
+                ),
                 positional_arg_expressions=[
-                    code_ir.SymbolReference('test_fixtures.foo')
+                    code_ir.AttributeExpression(
+                        code_ir.ModuleReference(code_ir.Name('test_fixtures')),
+                        'foo',
+                    )
                 ],
                 arg_expressions={'x': 4},
                 history_comments=code_ir.HistoryComments(
@@ -150,6 +156,21 @@ class MakeSymbolicReferencesTest(absltest.TestCase):
         initializer = fdl.ArgFactory(test_fixtures.initializer,
             name='const', dtype='float32')
         return fdl.Partial(test_fixtures.Attention, kernel_init=initializer)
+    """
+    self.assertEqual(code.split(), expected.split(), msg=code)
+
+  def test_bare_symbols(self):
+    task = test_fixtures.bare_symbol_reference_config()
+    task.auto_config_fn = None
+    newcg_symbolic_references.import_symbols(task)
+    newcg_symbolic_references.replace_callables_and_configs_with_symbols(task)
+    code = ir_to_cst.code_for_task(task).code
+    expected = """
+    from fiddle._src.codegen.auto_config import test_fixtures
+
+
+    def config_fixture():
+        return test_fixtures.Attention
     """
     self.assertEqual(code.split(), expected.split(), msg=code)
 

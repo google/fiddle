@@ -18,6 +18,7 @@
 N.B. Please see codegen/auto_config for the auto_config version!!
 """
 
+import typing
 from typing import Callable
 
 from fiddle import daglish
@@ -55,6 +56,16 @@ def import_symbols(task: code_ir.CodegenTask) -> None:
       task.import_manager.add(value)
 
 
+def _name_to_attribute_expression(name: str) -> code_ir.AttributeExpression:
+  if "." not in name:
+    raise ValueError(f"Could not parse symbol import {name}")
+  base, *parts = name.split(".")
+  value = code_ir.ModuleReference(code_ir.Name(base))
+  for part in parts:
+    value = code_ir.AttributeExpression(value, part)
+  return typing.cast(code_ir.AttributeExpression, value)
+
+
 def replace_callables_and_configs_with_symbols(
     task: code_ir.CodegenTask,
     *,
@@ -73,8 +84,12 @@ def replace_callables_and_configs_with_symbols(
 
   def traverse(value, state: daglish.State):
     if isinstance(value, config_lib.Buildable):
-      buildable_type = task.import_manager.add(type(value))
-      symbol = task.import_manager.add(config_lib.get_callable(value))
+      ir_for_buildable_type = _name_to_attribute_expression(
+          task.import_manager.add(type(value))
+      )
+      ir_for_symbol = _name_to_attribute_expression(
+          task.import_manager.add(config_lib.get_callable(value))
+      )
       all_tags = value.__argument_tags__
       value = state.map_children(value)
       for arg, arg_tags in all_tags.items():
@@ -92,14 +107,13 @@ def replace_callables_and_configs_with_symbols(
             item_to_tag=value.__arguments__[arg],
         )
       return code_ir.SymbolOrFixtureCall(
-          symbol_expression=buildable_type,
-          positional_arg_expressions=[code_ir.SymbolReference(symbol)],
+          symbol_expression=ir_for_buildable_type,
+          positional_arg_expressions=[ir_for_symbol],
           arg_expressions=config_lib.ordered_arguments(value),
           history_comments=format_history(value),
       )
     elif is_plain_symbol_or_enum_value(value):
-      symbol = task.import_manager.add(value)
-      return code_ir.SymbolReference(symbol)
+      return _name_to_attribute_expression(task.import_manager.add(value))
     else:
       return state.map_children(value)
 

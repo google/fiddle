@@ -18,6 +18,7 @@
 import enum
 import functools
 import inspect
+import typing
 from typing import Any, Callable
 
 from fiddle import arg_factory
@@ -66,6 +67,16 @@ def noop_history_comments(unused_buildable):
   return code_ir.HistoryComments()
 
 
+def _name_to_attribute_expression(name: str) -> code_ir.AttributeExpression:
+  if "." not in name:
+    raise ValueError(f"Could not parse symbol import {name}")
+  base, *parts = name.split(".")
+  value = code_ir.ModuleReference(code_ir.Name(base))
+  for part in parts:
+    value = code_ir.AttributeExpression(value, part)
+  return typing.cast(code_ir.AttributeExpression, value)
+
+
 def replace_callables_and_configs_with_symbols(
     task: code_ir.CodegenTask,
     *,
@@ -85,11 +96,11 @@ def replace_callables_and_configs_with_symbols(
   fn_name = None
 
   def _handle_partial(
-      value: config_lib.Partial, state: daglish.State, symbol: str
+      value: config_lib.Partial,
+      state: daglish.State,
+      ir_for_symbol: code_ir.AttributeExpression,
   ):
     """Split-out helper method to handle Partial() nodes."""
-    symbol_ref = code_ir.SymbolReference(symbol)
-
     arguments = config_lib.ordered_arguments(value)
     all_tags = value.__argument_tags__
 
@@ -120,8 +131,10 @@ def replace_callables_and_configs_with_symbols(
 
     def _arg_factory_partial():
       return code_ir.SymbolOrFixtureCall(
-          task.import_manager.add(arg_factory.partial),
-          positional_arg_expressions=[symbol_ref],
+          _name_to_attribute_expression(
+              task.import_manager.add(arg_factory.partial)
+          ),
+          positional_arg_expressions=[ir_for_symbol],
           arg_expressions=arg_factory_args,
           history_comments=format_history(value),
       )
@@ -133,8 +146,10 @@ def replace_callables_and_configs_with_symbols(
       # the auto_config fixture's as_buildable() method. If we got rid of the
       # functools.partial, then we couldn't configure any attributes.
       return code_ir.SymbolOrFixtureCall(
-          task.import_manager.add(functools.partial),
-          positional_arg_expressions=[symbol_ref],
+          _name_to_attribute_expression(
+              task.import_manager.add(functools.partial)
+          ),
+          positional_arg_expressions=[ir_for_symbol],
           arg_expressions=regular_args,
           history_comments=format_history(value),
       )
@@ -146,7 +161,9 @@ def replace_callables_and_configs_with_symbols(
       # which order, but we need to emit both decorators. Go with functools
       # on the outer level.
       return code_ir.SymbolOrFixtureCall(
-          task.import_manager.add(functools.partial),
+          _name_to_attribute_expression(
+              task.import_manager.add(functools.partial)
+          ),
           positional_arg_expressions=[_arg_factory_partial()],
           arg_expressions=regular_args,
           history_comments=format_history(value),
@@ -154,7 +171,9 @@ def replace_callables_and_configs_with_symbols(
 
   def traverse(value, state: daglish.State):
     if isinstance(value, config_lib.Buildable):
-      symbol = task.import_manager.add(config_lib.get_callable(value))
+      ir_for_symbol = _name_to_attribute_expression(
+          task.import_manager.add(config_lib.get_callable(value))
+      )
       if isinstance(value, config_lib.Config):
         all_tags = value.__argument_tags__
         value = state.map_children(value)
@@ -173,13 +192,13 @@ def replace_callables_and_configs_with_symbols(
               item_to_tag=value.__arguments__[arg],
           )
         return code_ir.SymbolOrFixtureCall(
-            symbol_expression=symbol,
+            symbol_expression=ir_for_symbol,
             positional_arg_expressions=[],
             arg_expressions=config_lib.ordered_arguments(value),
             history_comments=format_history(value),
         )
       elif isinstance(value, config_lib.Partial):
-        return _handle_partial(value, state, symbol)
+        return _handle_partial(value, state, ir_for_symbol)
       elif isinstance(value, config_lib.ArgFactory):
         paths = " , ".join(
             daglish.path_str(path) for path in state.get_all_paths()
@@ -195,8 +214,7 @@ def replace_callables_and_configs_with_symbols(
       else:
         raise TypeError(f"Unsupported Buildable {type(value)}")
     elif is_plain_symbol_or_enum_value(value):
-      symbol = task.import_manager.add(value)
-      return code_ir.SymbolReference(symbol)
+      return _name_to_attribute_expression(task.import_manager.add(value))
     else:
       return state.map_children(value)
 

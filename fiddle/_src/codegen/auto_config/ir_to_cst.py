@@ -79,7 +79,7 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
 
     if isinstance(value, config_lib.Buildable):
       raise ValueError(
-          "Internal Fiddle error: you must run the make_symbolic_reference "
+          "Internal Fiddle error: you must run the make_symbolic_references "
           "passes before CST generation."
       )
     elif isinstance(value, (list, tuple)):
@@ -96,8 +96,11 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
         sub_value_node = state.call(sub_value, daglish.Attr(key))
         elements.append(cst.DictElement(key_node, sub_value_node))
       return cst.Dict(elements)
-    elif isinstance(value, code_ir.VariableReference):
+    elif isinstance(value, code_ir.BaseNameReference):
       return cst.Name(value.name.value)
+    elif isinstance(value, code_ir.AttributeExpression):
+      base = state.call(value.base, daglish.Attr("base"))
+      return cst.Attribute(value=base, attr=cst.Name(value.attribute))
     elif isinstance(value, code_ir.SymbolOrFixtureCall):
       attr = daglish.Attr("arg_expressions")
       args = []
@@ -124,7 +127,9 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       else:
         whitespace_before_args = cst.SimpleWhitespace("")
       return cst.Call(
-          cst.parse_expression(value.symbol_expression),
+          state.call(
+              value.symbol_expression, daglish.Attr("symbol_expression")
+          ),
           args=args,
           whitespace_before_args=whitespace_before_args,
       )
@@ -138,8 +143,6 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
         call_args.append(cst.Arg(tag_name))
       with_tags = cst.parse_expression("auto_config.with_tags")
       return cst.Call(with_tags, args=call_args)
-    elif isinstance(value, code_ir.SymbolReference):
-      return cst.parse_expression(value.expression)
     elif state.is_traversable(value):
       raise NotImplementedError(
           f"Expression generation is not implemented for {value!r}"

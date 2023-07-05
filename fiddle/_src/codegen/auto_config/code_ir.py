@@ -93,17 +93,33 @@ class Parameter(CodegenNode):
 
 
 @dataclasses.dataclass
-class VariableReference(CodegenNode):
-  """Reference to a variable or parameter."""
+class BaseNameReference(CodegenNode):
+  """Reference to a named symbol (mostly a base class for the below)."""
 
   name: Name
 
 
 @dataclasses.dataclass
-class SymbolReference(CodegenNode):
-  """Reference to a library symbol, like MyEncoderLayer."""
+class VariableReference(BaseNameReference):
+  """Reference to a variable or parameter."""
 
-  expression: str
+
+@dataclasses.dataclass
+class ModuleReference(BaseNameReference):
+  """Reference to an imported module."""
+
+
+@dataclasses.dataclass
+class FixtureReference(BaseNameReference):
+  """Reference to another fixture."""
+
+
+@dataclasses.dataclass
+class AttributeExpression(CodegenNode):
+  """Reference to an attribute of another expression."""
+
+  base: Any  # Wrapped expression, can involve VariableReference's
+  attribute: str
 
 
 @dataclasses.dataclass
@@ -141,13 +157,20 @@ class HistoryComments:
 class SymbolOrFixtureCall(CodegenNode):
   """Reference to a call of a library symbol/fixture, like MyEncoderLayer()."""
 
-  symbol_expression: str
+  symbol_expression: Any
   # Values for args can involve VariableReference's, Calls, etc.
   positional_arg_expressions: List[Any]
   arg_expressions: Dict[str, Any]
   history_comments: HistoryComments = dataclasses.field(
       default_factory=HistoryComments
   )
+
+  def __post_init__(self):
+    if isinstance(self.symbol_expression, str):
+      raise TypeError(
+          "Strings are no longer allowed in `symbol_expression`, please wrap"
+          " with a name!"
+      )
 
 
 @dataclasses.dataclass
