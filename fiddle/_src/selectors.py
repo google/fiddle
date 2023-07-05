@@ -23,12 +23,14 @@ imperatively.
 import abc
 import copy
 import dataclasses
+import logging
 from typing import Any, Callable, Iterator, Optional, Type, Union
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import mutate_buildable
 from fiddle._src import tag_type
+from fiddle._src import tagging
 
 
 # Maybe DRY up with type declaration in autobuilders.py?
@@ -136,6 +138,14 @@ class NodeSelection(Selection):
       if self._matches(value):
         yield value
 
+  def __str__(self) -> str:
+    return (
+        f"NodeSelection(cfg, fn_or_cls={self.fn_or_cls},"
+        f" match_subclasses={self.match_subclasses})"
+    )
+
+  __repr__ = __str__
+
   def replace(self, value: Any, deepcopy: bool = True) -> None:
     if self._matches(self.cfg):
       raise ValueError(
@@ -198,7 +208,7 @@ class TagSelection(Selection):
       if isinstance(value, config_lib.Buildable):
         for name, tags in value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
-            yield getattr(value, name)
+            yield getattr(value, name, tagging.NO_VALUE)
 
   def replace(self, value: Any, deepcopy: bool = True) -> None:
 
@@ -219,6 +229,13 @@ class TagSelection(Selection):
         "You can't set named attributes on tagged values, you can only replace "
         "them. Please call replace() instead of set().")
 
+_missing = object()
+
+
+def _is_empty(selection: Selection) -> bool:
+  """Returns whether a selection is empty."""
+  return next(iter(selection), _missing) is _missing
+
 
 def select(
     cfg: config_lib.Buildable,
@@ -227,6 +244,7 @@ def select(
     tag: Optional[tag_type.TagType] = None,
     match_subclasses: bool = True,
     buildable_type: Type[config_lib.Buildable] = config_lib.Buildable,
+    check_nonempty: Optional[bool] = None,
 ) -> Selection:
   """Selects sub-buildables or fields within a configuration DAG.
 
@@ -247,6 +265,8 @@ def select(
       subclasses of `fn_or_cls`.
     buildable_type: Restrict the selection to a particular buildable type. Not
       valid for tag selections.
+    check_nonempty: Whether to raise an error on empty selections. This will be
+      true in the future.
 
   Returns:
     A Selection, which is a TagSelection if `tag` is set, and a NodeSelection
@@ -259,10 +279,25 @@ def select(
     if not match_subclasses:
       raise NotImplementedError(
           "match_subclasses is ignored when selecting by tag.")
-    return TagSelection(cfg, tag)
+    selection = TagSelection(cfg, tag)
   else:
-    return NodeSelection(
+    if fn_or_cls is None:
+      raise ValueError("Either tag or fn_or_cls must be provided.")
+    selection = NodeSelection(
         cfg,
         fn_or_cls,
         match_subclasses=match_subclasses,
-        buildable_type=buildable_type)
+        buildable_type=buildable_type,
+    )
+
+  if check_nonempty and _is_empty(selection):
+    raise ValueError(
+        f"Selection {selection} is empty! If this is OK, please call"
+        " select(..., check_nonempty=False)"
+    )
+  elif check_nonempty is None and _is_empty(selection):
+    logging.warning(
+        "Your selection was empty. In the future, this will be "
+        "an error. Please set check_nonempty=False if this is intended."
+    )
+  return selection

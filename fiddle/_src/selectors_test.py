@@ -174,17 +174,6 @@ class SelectionTest(absltest.TestCase):
 
 class NodeSelectionTest(absltest.TestCase):
 
-  def test_matches_everything(self):
-    cfg = encoder_decoder_config()
-    sel = typing.cast(selectors.NodeSelection, selectors.select(cfg))
-    self.assertTrue(sel._matches(cfg.encoder))
-    self.assertTrue(sel._matches(cfg.encoder.attention))
-    self.assertTrue(sel._matches(cfg.encoder.mlp))
-    self.assertTrue(sel._matches(cfg.decoder))
-    self.assertTrue(sel._matches(cfg.decoder.self_attention))
-    self.assertTrue(sel._matches(cfg.decoder.encoder_decoder_attention))
-    self.assertTrue(sel._matches(cfg.decoder.mlp))
-
   def test_matches_based_on_type(self):
     cfg = encoder_decoder_config()
     sel = typing.cast(selectors.NodeSelection, selectors.select(cfg, Attention))
@@ -294,6 +283,11 @@ class NodeSelectionTest(absltest.TestCase):
     self.assertEqual(cfg.encoder.attention.kernel_init, "override_init")
     self.assertEqual(cfg.decoder.self_attention.kernel_init, "override_init")
 
+  def test_check_nonempty(self):
+    cfg = encoder_decoder_config()
+    with self.assertRaisesRegex(ValueError, "Selection.*fcn.*is empty"):
+      selectors.select(cfg, fcn, check_nonempty=True)
+
   def test_debug_get(self):
     cfg = encoder_decoder_config()
     attention_kernels = list(
@@ -347,6 +341,19 @@ class TagSelectionTest(absltest.TestCase):
         config, tag=KernelInitializerTag).replace(
             value=KernelInitializerTag.new("actual_value"))
     self.assertEqual(fdl.build(config), Attention("float32", "actual_value", 2))
+
+  def test_iterate_no_values(self):
+    config = fdl.Config(Attention, dtype="float32")
+    fdl.add_tag(config, "kernel_init", KernelInitializerTag)
+    fdl.add_tag(config, "bias_init", BiasInitializerTag)
+
+    self.assertEqual(
+        list(selectors.select(config, tag=KernelInitializerTag)), [fdl.NO_VALUE]
+    )
+    self.assertEqual(
+        list(selectors.select(config, tag=AnyInitializerTag)),
+        [fdl.NO_VALUE, fdl.NO_VALUE],
+    )
 
 
 if __name__ == "__main__":
