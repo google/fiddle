@@ -577,11 +577,10 @@ def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
   )
 
 
-# TODO(b/286559744): Change allow_dataclass_attribute_access default as False.
 def auto_config(
     fn=None,
     *,
-    experimental_allow_dataclass_attribute_access=True,
+    experimental_allow_dataclass_attribute_access=False,
     experimental_allow_control_flow: bool = False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
