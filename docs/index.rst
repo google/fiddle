@@ -136,7 +136,7 @@ detailed documentation on Fiddle's core types, please consult the
 :ref:`api_reference`.
 
 :class:`fdl.Config<fiddle.Config>` and :class:`fdl.build()<fiddle.build>`
-^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Fiddle's core type is the :class:`~fiddle.Config` class. A
 :class:`~fiddle.Config` instance contains a reference to a Python callable (such
@@ -227,7 +227,7 @@ example::
     assert dual_encoder_instance.query_encoder is dual_encoder_instance.item_encoder
 
 :class:`fdl.Partial<fiddle.Partial>`
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In addition to :class:`fdl.Config<fiddle.Config>`, Fiddle provides one other
 core "buildable" type called :class:`fdl.Partial<fiddle.Partial>` (both
