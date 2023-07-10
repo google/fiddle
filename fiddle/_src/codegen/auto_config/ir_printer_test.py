@@ -16,10 +16,10 @@
 """Tests for ir_printer."""
 
 import textwrap
-
 from typing import Any, Optional
 
 from absl.testing import absltest
+from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import ir_printer
 from fiddle._src.codegen.auto_config import test_fixtures
 
@@ -61,6 +61,17 @@ class IrPrinterTest(absltest.TestCase):
     self.assertEqual(ir_printer.format_expr(example_tuple), "()")
     example_tuple = (3,)
     self.assertEqual(ir_printer.format_expr(example_tuple), "(3,)")
+
+  def test_format_attributes(self):
+    # Not working Python but we should print it anyway.
+    attr = code_ir.AttributeExpression([1, 2], "foo")
+    self.assertEqual(ir_printer.format_expr(attr), "[1, 2].foo")
+
+    self_var = code_ir.VariableReference(
+        code_ir.Name("self", is_generated=True)
+    )
+    attr = code_ir.AttributeExpression(self_var, "foo")
+    self.assertEqual(ir_printer.format_expr(attr), "self.foo")
 
   def test_format_simple_ir(self):
     task = test_fixtures.simple_ir()

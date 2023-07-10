@@ -205,6 +205,15 @@ def unprocessed_two_shared_config() -> code_ir.CodegenTask:
   )
 
 
+def bare_symbol_reference_config() -> code_ir.CodegenTask:
+  """Returns a task for a config that is a bare symbol reference.
+
+  i.e. a symbol reference not wrapped in a fdl.Partial or the like.
+  """
+  config = Attention
+  return init_task.init_task(config)
+
+
 def parameters_for_testcases():
   """Returns parameters for absl's parameterized test cases."""
   return [

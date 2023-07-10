@@ -62,7 +62,7 @@ def move_shared_nodes_to_variables(
       """Processes a node in a function definition."""
       if isinstance(
           value,
-          (code_ir.VariableReference, code_ir.SymbolReference, code_ir.Name),
+          (code_ir.BaseNameReference, code_ir.Name),
       ):
         # Don't double-extract variables, and repeated symbol references are
         # fine.

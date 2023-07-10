@@ -81,6 +81,9 @@ def format_expr(expr: Any):
       )
     elif isinstance(value, code_ir.VariableReference):
       return value.name.value
+    elif isinstance(value, code_ir.AttributeExpression):
+      base_obj = state.call(value.base, daglish.Attr("base"))
+      return f"{base_obj}.{value.attribute}"
     elif isinstance(value, code_ir.ArgFactoryExpr):
       sub_value = state.map_children(value).expression
       return f"ArgFactoryExpr[{sub_value}]"

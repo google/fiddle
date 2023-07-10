@@ -233,7 +233,7 @@ def _transform_sub_fixtures(
       for param in params:
         args[param.name.value] = code_ir.VariableReference(name=param.name)
       return code_ir.SymbolOrFixtureCall(
-          symbol_expression=name.value,
+          symbol_expression=code_ir.FixtureReference(name=name),
           positional_arg_expressions=[],
           arg_expressions=args,
       )
