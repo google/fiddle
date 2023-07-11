@@ -200,6 +200,13 @@ class PathElementTest(absltest.TestCase):
         r"with root\[1\]\['a'\]=.*"):
       daglish.follow_path(root, bad_path_3)
 
+  def test_path_elements_order(self):
+    a = daglish.Attr("bar")
+    b = daglish.Index(1)
+    c = daglish.Key("a")
+    self.assertLess(a, b)
+    self.assertLess(b, c)
+
 
 class TraverserRegistryTest(parameterized.TestCase):
 

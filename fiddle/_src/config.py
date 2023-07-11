@@ -64,6 +64,120 @@ NO_VALUE = NoValue()
 _UNSET_SENTINEL = object()
 
 
+_defaults_aware_traverser_registry = daglish.NodeTraverserRegistry(
+    use_fallback=True
+)
+
+
+def _buildable_flatten(
+    buildable: Buildable, include_defaults: bool = False
+) -> Tuple[Tuple[Any, ...], BuildableTraverserMetadata]:
+  """Implement Buildable.__flatten__ method."""
+  arguments = ordered_arguments(buildable, include_defaults=include_defaults)
+  keys = tuple(arguments.keys())
+  values = tuple(arguments.values())
+  argument_tags = {
+      name: frozenset(tags)
+      for name, tags in buildable.__argument_tags__.items()
+      if tags  # Don't include empty sets.
+  }
+  argument_history = {
+      name: tuple(entries)
+      for name, entries in buildable.__argument_history__.items()
+  }
+  metadata = BuildableTraverserMetadata(
+      fn_or_cls=buildable.__fn_or_cls__,
+      argument_names=keys,
+      argument_tags=argument_tags,
+      argument_history=argument_history,
+  )
+  return values, metadata
+
+
+def _buildable_path_elements(
+    buildable: Buildable, include_defaults: bool = False
+) -> Tuple[daglish.Attr]:
+  """Implement Buildable.__path_elements__ method."""
+  return tuple(
+      daglish.Attr(name)
+      for name in ordered_arguments(
+          buildable, include_defaults=include_defaults
+      ).keys()
+  )
+
+
+def _register_buildable_defaults_aware_traversers(cls: Type[Buildable]):
+  """Registers defaults aware traversal routines for buildable subclasses."""
+  _defaults_aware_traverser_registry.register_node_traverser(
+      cls,
+      flatten_fn=functools.partial(_buildable_flatten, include_defaults=True),
+      unflatten_fn=cls.__unflatten__,
+      path_elements_fn=functools.partial(
+          _buildable_path_elements, include_defaults=True
+      ),
+  )
+
+
+def _compare_buildable(x: Buildable, y: Buildable, check_dag: bool = False):
+  """Compare if two Buildables are equal, including DAG structure."""
+  assert isinstance(x, Buildable)
+  if type(x) is not type(y):
+    return False
+  if x.__fn_or_cls__ != y.__fn_or_cls__:
+    return False
+  assert x._has_var_keyword == y._has_var_keyword, (  # pylint: disable=protected-access
+      'Internal invariant violated: has_var_keyword should be the same if '
+      "__fn_or_cls__'s are the same."
+  )
+
+  missing = object()
+  for key in set(x.__arguments__) | set(y.__arguments__):
+    v1 = getattr(x, key, missing)
+    v2 = getattr(y, key, missing)
+    assert not (v1 is missing and v2 is missing)
+    if v1 is missing or v2 is missing:
+      return False
+    if isinstance(v1, Buildable) and isinstance(v2, Buildable):
+      if not _compare_buildable(v1, v2, check_dag=False):
+        return False
+    if v1 != v2:
+      return False
+
+  # Compare the DAG structure.
+  # The DAG stracture comparison must traverse the whole DAG and sort the
+  # result by path, which is expensive. Thus, we compare values first so
+  # that most unequal cases will not reach the expensive DAG compare step.
+  if check_dag:
+    x_elements = list(
+        daglish.iterate(
+            x,
+            memoized=True,
+            # Not to memorize internables during traversal, as they might
+            # be equal in value but have different object ids.
+            memoize_internables=False,
+            registry=_defaults_aware_traverser_registry,
+        )
+    )
+    y_elements = list(
+        daglish.iterate(
+            y,
+            memoized=True,
+            memoize_internables=False,
+            registry=_defaults_aware_traverser_registry,
+        )
+    )
+    x_paths = sorted([elt[1] for elt in x_elements])
+    y_paths = sorted([elt[1] for elt in y_elements])
+
+    if len(x_paths) != len(y_paths):
+      return False
+    for x_path, y_path in zip(x_paths, y_paths):
+      if x_path != y_path:
+        return False
+
+  return True
+
+
 class BuildableTraverserMetadata(NamedTuple):
   """Metadata for a Buildable.
 
@@ -192,6 +306,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         unflatten_fn=cls.__unflatten__,
         path_elements_fn=lambda x: x.__path_elements__(),
     )
+    _register_buildable_defaults_aware_traversers(cls)
 
   @abc.abstractmethod
   def __build__(self, *args, **kwargs):
@@ -199,25 +314,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
   def __flatten__(self) -> Tuple[Tuple[Any, ...], BuildableTraverserMetadata]:
-    arguments = ordered_arguments(self)
-    keys = tuple(arguments.keys())
-    values = tuple(arguments.values())
-    argument_tags = {
-        name: frozenset(tags)
-        for name, tags in self.__argument_tags__.items()
-        if tags  # Don't include empty sets.
-    }
-    argument_history = {
-        name: tuple(entries)
-        for name, entries in self.__argument_history__.items()
-    }
-    metadata = BuildableTraverserMetadata(
-        fn_or_cls=self.__fn_or_cls__,
-        argument_names=keys,
-        argument_tags=argument_tags,
-        argument_history=argument_history,
-    )
-    return values, metadata
+    return _buildable_flatten(self, include_defaults=False)
 
   @classmethod
   def __unflatten__(
@@ -230,8 +327,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     object.__setattr__(rebuilt, '__arguments__', metadata.arguments(values))
     return rebuilt
 
-  def __path_elements__(self):
-    return tuple(daglish.Attr(name) for name in ordered_arguments(self).keys())
+  def __path_elements__(self) -> Tuple[daglish.Attr]:
+    return _buildable_path_elements(self, include_defaults=False)
 
   def __getattr__(self, name: str):
     """Get parameter with given ``name``."""
@@ -446,22 +543,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       ``True`` if ``self`` equals ``other``, ``False`` if not.
     """
-    if type(self) is not type(other):
-      return False
-    if self.__fn_or_cls__ != other.__fn_or_cls__:
-      return False
-    assert self._has_var_keyword == other._has_var_keyword, (
-        'Internal invariant violated: has_var_keyword should be the same if '
-        "__fn_or_cls__'s are the same."
-    )
-
-    missing = object()
-    for key in set(self.__arguments__) | set(other.__arguments__):
-      v1 = getattr(self, key, missing)
-      v2 = getattr(other, key, missing)
-      if (v1 is not missing or v2 is not missing) and v1 != v2:
-        return False
-    return True
+    return _compare_buildable(self, other, check_dag=True)
 
   def __getstate__(self):
     """Gets pickle serialization state, removing some fields.

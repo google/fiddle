@@ -21,7 +21,6 @@ import functools
 import pickle
 import threading
 from typing import Any, Callable, Dict, Generic, TypeVar
-
 from absl.testing import absltest
 from absl.testing import parameterized
 import fiddle as fdl
@@ -30,6 +29,7 @@ from fiddle import daglish
 from fiddle import history
 from fiddle._src import config as config_lib
 from fiddle._src.experimental import daglish_legacy
+from fiddle._src.testing.example import demo_configs
 import pytype_extensions
 from typing_extensions import Annotated
 
@@ -516,6 +516,32 @@ class ConfigTest(parameterized.TestCase):
     value1, value2 = fdl.build(cfg)
     self.assertIsInstance(value1, ClassWithDisabledEquality)
     self.assertIsInstance(value2, ClassWithDisabledEquality)
+
+  def test_config_dag_structure_comparison(self):
+    a = fdl.Config(SampleClass, 1, 2)
+    b = fdl.Config(SampleClass, 1, 2)
+    with self.subTest('python_list'):
+      x = [a, a]
+      y = [a, b]
+      self.assertEqual(x, y)
+
+    with self.subTest('node_sharing_detection'):
+      x = fdl.Config(SampleClass, a, b)
+      y = fdl.Config(SampleClass, a, a)
+      self.assertNotEqual(x, y)
+
+    with self.subTest('node_sharing_difference'):
+      x = fdl.Config(SampleClass, a, b, b)
+      y = fdl.Config(SampleClass, a, a, b)
+      self.assertNotEqual(x, y)
+
+  def test_config_internables_comparison(self):
+    x, y = demo_configs.get_equal_but_not_object_identical_string_configs()
+    self.assertEqual(x, y)
+
+  def test_dict_with_different_order_comparison(self):
+    x, y = demo_configs.get_equal_but_not_object_identical_string_configs()
+    self.assertEqual(x, y)
 
   def test_unsetting_argument(self):
     fn_config = fdl.Config(basic_fn)

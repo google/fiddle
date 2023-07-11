@@ -17,7 +17,9 @@
 
 import inspect
 import logging
+import typing
 from typing import Any, List
+from fiddle._src import config as config_lib
 
 
 def find_fiddler_like_things(source_module: Any) -> List[str]:
@@ -74,8 +76,16 @@ def find_base_config_like_things(source_module: Any) -> List[str]:
   for name in dir(source_module):
     if name.startswith('__'):
       continue
+    if name in dir(typing):
+      continue
     try:
       sig = inspect.signature(getattr(source_module, name))
+
+      # Exclude functions that do not return a single config.
+      return_type = sig.return_annotation
+      origin = typing.get_origin(return_type)
+      if origin is not None and not issubclass(origin, config_lib.Buildable):
+        continue
 
       def is_required_arg(name: str) -> bool:
         param = sig.parameters[name]  # pylint: disable=cell-var-from-loop
