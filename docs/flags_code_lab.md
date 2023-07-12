@@ -40,7 +40,7 @@ When our example program is executed, the following steps occur:
 
     ```sh
     python3 -m fiddle.absl_flags.example.example \
-      --fdl_config=simple \
+      --fdl_config=base \
       --fiddler=swap_weight_and_bias \
       --fdl.model.b=0.73
     ```
@@ -89,7 +89,7 @@ When our example program is executed, the following steps occur:
 The Fiddle flag integration supports the following flag syntax:
 
 -   **Base Config**: The base configuration function is specified with the flag
-    `--fdl_config`. Example: `--fdl_config=simple`. Alternatively, a
+    `--fdl_config`. Example: `--fdl_config=base`. Alternatively, a
     JSON-serialized configuration can be read from a file via with the flag
     `--fdl_config_file`. Example: `--fdl_config_file='/some/path/config.json'`.
 
