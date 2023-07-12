@@ -20,7 +20,6 @@ from typing import Any
 
 from absl.testing import absltest
 import fiddle as fdl
-from fiddle._src.experimental import fixture_node
 from fiddle._src.experimental import serialization
 from fiddle._src.experimental import yaml_serialization
 from fiddle._src.testing import test_util
@@ -49,10 +48,6 @@ def _partial_constructor(loader, node):
   return fdl.cast(fdl.Partial, _config_constructor(loader, node))
 
 
-def _fixture_constructor(loader, node):
-  return fdl.cast(fixture_node.FixtureNode, _config_constructor(loader, node))
-
-
 class SemiSafeLoader(yaml.SafeLoader):
   """Intermediate class that can load Fiddle configs."""
 
@@ -73,8 +68,6 @@ def load_yaml_test_only(serialized: str) -> Any:
   """
   SemiSafeLoader.add_constructor("!fdl.Config", _config_constructor)
   SemiSafeLoader.add_constructor("!fdl.Partial", _partial_constructor)
-  SemiSafeLoader.add_constructor("!fiddle.experimental.Fixture",
-                                 _fixture_constructor)
   return yaml.load(serialized, Loader=SemiSafeLoader)
 
 
@@ -83,10 +76,6 @@ class Foo:
   a: int
   b: str
   c: Any
-
-
-def my_fixture(template):
-  return template
 
 
 class FakeTag(fdl.Tag):
@@ -128,14 +117,6 @@ class YamlSerializationTest(test_util.TestCase):
         Foo, a=1, b="hi", c=fdl.Config(Foo, a=2, b="bye", c=None))
     serialized = yaml_serialization.dump_yaml(value=config)
     loaded = load_yaml_test_only(serialized)
-    self.assertEqual(loaded, config)
-
-  def test_dump_fixture(self):
-    config = fixture_node.FixtureNode(my_fixture,
-                                      fdl.Config(Foo, a=1, b="hi", c=None))
-    serialized = yaml_serialization.dump_yaml(value=config)
-    loaded = load_yaml_test_only(serialized)
-    self.assertIsInstance(loaded, fixture_node.FixtureNode)
     self.assertEqual(loaded, config)
 
   def test_dump_tagged_value(self):

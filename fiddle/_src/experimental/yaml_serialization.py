@@ -27,7 +27,6 @@ from typing import Any
 
 from fiddle._src import config as config_lib
 from fiddle._src import tagging
-from fiddle._src.experimental import fixture_node
 import yaml
 
 
@@ -35,8 +34,9 @@ def _defaultdict_representer(dumper, data):
   return dumper.represent_dict(data)
 
 
-yaml.SafeDumper.add_representer(collections.defaultdict,
-                                _defaultdict_representer)
+yaml.SafeDumper.add_representer(
+    collections.defaultdict, _defaultdict_representer
+)
 
 
 def _config_representer(dumper, data, type_name="fdl.Config"):
@@ -47,8 +47,10 @@ def _config_representer(dumper, data, type_name="fdl.Config"):
   # key that doesn't exist in __arguments__. It would be pretty rare for this
   # to be an issue.
   if "__fn_or_cls__" in value:
-    raise ValueError("It is not supported to dump objects of functions/classes "
-                     "that have a __fn_or_cls__ parameter.")
+    raise ValueError(
+        "It is not supported to dump objects of functions/classes "
+        "that have a __fn_or_cls__ parameter."
+    )
 
   value["__fn_or_cls__"] = {
       "module": inspect.getmodule(config_lib.get_callable(data)).__name__,
@@ -61,23 +63,21 @@ def _partial_representer(dumper, data):
   return _config_representer(dumper, data, type_name="fdl.Partial")
 
 
-def _fixture_representer(dumper, data):
-  return _config_representer(
-      dumper, data, type_name="fiddle.experimental.Fixture")
-
-
 def _taggedvalue_representer(dumper, data):
-  return dumper.represent_mapping("!fdl.TaggedValue", {
-      "tags": [tag.name for tag in data.tags],
-      "value": data.value,
-  })
+  return dumper.represent_mapping(
+      "!fdl.TaggedValue",
+      {
+          "tags": [tag.name for tag in data.tags],
+          "value": data.value,
+      },
+  )
 
 
 yaml.SafeDumper.add_representer(config_lib.Config, _config_representer)
 yaml.SafeDumper.add_representer(config_lib.Partial, _partial_representer)
-yaml.SafeDumper.add_representer(fixture_node.FixtureNode, _fixture_representer)
-yaml.SafeDumper.add_representer(tagging.TaggedValueCls,
-                                _taggedvalue_representer)
+yaml.SafeDumper.add_representer(
+    tagging.TaggedValueCls, _taggedvalue_representer
+)
 
 
 def dump_yaml(value: Any) -> str:
