@@ -334,10 +334,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """Get parameter with given ``name``."""
     value = self.__arguments__.get(name, _UNSET_SENTINEL)
 
-    # Replace tied values with their contents.
-    if isinstance(value, TiedValue):
-      value = value.value
-
     if value is not _UNSET_SENTINEL:
       return value
     if dataclasses.is_dataclass(
@@ -410,20 +406,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
             name, self.__argument_tags__[name]
         )
       if 'value' in value.__arguments__:
-        # Must pull from underlying dictionary to preserve TiedValue's.
         value = value.__arguments__['value']
       else:
         return
 
-    # Actually set the value, handling TiedValue's as a special case.
-    current = self.__arguments__.get(name)
-    if isinstance(current, TiedValue) and not isinstance(value, TiedValue):
-      # This will create a history entry in the TiedValue as well. (Seems
-      # reasonable, but not clear what's best?)
-      current.value = value
-    else:
-      self.__arguments__[name] = value
-
+    self.__arguments__[name] = value
     self.__argument_history__.add_new_value(name, value)
 
   def __delattr__(self, name):
@@ -866,22 +853,6 @@ class TaggedValueCls(Generic[T], Config[T]):
           f'{self.__fn_or_cls__}'
       )
     return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
-
-
-class TiedValue(Generic[T], Config[T]):
-  """Class implementing tied values.
-
-  The implementation/declaration is here, so that we can write __getattr__ and
-  __setattr__ buildable hooks to eliminate the extra ``.value`` when it is a
-  field attribute, but please use ``experimental/tied_value.py`` for the public
-  API.
-  """
-
-  # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT[T]
-  __signature__: inspect.Signature
-
-  value: T
 
 
 @dataclasses.dataclass(frozen=True)
