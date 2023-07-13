@@ -1,5 +1,7 @@
 """Macros to make fiddle configs trivial to maintain through testing."""
 
+load("//third_party/bazel_rules/rules_python/python:py_test.bzl", "py_test")
+
 def fiddle_autotest(
         name,
         module):
@@ -16,7 +18,7 @@ def fiddle_autotest(
         cmd = "echo " + program + " > $(location " + name + ".py)",
     )
 
-    native.py_test(
+    py_test(
         name = name,
         srcs = [name + ".py"],
         deps = [
