@@ -192,9 +192,9 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
         # the MoveComplexNodesToVariables pass is run.
         num_lines = len(code.splitlines())
         if complexity is None:
-          self.assertLessEqual(num_lines, 25)
+          self.assertLessEqual(num_lines, 22)
         else:
-          self.assertGreater(num_lines, 25)
+          self.assertGreater(num_lines, 22)
 
         matches = re.findall(r"def\ (?P<name>[\w_]+)\(", code)
         self.assertEqual(

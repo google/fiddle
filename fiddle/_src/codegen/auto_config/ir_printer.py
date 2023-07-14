@@ -79,7 +79,7 @@ def format_expr(expr: Any):
           + ", ".join(f'"{key}": {value}' for key, value in value.items())
           + "}"
       )
-    elif isinstance(value, code_ir.VariableReference):
+    elif isinstance(value, code_ir.BaseNameReference):
       return value.name.value
     elif isinstance(value, code_ir.AttributeExpression):
       base_obj = state.call(value.base, daglish.Attr("base"))
@@ -90,6 +90,22 @@ def format_expr(expr: Any):
     elif isinstance(value, code_ir.WithTagsCall):
       sub_value = state.map_children(value).expression
       return f"WithTagsCall[{sub_value}]"
+    elif isinstance(value, code_ir.SymbolOrFixtureCall):
+      symbol_expression = state.call(
+          value.symbol_expression, daglish.Attr("symbol_expression")
+      )
+      positional_arg_expressions = state.call(
+          value.positional_arg_expressions,
+          daglish.Attr("positional_arg_expressions"),
+      )
+      arg_expressions = state.call(
+          value.arg_expressions, daglish.Attr("arg_expressions")
+      )
+      return (
+          f"call:<{symbol_expression}"
+          f"(*[{positional_arg_expressions}],"
+          f" **{arg_expressions})>"
+      )
     elif isinstance(value, code_ir.Name):
       return value.value
     elif isinstance(value, type):

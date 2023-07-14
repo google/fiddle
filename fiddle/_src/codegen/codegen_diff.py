@@ -19,7 +19,7 @@ import collections
 import functools
 import re
 import types
-from typing import Any, Callable, Dict, List, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from fiddle import daglish
 from fiddle import diffing
@@ -31,10 +31,13 @@ from fiddle._src.experimental import daglish_legacy
 import libcst as cst
 
 
-def fiddler_from_diff(diff: diffing.Diff,
-                      old: Any = None,
-                      func_name: str = 'fiddler',
-                      param_name: str = 'cfg'):
+def fiddler_from_diff(
+    diff: diffing.Diff,
+    old: Any = None,
+    func_name: str = 'fiddler',
+    param_name: str = 'cfg',
+    import_manager: Optional[import_manager_lib.ImportManager] = None,
+):
   """Returns the CST for a fiddler function that applies the changes in `diff`.
 
   The returned `cst.Module` consists of a set of `import` statements for any
@@ -66,18 +69,26 @@ def fiddler_from_diff(diff: diffing.Diff,
       all referenced paths.
     func_name: The name for the fiddler function.
     param_name: The name for the parameter to the fiddler function.
+    import_manager: Existing import manager. Usually set to None, but if you are
+      integrating this with other code generation tasks, it can be nice to
+      share.
 
   Returns:
     An `cst.Module` object.  You can convert this to a string using
     `result.code`.
   """
-  # Create a namespace to keep track of variables that we add.  Reserve the
-  # names of the param & func.
-  namespace = namespace_lib.Namespace()
-  namespace.add(param_name)
-  namespace.add(func_name)
+  if import_manager is None:
+    # Create a namespace to keep track of variables that we add.  Reserve the
+    # names of the param & func.
+    namespace = namespace_lib.Namespace()
+    namespace.add(param_name)
+    namespace.add(func_name)
 
-  import_manager = import_manager_lib.ImportManager(namespace)
+    import_manager = import_manager_lib.ImportManager(namespace)
+  else:
+    namespace = import_manager.namespace
+    namespace.add(param_name)
+    namespace.add(func_name)
 
   # Get a list of paths that are referenced by the diff.
   used_paths = _find_used_paths(diff)
