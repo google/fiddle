@@ -189,12 +189,14 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
 
         # Choose an arbitrary split point and check that there are more lines
         # when we add more intermediate variables. This is just to ensure that
-        # the MoveComplexNodesToVariables pass is run.
+        # the MoveComplexNodesToVariables pass is run. (We don't currently wrap
+        # lines, so there will be fewer when not extracting variables.)
+        max_lines_when_no_variables = 22
         num_lines = len(code.splitlines())
         if complexity is None:
-          self.assertLessEqual(num_lines, 25)
+          self.assertLessEqual(num_lines, max_lines_when_no_variables)
         else:
-          self.assertGreater(num_lines, 25)
+          self.assertGreater(num_lines, max_lines_when_no_variables)
 
         matches = re.findall(r"def\ (?P<name>[\w_]+)\(", code)
         self.assertEqual(

@@ -121,6 +121,13 @@ class AttributeExpression(CodegenNode):
   base: Any  # Wrapped expression, can involve VariableReference's
   attribute: str
 
+  def __hash__(self):
+    # Currently, some Pax (https://github.com/google/paxml) codegen involves
+    # having AttributeExpression's as dict keys, as those keys are rewritten to
+    # expressions. This function allows for that, but one shouldn't generally
+    # assume equality as object identity here.
+    return id(self)
+
 
 @dataclasses.dataclass
 class ArgFactoryExpr(CodegenNode):

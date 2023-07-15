@@ -154,6 +154,7 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       except:
         print(f"\n\nERROR CONVERTING: {value!r}")
         print(f"\n\nTYPE: {type(value)}")
+        print(f"\n\nPATH: {daglish.path_str(state.current_path)}")
         raise
 
   return daglish.MemoizedTraversal.run(traverse, expr)
@@ -198,7 +199,7 @@ def code_for_fn(
           ),
       ]
   )
-  if fn.parameters:
+  if fn.parameters and len(fn.parameters) > 1:
     whitespace_before_params = cst.ParenthesizedWhitespace(
         cst.TrailingWhitespace(),
         indent=True,
