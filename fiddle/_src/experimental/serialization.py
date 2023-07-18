@@ -40,6 +40,7 @@ from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src import reraised_exception
 from fiddle._src.experimental import daglish_legacy
+from fiddle._src.experimental import lazy_imports
 
 
 _VERSION = '0.0.1'
@@ -412,6 +413,24 @@ _MODULE_KEY = 'module'
 _NAME_KEY = 'name'
 
 
+def _serialize_lazy_imports(proxy_object):
+  """Serialize proxy object for lazy imports."""
+  qualname = proxy_object.__qualname__
+  parts = qualname.split(':')
+  if len(parts) == 2:
+    module_name, symbol_name = parts
+  elif len(parts) == 1:
+    module_name, symbol_name = qualname.rsplit('.', maxsplit=1)
+  else:
+    raise ValueError(f'Invalid qualname {qualname} for ProxyObject.')
+  output = {
+      _TYPE_KEY: _PYREF_TYPE,
+      _MODULE_KEY: module_name,
+      _NAME_KEY: symbol_name,
+  }
+  return output
+
+
 class Serialization:
   """Maintains state for an in-progress serialization.
 
@@ -518,7 +537,10 @@ class Serialization:
       hint_type = type(value)
       if isinstance(value, config_lib.Buildable):
         hint_type = config_lib.get_callable(value)
-      hint = hint_type.__name__
+      if isinstance(hint_type, lazy_imports.ProxyObject):
+        hint = hint_type.name
+      else:
+        hint = hint_type.__name__
     except AttributeError:
       hint = re.sub(r"[<>()\[\] '\"]", '', str(type(value)))
 
@@ -612,6 +634,8 @@ class Serialization:
         output = self._leaf(value)
       elif isinstance(value, (type, types.FunctionType, enum.Enum)):
         output = self._pyref(value, current_path)
+      elif isinstance(value, lazy_imports.ProxyObject):
+        output = _serialize_lazy_imports(value)
       elif id(value) in _serialization_constants_by_id:
         output = _serialization_constants_by_id[id(value)].to_pyref()
       elif (isinstance(value, collections.abc.Hashable) and
