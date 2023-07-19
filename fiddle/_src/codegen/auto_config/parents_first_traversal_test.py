@@ -27,8 +27,8 @@ from fiddle._src.testing import nested_values
 def get_traversal_order(structure) -> List[Any]:
   result = []
 
-  def traverse_fn(value, parent_values):
-    del parent_values  # unused
+  def traverse_fn(value, parent_results):
+    del parent_results  # unused
     result.append(value)
 
   parents_first_traversal.traverse_parents_first(traverse_fn, structure)
@@ -80,6 +80,21 @@ class ParentsFirstTraversalTest(absltest.TestCase):
         rng = random.Random(rng_seed)
         structure = nested_values.generate_nested_value(rng)
         get_traversal_order(structure)
+
+  def test_parent_results(self):
+    shared = {"a": 1, "b": 2}
+    x = {"a": 3, "b": shared}
+    y = {"a": 4, "b": shared}
+    config = {"a": x, "b": y}
+
+    def traverse_fn(value, parent_results):
+      if value is shared:
+        self.assertLen(parent_results, 2)
+        self.assertIn(x, parent_results)
+        self.assertIn(y, parent_results)
+      return value
+
+    parents_first_traversal.traverse_parents_first(traverse_fn, config)
 
 
 if __name__ == "__main__":

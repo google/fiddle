@@ -132,10 +132,7 @@ class PathFirstNamer(Namer):
     if not candidates and not paths:
       candidates.append("root")
     if not candidates:
-      raise NameGenerationError(
-          f"Could not generate any candidate names for {value!r} with "
-          f"paths {paths!r}"
-      )
+      candidates.append("unnamed_var")
     return self.name_from_candidates(candidates)
 
 

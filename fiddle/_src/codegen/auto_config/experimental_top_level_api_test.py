@@ -20,7 +20,6 @@ import random
 import re
 import sys
 import types
-from typing import Any
 import uuid
 
 from absl import flags
@@ -33,19 +32,9 @@ from fiddle._src.codegen.auto_config import experimental_top_level_api
 from fiddle._src.codegen.auto_config import test_fixtures
 from fiddle._src.testing import nested_values
 from fiddle._src.testing import test_util
+from fiddle._src.testing.example import demo_configs
 from fiddle._src.testing.example import fake_encoder_decoder
 from fiddle.experimental.auto_config import auto_config
-
-
-@dataclasses.dataclass(frozen=True)
-class ModelWrapper:
-  model: Any
-
-
-@dataclasses.dataclass(frozen=True)
-class AnotherClass:
-  foo: Any
-  bar: Any
 
 
 def make_arg_factory_config():
@@ -58,6 +47,20 @@ def make_arg_factory_config():
           ),
       ),
   )
+
+
+def create_random_sub_fixture(config, rng, ratio=0.5):
+  fixtures = {}
+  for value, _ in daglish.iterate(config):
+    if (
+        isinstance(value, fdl.Buildable)
+        # TODO(b/284359119): Support fdl.ArgFactory as sub-fixture.
+        and (not isinstance(value, fdl.ArgFactory))
+    ):
+      if rng.random() < ratio:
+        name = f"sub_fixture_{len(fixtures) + 1}"
+        fixtures[name] = value
+  return fixtures
 
 
 class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
@@ -130,8 +133,9 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
       )
       if has_buildables:
         with self.subTest(f"rng_{i}"):
+          sub_fixtures = create_random_sub_fixture(config, random.Random(i))
           code = experimental_top_level_api.auto_config_codegen(
-              config, **kwargs
+              config, sub_fixtures=sub_fixtures, **kwargs
           )
           module = self._load_code_as_module(code)
           generated_config = module.config_fixture.as_buildable()
@@ -270,6 +274,24 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
         code = experimental_top_level_api.auto_config_codegen(
             config,
             sub_fixtures={"model_fixture": config.model},
+            max_expression_complexity=complexity,
+        )
+        module = self._load_code_as_module(code)
+        generated_config = module.config_fixture.as_buildable()
+        self.assertDagEqual(config, generated_config)
+
+  def test_nesting_shared_nodes(self):
+    config = demo_configs.nested_node_sharing_config.as_buildable()
+    for complexity in [None, 2, 3]:
+      with self.subTest(f"max_complexity_as_{complexity}"):
+        code = experimental_top_level_api.auto_config_codegen(
+            config,
+            sub_fixtures={
+                "fx_a": config.x,
+                "fx_f1": config.x.x,
+                "fx_f2": config.x.y,
+                "fx_f3": config.x.z,
+            },
             max_expression_complexity=complexity,
         )
         module = self._load_code_as_module(code)

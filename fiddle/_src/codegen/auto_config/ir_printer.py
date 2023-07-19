@@ -65,7 +65,9 @@ def format_expr(expr: Any):
       fn = format_py_reference(fdl.get_callable(value))
       return f"{buildable_type}({fn}, {arguments})"
     elif isinstance(value, (list, tuple)):
-      children = ", ".join(sub_value for sub_value in state.map_children(value))
+      children = ", ".join(
+          str(sub_value) for sub_value in state.map_children(value)
+      )
       if isinstance(value, tuple):
         if len(value) == 1:
           children += ","

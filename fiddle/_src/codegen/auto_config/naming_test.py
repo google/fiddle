@@ -134,13 +134,19 @@ class PathFirstNamerTest(absltest.TestCase):
   def test_names_as_documented_example_2(self):
     config = [{1: "hi"}]
     namer = new_path_first_namer()
-    with self.assertRaises(ValueError):
-      namer.name_for(config[0][1], [(
-          daglish.Index(0),
-          daglish.Key(1),
-      )])
-    with self.assertRaises(ValueError):
-      namer.name_for(config[0], [(daglish.Index(0),)])
+    self.assertEqual(
+        namer.name_for(
+            config[0][1],
+            [(
+                daglish.Index(0),
+                daglish.Key(1),
+            )],
+        ),
+        "unnamed_var",
+    )
+    self.assertEqual(
+        namer.name_for(config[0], [(daglish.Index(0),)]), "unnamed_var_2"
+    )
     self.assertEqual(namer.name_for(config, [()]), "root")
 
 
