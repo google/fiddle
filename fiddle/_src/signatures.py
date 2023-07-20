@@ -17,7 +17,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Generic, Mapping, Tuple, Type
+from typing import Any, Callable, Dict, Generic, List, Mapping, Tuple, Type
 import weakref
 import typing_extensions
 
@@ -136,48 +136,71 @@ class SignatureInfo:
 
   signature: inspect.Signature
   has_var_keyword: bool = None
+  has_var_positional: bool = None
+  positional_arg_names: List[str] = dataclasses.field(default_factory=list)
 
   def __post_init__(self):
+    # During serilization, signature is set to None so no action is needed.
+    if self.signature is None:
+      return
+
+    if self.has_var_positional is None:
+      self.has_var_positional = any(
+          param.kind == param.VAR_POSITIONAL
+          for param in self.signature.parameters.values()
+      )
     if self.has_var_keyword is None:
-      has_var_keyword = any(
+      self.has_var_keyword = any(
           param.kind == param.VAR_KEYWORD
           for param in self.signature.parameters.values()
       )
-      self.has_var_keyword = has_var_keyword
+
+    # If *args exists, we must pass things before it in positional format. This
+    # list tracks those arguments.
+    maybe_positional_args = []
+    positional_only_args = []
+    for param in self.signature.parameters.values():
+      if param.kind == param.POSITIONAL_ONLY:
+        positional_only_args.append(param.name)
+      elif param.kind == param.POSITIONAL_OR_KEYWORD:
+        maybe_positional_args.append(param.name)
+      elif param.kind == param.VAR_POSITIONAL:
+        positional_only_args.extend(maybe_positional_args)
+    self.positional_arg_names = positional_only_args
 
   @staticmethod
   def signature_binding(fn_or_cls, *args, **kwargs) -> Any:
     """Bind partial for arguments and return arguments."""
     signature = get_signature(fn_or_cls)
+    positional_arguments = ()
     arguments = signature.bind_partial(*args, **kwargs).arguments
     for name in list(arguments.keys()):  # Make a copy in case we mutate.
       param = signature.parameters[name]
       if param.kind == param.VAR_POSITIONAL:
-        # TODO(b/197367863): Add *args support.
-        err_msg = (
-            'Variable positional arguments (aka `*args`) not supported. '
-            f'Found param `{name}` in `{fn_or_cls}`.'
-        )
-        raise NotImplementedError(err_msg)
+        positional_arguments = arguments.pop(param.name)
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
-    return arguments
+    return arguments, positional_arguments
 
   def validate_param_name(self, name, fn_or_cls) -> None:
     """Raises an error if ``name`` is not a valid parameter name."""
+    if name == '__args__':
+      if self.has_var_positional:
+        return
+      else:
+        raise ValueError(
+            'This Buildable does not have variadic positional argument.'
+        )
+
     param = self.signature.parameters.get(name)
 
-    if param is not None:
-      if param.kind == param.POSITIONAL_ONLY:
-        # TODO(b/197367863): Add positional-only arg support.
-        raise NotImplementedError(
-            'Positional only arguments not supported. '
-            f'Tried to set {name!r} on {fn_or_cls}'
-        )
-      elif param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-        # Just pretend it doesn't correspond to a valid parameter name... below
-        # a TypeError will be thrown unless there is a **kwargs parameter.
-        param = None
+    if param is not None and param.kind in (
+        param.VAR_POSITIONAL,
+        param.VAR_KEYWORD,
+    ):
+      # Just pretend it doesn't correspond to a valid parameter name... below
+      # a TypeError will be thrown unless there is a **kwargs parameter.
+      param = None
 
     if param is None and not self.has_var_keyword:
       if name in self.signature.parameters:

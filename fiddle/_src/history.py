@@ -129,14 +129,23 @@ _location_provider: LocationProvider = _stacktrace_location_provider
 
 
 class _Deleted:
-  """A marker object to indicated deletion."""
+  """A marker object to indicate deletion."""
 
   def __repr__(self):
     return "DELETED"
 
 
+class _NotSet:
+  """A marker object to indicate a value is not set for *args."""
+
+  def __repr__(self):
+    return "NOT_SET"
+
+
 # A marker object to record when a field was deleted.
 DELETED = _Deleted()
+# A marker object to record this value is not set for *args.
+NOTSET = _NotSet()
 
 
 class ChangeKind(enum.Enum):
@@ -149,7 +158,7 @@ class ChangeKind(enum.Enum):
   UPDATE_TAGS = 2
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=False)
 class HistoryEntry:
   """An entry in the history table for a config object.
 
@@ -166,7 +175,7 @@ class HistoryEntry:
   sequence_id: int
   param_name: str
   kind: ChangeKind
-  new_value: Union[Any, FrozenSet[tag_type.TagType], _Deleted]
+  new_value: Union[Any, FrozenSet[tag_type.TagType], _Deleted, _NotSet]
   location: Location
 
   def __deepcopy__(self, memo):
