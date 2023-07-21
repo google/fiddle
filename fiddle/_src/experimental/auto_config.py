@@ -30,7 +30,7 @@ import inspect
 import linecache
 import textwrap
 import types
-from typing import Any, Callable, cast, Optional
+from typing import Any, Callable, Optional, Type, cast
 
 from fiddle._src import arg_factory
 from fiddle._src import building
@@ -477,7 +477,7 @@ def _make_closure_cell(contents):
     return cell_type(contents)
 
 
-def _convert_callable_to_fiddle_arg_factory(arg):
+def _maybe_as_arg_factory(arg_factory_cls, arg):
   """Converts an argument of an arg_factory partial() to Fiddle buildables.
 
   In normal Python, one expresses arg factories like,
@@ -502,15 +502,17 @@ def _convert_callable_to_fiddle_arg_factory(arg):
   most likely a mistake in configuration, so we don't allow it.
 
   Args:
+    arg_factory_cls: The type to use when creating the ArgFactory (normally this
+      will just be `fdl.ArgFactory`, but can potentially be customized).
     arg: Intermediate value passed to `arg_factory.partial`.
 
   Returns:
     ArgFactory version of a configuration or callable.
   """
   if isinstance(arg, config.Partial):
-    return config.cast(config.ArgFactory, arg)
+    return config.cast(arg_factory_cls, arg)
   elif callable(arg):
-    return config.ArgFactory(arg)
+    return arg_factory_cls(arg)
   else:
     raise ValueError(
         "Couldn't figure out how to handle arg_factory argument; please "
@@ -518,10 +520,12 @@ def _convert_callable_to_fiddle_arg_factory(arg):
     )
 
 
-def _make_partial(buildable_or_callable, *args, **kwargs):
-  """Makes a fdl Partial, but calling appropriate APIs if casting is required.
+def _make_partial(partial_cls, buildable_or_callable, *args, **kwargs):
+  """Makes a fdl.Partial, but calling appropriate APIs if casting is required.
 
   Args:
+    partial_cls: The type to use when creating the Partial (normally this will
+      just be `fdl.Partial`, but can potentially be customized).
     buildable_or_callable: Callable or existing configuration object to update.
     *args: Positional arguments, only supported when `config_or_callable` is a
       Partial already.
@@ -543,7 +547,7 @@ def _make_partial(buildable_or_callable, *args, **kwargs):
       )
     return config.copy_with(buildable_or_callable, **kwargs)
   else:
-    return config.Partial(buildable_or_callable, *args, **kwargs)
+    return partial_cls(buildable_or_callable, *args, **kwargs)
 
 
 def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
@@ -577,6 +581,13 @@ def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
   )
 
 
+@dataclasses.dataclass(frozen=True)
+class ConfigTypes:
+  config_cls: Type[config.Config] = config.Config
+  partial_cls: Type[config.Partial] = config.Partial
+  arg_factory_cls: Type[config.ArgFactory] = config.ArgFactory
+
+
 def auto_config(
     fn=None,
     *,
@@ -584,7 +595,7 @@ def auto_config(
     experimental_allow_control_flow: bool = False,
     experimental_always_inline: Optional[bool] = None,
     experimental_exemption_policy: Optional[auto_config_policy.Policy] = None,
-    experimental_config_cls=config.Config,
+    experimental_config_types: ConfigTypes = ConfigTypes(),
     experimental_result_must_contain_buildable: bool = True,
 ) -> Any:  # TODO(b/272377821): More precise return type.
   """Rewrites the given function to make it generate a ``Config``.
@@ -671,10 +682,12 @@ def auto_config(
       which ones should simply be executed normally during the ``as_buildable``
       interpretation of ``fn``. This predicate should return ``True`` if the
       given callable should be exempted from auto-configuration.
-    experimental_config_cls: The class to use to generate configs. By default,
-      this is just ``fdl.Config``, but projects with custom ``Config``
-      subclasses can use this to override the default. This is experimental and
-      may be removed in the future.
+    experimental_config_types: A ``ConfigTypes`` instance containing the types
+      to use when generating configs. By default, this just supplies the
+      standard Fiddle types ()``fdl.Config``, ``fdl.Partial``, and
+      ``fdl.ArgFactory``), but projects with custom subclasses can use this to
+      override the default. This is experimental and may be removed in the
+      future.
     experimental_result_must_contain_buildable: If true, then raise an error if
       `fn.as_buildable` returns a result that does not contain any `Buildable`
       values -- e.g., if it returns an empty dict.
@@ -712,14 +725,17 @@ def auto_config(
     if isinstance(fn_or_cls, AutoConfig) and fn_or_cls.always_inline:
       return fn_or_cls.as_buildable(*args, **kwargs)
 
+    partial_cls = experimental_config_types.partial_cls
     if fn_or_cls is functools.partial:
-      return _make_partial(args[0], *args[1:], **kwargs)
+      return _make_partial(partial_cls, args[0], *args[1:], **kwargs)
     elif fn_or_cls is arg_factory.partial:
+      arg_factory_cls = experimental_config_types.arg_factory_cls
       return _make_partial(
+          partial_cls,
           args[0],
-          *[_convert_callable_to_fiddle_arg_factory(arg) for arg in args[1:]],
+          *[_maybe_as_arg_factory(arg_factory_cls, arg) for arg in args[1:]],
           **{
-              name: _convert_callable_to_fiddle_arg_factory(arg)
+              name: _maybe_as_arg_factory(arg_factory_cls, arg)
               for name, arg in kwargs.items()
           },
       )
@@ -729,7 +745,7 @@ def auto_config(
     if experimental_exemption_policy(fn_or_cls):
       return fn_or_cls(*args, **kwargs)
 
-    return experimental_config_cls(fn_or_cls, *args, **kwargs)
+    return experimental_config_types.config_cls(fn_or_cls, *args, **kwargs)
 
   def auto_config_attr_load_handler(value, attr, allow_dataclass=True):
     """Handles attribute access in auto_config'ed functions."""

@@ -26,8 +26,6 @@ import fiddle as fdl
 from fiddle import selectors
 from fiddle._src import tagging
 from fiddle._src import tagging_test_module as tst
-from fiddle.experimental import auto_config
-from fiddle.experimental import dataclasses as fdl_dc
 
 
 @dataclasses.dataclass
@@ -50,17 +48,6 @@ def return_kwargs(**kwargs):
 
 def sample_function(x, y):
   return (x, y)
-
-
-@auto_config.auto_config
-def custom_default_factory():
-  return Foo(1, "2")
-
-
-@dataclasses.dataclass
-class Baz:
-  foo: Foo = fdl_dc.field(default_factory=custom_default_factory)
-  baz: int = 2
 
 
 def get_single_tag(tagged_value: tagging.TaggedValueCls) -> tagging.TagType:
@@ -178,13 +165,6 @@ class TaggingTest(absltest.TestCase):
     )
     tagging.set_tagged(cfg, tag=tst.LinearParamDType, value=1)
     self.assertDictEqual(fdl.build(cfg), {"foo": None, "bar": 1})
-
-  def test_tagging_dataclass_field_defaults(self):
-    cfg = fdl.Config(Baz, foo=RedTag.new())
-    obj = fdl.build(cfg)
-    self.assertEqual(
-        obj.foo.bar, 1, "Default values from dataclass field missing."
-    )
 
   def test_set_two_taggedvalues(self):
     cfg = fdl.Config(

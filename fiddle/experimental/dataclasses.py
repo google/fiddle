@@ -13,20 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Leverage Python's dataclasses' extensibility for lightweight Fiddle control.
-
-While Fiddle is carefully designed to be used with libraries that are completely
-ignorant of Fiddle's existance, Fiddle also allows library authors (if they so
-choose) to customize Fiddle's behavior to make great user experiences for the
-library's users. Fiddle leverages extension mechanisms within Python's
-dataclasses system to add some additional metadata to control behavior in the
-rest of Fiddle.
-"""
+"""Utilities for traversing and converting dataclasses."""
 
 # pylint: disable=unused-import
 from fiddle._src.experimental.dataclasses import convert_dataclasses_to_configs
 from fiddle._src.experimental.dataclasses import daglish_dataclass_registry
-from fiddle._src.experimental.dataclasses import field
-from fiddle._src.experimental.dataclasses import field_has_tag
-from fiddle._src.experimental.dataclasses import FieldMetadata
-from fiddle._src.experimental.dataclasses import TagOrTags

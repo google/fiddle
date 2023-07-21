@@ -30,7 +30,6 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable
 
 from fiddle._src import arg_factory
 from fiddle._src import daglish
-from fiddle._src import field_metadata
 from fiddle._src import history
 from fiddle._src import signatures
 from fiddle._src import tag_type
@@ -258,11 +257,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         raise NotImplementedError(err_msg)
       elif param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
-
-    if dataclasses.is_dataclass(self.__fn_or_cls__):
-      fields = dataclasses.fields(self.__fn_or_cls__)
-      _add_dataclass_tags(self, fields)
-      _expand_dataclass_default_factories(self, fields, arguments)
 
     for name, value in arguments.items():
       setattr(self, name, value)
@@ -560,178 +554,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       object.__setattr__(
           self, '__signature__', signatures.get_signature(self.__fn_or_cls__)
       )
-
-
-def _add_dataclass_tags(buildable, fields):
-  """Adds tags to arguments as indicated by dataclass fields.
-
-  If any dataclass field in ``fields`` has metadata indicating that the field
-  should be given one or more tags, then add those tags to the argument
-  corresponding to the field.
-
-  Args:
-    buildable: The buildable that should be updated.
-    fields: The dataclass fields for buildable.__fn_or_cls__.
-  """
-  for field in fields:
-    metadata = field_metadata.field_metadata(field)
-    if metadata:
-      for tag in metadata.tags:
-        add_tag(buildable, field.name, tag)
-
-
-def _expand_dataclass_default_factories(buildable, fields, arguments):
-  """Expand default-valued args for dataclass fields with default-factories.
-
-  If an argument has no value supplied when initializing a dataclass, but the
-  corresponding field has a default factory, then that factory will be used to
-  construct the argument's value. Thus, when creating a ``fdl.Buildable`` for
-  the dataclass, it may be possible to fill in the value for the argument with
-  ``Config(factory)``, without changing the value that will be built by
-  ``buildable`` when calling ``fdl.build``.  This is useful because it makes the
-  argument "deeply configurable" -- i.e., if the factory has any optional
-  arguments, then this makes it possible to configure those objects. And in the
-  special case where ``factory`` is an ``@auto_config``'d function, we can make
-  the argument even more deeply configurable by inlining the factory.
-
-  However, expanding default-valued args into `Buildable`s should only be
-  performed when it can be done safely -- i.e., without changing the value
-  that will be built by ``buildable``. In particular, we need to be careful
-  not to create any "unintentional sharing," where the value built by the
-  default factory is used by multiple instances of the dataclass.
-
-  If we are not able to do the expansion safely, then we raise an exception.
-  Note that it would be "safe" to leave the argument empty, in so far as the
-  original semantics would be preserved.  But having the argument be
-  unexpectedly unconfigurable could lead to difficult-to-diagnose issues.
-  E.g., any nested dataclasses with `fdl.Tag`s associated with fields will
-  not be accessable.
-
-  One case where it *is* safe to expand default factories is when
-  ``type(buildable)`` is ``fdl.Config``.  In that case, we know that a single
-  dataclass object will be built from `buildable`, so we are guaranteed that the
-  value built by the default factory will only be used by that one object.
-
-  However, if ``type(buildable)`` is ``fdl.Partial``, then the function built
-  from ``buildable`` can be used to generate multiple dataclass instances; and
-  we need to ensure that the default factory is called for each instance.  For
-  this case, we use ``ArgFactory(factory)`` rather than ``Config(factory)`` to
-  expand the argument.  This ensures that the factory is called each time the
-  partial is called.  We also need to replace any nested ``Config``'s with
-  ``ArgFactory``'s, to ensure that the nested values are created each time as
-  well.
-
-  Similarly, if ``type(buildable) is fdl.ArgFactory``, then the factory function
-  built from ``buildable`` can be used to generate multiple dataclass instances,
-  so we use ``ArgFactory(factory)`` to expand arguments.
-
-  In the case where ``type(buildable)`` is ``fdl.Partial`` or
-  ``fdl.ArgFactory``, there is one additional corner case to consider, which
-  occurs when multiple nested partials makes it impossible for Fiddle to
-  describe the correct instance sharing pattern with its current ``Buildable``
-  subclasses.  This corner case is demonstrated by the following example:
-
-  ```
-  def f(x):
-    return x
-  def g():
-    return object()
-  @auto_config.auto_config
-  def make_fn():
-    return functools.partial(f, x=g())
-  @dataclasses.dataclass
-  class A:
-    fn: Callable[[], object] = fdl_field(default_factory=make_fn)
-  p = functools.partial(A)
-  ```
-
-  Here, if we write ``a1 = p()`` to create an instance of ``A``, then calling
-  ``a1.fn()`` multiple times will always return the same object, while another
-  instance ``a2 = p()`` will return a different object when calling ``a2.fn()``:
-
-  ```
-  a1, a2 = p(), p()              # call the partial function twice.
-  assert a1.fn() is a1.fn()      # a1.fn always returns the same object.
-  assert a1.fn() is not a2.fn()  # a1 and a2 return different objects.
-  ```
-
-  However, if we construct ``fdl.Partial(A)``, and try to make ``f`` and ``g``
-  deeply configurable, then there's no way to generate the same behavior
-  using Fiddle ``Buildable``'s:
-
-  * If we use ``fdl.Partial(A, fdl.Partial(f, fdl.Config(g)))``, then all
-    instances of ``A`` generated by ``p`` will return the same instance
-    (namely, the instance constructed by ``fdl.build(fdl.Config(g))``).
-  * If we use ``fdl.Partial(A, fdl.Partial(f, fdl.ArgFactory(g)))``, then
-    every call to ``A.fn`` will return a new object.
-
-  Therefore, since is not possible to make the field ``A.fn`` deeply
-  configurable while preserving the original semantics, we instead raise
-  an exception.  If you believe you have a valid use-case for this, please
-  contact the Fiddle team.
-
-  The precise circumstances that cause this problem are: when we are building
-  a ``Partial`` (or ``ArgFactory``), and the default factory expands into an
-  expression containing a ``Partial`` (or ``ArgFactory``) that contains a
-  ``Config`` -- in that case, the object built for the `Config` should be shared
-  for each call to the inner partial; but should *not* be shared for each call
-  to the outer partial.
-
-  Args:
-    buildable: The buildable that should be updated.
-    fields: The dataclass fields for ``buildable.__fn_or_cls__``.
-    arguments: The arguments that are being used to construct this
-      ``Buildable``. If any argument has no value, and the corresponding field
-      has a default factory, then the argument will be expanded into an
-      equivalent ``Buildable`` if it's possible to do so without changing the
-      semantics of ``fdl.build(buildable)``.
-  """
-
-  def convert_to_arg_factory(value, state):
-    """Converts `cfg` and any nested `Config` objects to ArgFactory."""
-    if not isinstance(value, Partial):  # Don't recurse into partials.
-      value = state.map_children(value)
-    if isinstance(value, Config):
-      value = cast(ArgFactory, value)
-    return value
-
-  def contains_partial_that_contains_config(value, state):
-    """True if value contains a Partial/ArgFactory that contains a Config."""
-    if isinstance(value, (Partial, ArgFactory)):
-      return any(isinstance(v, Config) for v, _ in daglish.iterate(value))
-    elif state.is_traversable(value):
-      return any(state.flattened_map_children(value).values)
-    else:
-      return False
-
-  for field in fields:
-    if field.name in arguments:
-      continue  # We have an explicit value for this argument.
-    metadata = field_metadata.field_metadata(field)
-    if not (metadata and metadata.buildable_initializer):
-      continue
-    field_config = metadata.buildable_initializer()
-    if daglish.MemoizedTraversal.run(
-        contains_partial_that_contains_config, field_config
-    ):
-      cls_name = getattr(
-          buildable.__fn_or_cls__, '__qualname__', repr(buildable.__fn_or_cls__)
-      )
-      raise ValueError(
-          f'Unable to safely replace {cls_name}.{field.name} with '
-          'a `fdl.Buildable`, because its default factory contains a '
-          '`fdl.Partial` that contains a `fdl.Config`.  This makes it '
-          'difficult for Fiddle to describe the correct instance-sharing '
-          'pattern. If you believe that you have a valid use-case for this, '
-          'please contact the Fiddle team.'
-      )
-    if isinstance(field_config, Config) and isinstance(
-        buildable, (Partial, ArgFactory)
-    ):
-      field_config = daglish.MemoizedTraversal.run(
-          convert_to_arg_factory, field_config
-      )
-    arguments[field.name] = field_config
 
 
 class Config(Generic[T], Buildable[T]):
@@ -1157,13 +979,6 @@ def update_callable(
   object.__setattr__(buildable, '__signature__', signature)
   object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
   buildable.__argument_history__.add_new_value('__fn_or_cls__', new_callable)
-
-  if dataclasses.is_dataclass(buildable.__fn_or_cls__):
-    fields = dataclasses.fields(buildable.__fn_or_cls__)
-    _add_dataclass_tags(buildable, fields)
-    _expand_dataclass_default_factories(
-        buildable, fields, buildable.__arguments__
-    )
 
 
 def assign(buildable: Buildable, **kwargs):

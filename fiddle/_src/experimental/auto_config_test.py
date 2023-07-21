@@ -472,22 +472,41 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         r'which is not \(or did not contain\) a `fdl\.Buildable`\.'):
       test_config.as_buildable()
 
-  def test_experimental_config_cls(self):
-
+  def test_experimental_config_types(self):
     class CustomConfig(fdl.Config):
       pass
 
-    @auto_config.auto_config(experimental_config_cls=CustomConfig)
+    class CustomPartial(fdl.Partial):
+      pass
+
+    class CustomArgFactory(fdl.ArgFactory):
+      pass
+
+    config_types = auto_config.ConfigTypes(
+        config_cls=CustomConfig,
+        partial_cls=CustomPartial,
+        arg_factory_cls=CustomArgFactory,
+    )
+
+    def make_int() -> int:
+      return 42
+
+    @auto_config.auto_config(experimental_config_types=config_types)
     def fn():
-      return FrozenSampleClass(arg1=basic_fn(3), arg2=4)
+      return FrozenSampleClass(
+          arg1=functools.partial(basic_fn, make_int()),
+          arg2=arg_factory.partial(basic_fn, make_int),
+      )
 
     expected = CustomConfig(
-        FrozenSampleClass, arg1=CustomConfig(basic_fn, 3), arg2=4
+        FrozenSampleClass,
+        arg1=CustomPartial(basic_fn, CustomConfig(make_int)),
+        arg2=CustomPartial(basic_fn, CustomArgFactory(make_int)),
     )
     cfg = fn.as_buildable()
+    # This assertion ensures that the correct types were produced (in addition
+    # to the leaf/parameter values in the config).
     self.assertDagEqual(cfg, expected)
-    self.assertIsInstance(cfg, CustomConfig)
-    self.assertIsInstance(cfg.arg1, CustomConfig)
 
   def test_staticmethod_nullary(self):
 
@@ -899,7 +918,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_disallow_raise(self):
 
     def test_config():
-      raise Exception()
+      raise ValueError('Some message.')
 
     with self.assertRaisesRegex(
         auto_config.UnsupportedLanguageConstructError,
