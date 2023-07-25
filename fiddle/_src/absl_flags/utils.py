@@ -20,10 +20,14 @@ import dataclasses
 import enum
 import importlib
 import re
+import types
+import typing
 from typing import Any, Dict, Optional, Tuple
 
+from fiddle._src import config
 from fiddle._src import daglish
 from fiddle._src import daglish_extensions
+from fiddle._src import module_reflection
 
 
 class ImportDottedNameDebugContext(enum.Enum):
@@ -199,3 +203,75 @@ def parse_value(value: str, path: str) -> Any:
         f"want to pass --fdl_set={path}='{value}' instead of "
         f'--fdl_set={path}={value}.'
     ) from e
+
+
+def resolve_function_reference(
+    function_name: str,
+    mode: ImportDottedNameDebugContext,
+    module: types.ModuleType,
+    allow_imports: bool,
+    failure_msg_prefix: str,
+):
+  """Returns function that produces `fdl.Buildable` from its name.
+
+  Args:
+    function_name: The name of the function.
+    mode: Whether we're looking for a base config function or a fiddler.
+    module: A common namespace to use as the basis for finding configs and
+      fiddlers. May be `None`; if `None`, only fully qualified Fiddler imports
+      will be used (or alternatively a base configuration can be specified using
+      the `--fdl_config_file` flag.)
+    allow_imports: If true, then fully qualified dotted names may be used to
+      specify configs or fiddlers that should be automatically imported.
+    failure_msg_prefix: Prefix string to prefix log messages in case of
+      failures.
+
+  Returns:
+    The named value.
+  """
+  if hasattr(module, function_name):
+    return getattr(module, function_name)
+  elif allow_imports:
+    try:
+      return import_dotted_name(
+          function_name,
+          mode=mode,
+      )
+    except ModuleNotFoundError as e:
+      raise ValueError(f'{failure_msg_prefix} {function_name!r}: {e}') from e
+  else:
+    available_names = module_reflection.find_base_config_like_things(module)
+    raise ValueError(
+        f'{failure_msg_prefix} {function_name!r}; '
+        f'available names: {", ".join(available_names)}.'
+    )
+
+
+def set_value(cfg: config.Buildable, assignment: str) -> None:
+  """Set an attribute's value.
+
+  Args:
+    cfg: A `fdl.Buildable` whose attribute is to be overridden.
+    assignment: String representing attribute's override expression. Of the form
+      `attribute=value`.
+  """
+  path, value = assignment.split('=', maxsplit=1)
+  *parents, last = parse_path(path)
+
+  walk = typing.cast(Any, cfg)
+  try:
+    for parent in parents:
+      walk = parent.follow(walk)
+  except Exception as e:
+    raise ValueError(f'Invalid path "{path}".') from e
+
+  literal_value = parse_value(value=value, path=path)
+  try:
+    if isinstance(last, daglish.Attr):
+      setattr(walk, last.name, literal_value)
+    elif isinstance(last, daglish.Key):
+      walk[last.key] = literal_value
+    else:
+      raise ValueError(f'Unexpected path element {last}.')
+  except Exception as e:
+    raise ValueError(f'Could not set "{path}" to "{value}".') from e

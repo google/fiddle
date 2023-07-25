@@ -18,5 +18,6 @@
 from fiddle._src.absl_flags.flags import apply_fiddlers_to
 from fiddle._src.absl_flags.flags import apply_overrides_to
 from fiddle._src.absl_flags.flags import create_buildable_from_flags
+from fiddle._src.absl_flags.flags import DEFINE_fiddle_config
 from fiddle._src.absl_flags.flags import fdl_flags_supplied
 from fiddle._src.absl_flags.flags import flags_parser

@@ -118,7 +118,6 @@ import inspect
 import re
 import sys
 import textwrap
-import typing
 from typing import Any, List, Optional, Sequence
 
 from absl import app
@@ -128,8 +127,6 @@ from etils import epath
 from fiddle import printing
 from fiddle import selectors
 from fiddle._src import config
-from fiddle._src import daglish
-from fiddle._src import module_reflection
 from fiddle._src import tagging
 from fiddle._src.absl_flags import utils
 from fiddle._src.experimental import auto_config
@@ -176,25 +173,7 @@ def _print_stderr(*args, **kwargs):
 def apply_overrides_to(cfg: config.Buildable):
   """Applies all command line flags to `cfg`."""
   for flag in _FDL_SET.value:
-    path, value = flag.split('=', maxsplit=1)
-    *parents, last = utils.parse_path(path)
-    walk = typing.cast(Any, cfg)
-    try:
-      for parent in parents:
-        walk = parent.follow(walk)
-    except Exception as e:
-      raise ValueError(f'Invalid path "{path}".') from e
-
-    literal_value = utils.parse_value(value=value, path=path)
-    try:
-      if isinstance(last, daglish.Attr):
-        setattr(walk, last.name, literal_value)
-      elif isinstance(last, daglish.Key):
-        walk[last.key] = literal_value
-      else:
-        raise ValueError(f'Unexpected path element {last}.')
-    except Exception as e:
-      raise ValueError(f'Could not set "{path}" to "{value}".') from e
+    utils.set_value(cfg, flag)
 
 
 def rewrite_fdl_args(args: Sequence[str]) -> List[str]:
@@ -281,21 +260,13 @@ def apply_fiddlers_to(cfg: config.Buildable,
   for fiddler_value in _FIDDLER.value:
     call_expr = utils.CallExpression.parse(fiddler_value)
     fiddler_name = call_expr.func_name
-    if hasattr(source_module, fiddler_name):
-      fiddler = getattr(source_module, fiddler_name)
-    elif allow_imports:
-      try:
-        fiddler = utils.import_dotted_name(
-            fiddler_name, mode=utils.ImportDottedNameDebugContext.FIDDLER
-        )
-      except ModuleNotFoundError as e:
-        raise ValueError(f'Could not load fiddler {fiddler_name!r}: {e}') from e
-    else:
-      available_fiddlers = ', '.join(
-          module_reflection.find_fiddler_like_things(source_module))
-      raise ValueError(
-          f'No fiddler named {fiddler_name!r} found; available fiddlers: '
-          f'{available_fiddlers}.')
+    fiddler = utils.resolve_function_reference(
+        fiddler_name,
+        utils.ImportDottedNameDebugContext.FIDDLER,
+        source_module,
+        allow_imports,
+        'Could not load fiddler',
+    )
     fiddler(cfg, *call_expr.args, **call_expr.kwargs)
 
 
@@ -388,21 +359,14 @@ def create_buildable_from_flags(
   if _FDL_CONFIG.value:
     call_expr = utils.CallExpression.parse(_FDL_CONFIG.value)
     base_name = call_expr.func_name
-    if hasattr(module, base_name):
-      base_fn = getattr(module, base_name)
-    elif allow_imports:
-      try:
-        base_fn = utils.import_dotted_name(
-            base_name,
-            mode=utils.ImportDottedNameDebugContext.BASE_CONFIG,
-        )
-      except ModuleNotFoundError as e:
-        raise ValueError(
-            f'Could not init a buildable from {base_name!r}: {e}') from e
-    else:
-      available_names = module_reflection.find_base_config_like_things(module)
-      raise ValueError(f'Could not init a buildable from {base_name!r}; '
-                       f'available names: {", ".join(available_names)}.')
+
+    base_fn = utils.resolve_function_reference(
+        base_name,
+        utils.ImportDottedNameDebugContext.BASE_CONFIG,
+        module,
+        allow_imports,
+        'Could not init a buildable from',
+    )
 
     if auto_config.is_auto_config(base_fn):
       buildable = base_fn.as_buildable(*call_expr.args, **call_expr.kwargs)
