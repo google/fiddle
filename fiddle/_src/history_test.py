@@ -41,6 +41,22 @@ class HistoryTest(absltest.TestCase):
         function_name="make_config")
     self.assertEqual(str(location), "my_other_file.py:321:make_config")
 
+  def test_location_formatting_concise(self):
+    location = history.Location(
+        filename="foo/bar/baz/my_file.py", line_number=123, function_name=None
+    )
+    self.assertEqual(location.format(3), ".../bar/baz/my_file.py:123")
+    self.assertEqual(location.format(2), ".../baz/my_file.py:123")
+    location = history.Location(
+        filename="foo/bar/baz/my_other_file.py",
+        line_number=321,
+        function_name="make_config",
+    )
+    self.assertEqual(
+        location.format(4), "foo/bar/baz/my_other_file.py:321:make_config"
+    )
+    self.assertEqual(location.format(1), ".../my_other_file.py:321:make_config")
+
   def test_entry_simple(self):
     entry = history.new_value("x", 1)
     self.assertEqual(entry.param_name, "x")

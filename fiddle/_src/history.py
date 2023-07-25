@@ -55,10 +55,20 @@ class Location:
   line_number: int
   function_name: Optional[str]
 
-  def __str__(self) -> str:
+  def format(self, max_filename_parts: Optional[int] = None):
+    filename = self.filename
+    if max_filename_parts is not None:
+      filename_parts = filename.split(os.path.sep)
+      if len(filename_parts) > max_filename_parts:
+        filename = os.path.sep.join(
+            ["...", *filename_parts[-max_filename_parts:]]
+        )
     if self.function_name is None:
-      return f"{self.filename}:{self.line_number}"
-    return f"{self.filename}:{self.line_number}:{self.function_name}"
+      return f"{filename}:{self.line_number}"
+    return f"{filename}:{self.line_number}:{self.function_name}"
+
+  def __str__(self) -> str:
+    return self.format()
 
   def __deepcopy__(self, memo):
     del memo  # unused

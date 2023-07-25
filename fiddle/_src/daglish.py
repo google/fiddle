@@ -438,7 +438,7 @@ class Traversal(metaclass=abc.ABCMeta):
     The initial state has a reference to the traversal, the empty path, and no
     parent states.
     """
-    return State(self, (), self.root_obj, _parent=None)  # pytype: disable=attribute-error
+    return State(self, (), self.root_obj, parent=None)
 
   @classmethod
   def begin(cls, fn: Callable[..., Any], root_obj: Any) -> State:
@@ -484,8 +484,9 @@ class State:
     current_path: A path that can be followed to the current object. In the case
       of shared objects, there will be other paths to the current object, and
       often these are determined by a somewhat arbitrary DAG traversal order.
+    parent: The parent state.
   """
-  __slots__ = ("traversal", "current_path", "_value", "_parent")
+  __slots__ = ("traversal", "current_path", "_value", "parent")
 
   traversal: Traversal
   current_path: Path
@@ -494,7 +495,7 @@ class State:
   # accessors.
   _value: Any  # pylint: disable=invalid-name
 
-  _parent: Optional[State]
+  parent: Optional[State]
 
   @property
   def _object_id(self) -> int:
@@ -505,11 +506,22 @@ class State:
     return is_memoizable(self._value)
 
   @property
+  def original_value(self):
+    """Original value constructed with this state.
+
+    Generally please don't use this value, it's much more clear to use the
+    first argument of your `traverse(value, state)` function, especially since
+    for post-order traversals, you'll often write `value =
+    state.map_children(value)`.
+    """
+    return self._value
+
+  @property
   def ancestors_inclusive(self) -> Iterable[State]:
     """Gets ancestors, including the current state."""
     yield self
-    if self._parent is not None:
-      yield from self._parent.ancestors_inclusive
+    if self.parent is not None:
+      yield from self.parent.ancestors_inclusive
 
   def get_all_paths(self, allow_caching: bool = True) -> List[Path]:
     """Gets all paths to the current value.
