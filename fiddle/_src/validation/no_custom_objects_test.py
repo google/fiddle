@@ -21,6 +21,7 @@ import typing
 from absl.testing import absltest
 import fiddle as fdl
 from fiddle import daglish
+from fiddle import validation
 from fiddle._src.testing.example import fake_encoder_decoder
 from fiddle._src.validation import no_custom_objects
 
@@ -103,12 +104,12 @@ class NoCustomObjectsTest(absltest.TestCase):
 
   def test_get_config_errors_empty(self):
     config = fake_encoder_decoder.fixture.as_buildable()
-    self.assertEmpty(no_custom_objects.get_config_errors(config=config))
+    self.assertEmpty(validation.get_config_errors(config=config))
 
   def test_get_config_errors_namedtuple(self):
     config = fake_encoder_decoder.fixture.as_buildable()
     config.encoder.attention = MyNamedtuple(1, "a")
-    errors = no_custom_objects.get_config_errors(config=config)
+    errors = validation.get_config_errors(config=config)
     self.assertLen(errors, 1)
     self.assertRegex(
         errors[0],
@@ -119,7 +120,7 @@ class NoCustomObjectsTest(absltest.TestCase):
   def test_get_config_errors_dataclass(self):
     config = fake_encoder_decoder.fixture.as_buildable()
     config.encoder.attention = MyDataclass(1, "a")
-    errors = no_custom_objects.get_config_errors(config=config)
+    errors = validation.get_config_errors(config=config)
     self.assertLen(errors, 1)
     self.assertRegex(
         errors[0],
@@ -130,7 +131,7 @@ class NoCustomObjectsTest(absltest.TestCase):
   def test_get_config_errors_not_empty(self):
     config = fake_encoder_decoder.fixture.as_buildable()
     config.encoder.attention = object()
-    errors = no_custom_objects.get_config_errors(config=config)
+    errors = validation.get_config_errors(config=config)
     self.assertLen(errors, 1)
     self.assertRegex(
         errors[0],
@@ -140,7 +141,7 @@ class NoCustomObjectsTest(absltest.TestCase):
 
   def test_check_no_custom_objects_okay(self):
     config = fake_encoder_decoder.fixture.as_buildable()
-    no_custom_objects.check_no_custom_objects(config)
+    validation.check_no_custom_objects(config)
 
   def test_check_no_custom_objects_error(self):
     config = fake_encoder_decoder.fixture.as_buildable()
@@ -154,7 +155,7 @@ class NoCustomObjectsTest(absltest.TestCase):
         r" \.decoder\.self_attention, Set in"
         r" .*:\d+:test_check_no_custom_objects_error",
     ):
-      no_custom_objects.check_no_custom_objects(config=config)
+      validation.check_no_custom_objects(config=config)
 
   def test_no_history_custom_objects_error(self):
     config = {
@@ -167,7 +168,7 @@ class NoCustomObjectsTest(absltest.TestCase):
         r"\n  Found.*object.*at \['encoder_attention'\],.*no history.*"
         r"\n  Found.*object.*at \['decoder_self_attention'\],.*no history.*",
     ):
-      no_custom_objects.check_no_custom_objects(config=config)
+      validation.check_no_custom_objects(config=config)
 
 
 if __name__ == "__main__":
