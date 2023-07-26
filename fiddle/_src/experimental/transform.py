@@ -19,6 +19,7 @@ from typing import Any, Callable, Iterable, Optional, TypeVar, Union
 
 from fiddle import daglish
 from fiddle._src import config
+from fiddle._src import partial
 
 
 # Any subclass of Buildable
@@ -74,8 +75,9 @@ def replace_unconfigured_partials_with_callables(
     # may have specialized behavior such that this transformation no longer
     # makes sense, so do not apply this to subclasses of fdl.Partial.
     # pylint: disable-next=unidiomatic-typecheck
-    if type(value) is config.Partial and not config.ordered_arguments(
-        value, exclude_equal_to_default=True):
+    if type(value) is partial.Partial and not config.ordered_arguments(
+        value, exclude_equal_to_default=True
+    ):
       value = config.get_callable(value)
     return state.map_children(value)
 

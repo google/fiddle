@@ -23,6 +23,7 @@ from typing import Any, Callable
 from fiddle import arg_factory
 from fiddle import daglish
 from fiddle._src import config as config_lib
+from fiddle._src import partial
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import import_manager_wrapper
 
@@ -86,7 +87,7 @@ def replace_callables_and_configs_with_symbols(
   fn_name = None
 
   def _handle_partial(
-      value: config_lib.Partial,
+      value: partial.Partial,
       state: daglish.State,
       ir_for_symbol: code_ir.CodegenNode,
   ):
@@ -181,9 +182,9 @@ def replace_callables_and_configs_with_symbols(
             arg_expressions=config_lib.ordered_arguments(value),
             history_comments=format_history(value),
         )
-      elif isinstance(value, config_lib.Partial):
+      elif isinstance(value, partial.Partial):
         return _handle_partial(value, state, ir_for_symbol)
-      elif isinstance(value, config_lib.ArgFactory):
+      elif isinstance(value, partial.ArgFactory):
         paths = " , ".join(
             daglish.path_str(path) for path in state.get_all_paths()
         )

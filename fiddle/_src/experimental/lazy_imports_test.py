@@ -23,6 +23,7 @@ import unittest
 from absl.testing import absltest
 from fiddle._src import building
 from fiddle._src import config as config_lib
+from fiddle._src import partial
 from fiddle._src.experimental import lazy_imports
 from fiddle._src.experimental import serialization
 
@@ -185,7 +186,7 @@ class BuildLazyImportsTest(absltest.TestCase, unittest.TestCase):
   def test_partial(self):
     with lazy_imports.lazy_imports(kw_only=True):
       from fiddle._src.experimental import lazy_imports_test_example  # pylint: disable=g-import-not-at-top
-    cfg = config_lib.Partial(lazy_imports_test_example.my_function)
+    cfg = partial.Partial(lazy_imports_test_example.my_function)
     obj = building.build(cfg)
     # Note that the lazy imported module is not loaded at build time but delayed
     # until call time when working with fdl.Partial.

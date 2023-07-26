@@ -17,10 +17,10 @@
 
 # pylint: disable=unused-import
 
-from fiddle._src.config import ArgFactory
 from fiddle._src.config import Buildable
 from fiddle._src.config import BuildableTraverserMetadata
 from fiddle._src.config import Config
 from fiddle._src.config import NO_VALUE
 from fiddle._src.config import NoValue
-from fiddle._src.config import Partial
+from fiddle._src.partial import ArgFactory
+from fiddle._src.partial import Partial

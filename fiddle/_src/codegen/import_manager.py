@@ -105,6 +105,7 @@ _SPECIAL_IMPORT_ALIASES = {
     "fiddle.config": parse_import("import fiddle as fdl"),
     "fiddle": parse_import("import fiddle as fdl"),
     "fiddle._src.config": parse_import("import fiddle as fdl"),
+    "fiddle._src.partial": parse_import("import fiddle as fdl"),
     "fiddle._src.experimental.auto_config": parse_import(
         "from fiddle.experimental import auto_config"
     ),
