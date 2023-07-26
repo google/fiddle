@@ -18,12 +18,12 @@
 N.B. Please see codegen/auto_config for the auto_config version!!
 """
 
-import typing
 from typing import Callable
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src.codegen.auto_config import code_ir
+from fiddle._src.codegen.auto_config import import_manager_wrapper
 from fiddle._src.codegen.auto_config import make_symbolic_references as ac_make_symbolic_references
 
 is_plain_symbol_or_enum_value = (
@@ -56,16 +56,6 @@ def import_symbols(task: code_ir.CodegenTask) -> None:
       task.import_manager.add(value)
 
 
-def _name_to_attribute_expression(name: str) -> code_ir.AttributeExpression:
-  if "." not in name:
-    raise ValueError(f"Could not parse symbol import {name}")
-  base, *parts = name.split(".")
-  value = code_ir.ModuleReference(code_ir.Name(base))
-  for part in parts:
-    value = code_ir.AttributeExpression(value, part)
-  return typing.cast(code_ir.AttributeExpression, value)
-
-
 def replace_callables_and_configs_with_symbols(
     task: code_ir.CodegenTask,
     *,
@@ -84,11 +74,11 @@ def replace_callables_and_configs_with_symbols(
 
   def traverse(value, state: daglish.State):
     if isinstance(value, config_lib.Buildable):
-      ir_for_buildable_type = _name_to_attribute_expression(
-          task.import_manager.add(type(value))
+      ir_for_buildable_type = import_manager_wrapper.add(
+          type(value), task.import_manager
       )
-      ir_for_symbol = _name_to_attribute_expression(
-          task.import_manager.add(config_lib.get_callable(value))
+      ir_for_symbol = import_manager_wrapper.add(
+          config_lib.get_callable(value), task.import_manager
       )
       all_tags = value.__argument_tags__
       value = state.map_children(value)
@@ -113,7 +103,7 @@ def replace_callables_and_configs_with_symbols(
           history_comments=format_history(value),
       )
     elif is_plain_symbol_or_enum_value(value):
-      return _name_to_attribute_expression(task.import_manager.add(value))
+      return import_manager_wrapper.add(value, task.import_manager)
     else:
       return state.map_children(value)
 

@@ -110,6 +110,11 @@ class ModuleReference(BaseNameReference):
 
 
 @dataclasses.dataclass
+class BuiltinReference(BaseNameReference):
+  """Reference to an imported module."""
+
+
+@dataclasses.dataclass
 class FixtureReference(BaseNameReference):
   """Reference to another fixture."""
 
@@ -127,6 +132,14 @@ class AttributeExpression(CodegenNode):
     # expressions. This function allows for that, but one shouldn't generally
     # assume equality as object identity here.
     return id(self)
+
+
+@dataclasses.dataclass
+class ParameterizedTypeExpression(CodegenNode):
+  """Reference to a parameterized type like list[int]."""
+
+  base_expression: Any  # Expression like BuiltinReference(Name("list"))
+  param_expressions: List[Any]  # List of (positional) argument expressions
 
 
 @dataclasses.dataclass
