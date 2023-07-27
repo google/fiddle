@@ -101,6 +101,14 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
     elif isinstance(value, code_ir.AttributeExpression):
       base = state.call(value.base, daglish.Attr("base"))
       return cst.Attribute(value=base, attr=cst.Name(value.attribute))
+    elif isinstance(value, code_ir.ParameterizedTypeExpression):
+      return cst.Subscript(
+          value=code_for_expr(value.base_expression),
+          slice=[
+              cst.SubscriptElement(cst.Index(code_for_expr(param)))
+              for param in value.param_expressions
+          ],
+      )
     elif isinstance(value, code_ir.SymbolOrFixtureCall):
       attr = daglish.Attr("arg_expressions")
       args = []
@@ -199,6 +207,12 @@ def code_for_fn(
           ),
       ]
   )
+  if fn.return_type_annotation:
+    returns = cst.Annotation(
+        annotation=code_for_expr(fn.return_type_annotation)
+    )
+  else:
+    returns = None
   if fn.parameters and len(fn.parameters) > 1:
     whitespace_before_params = cst.ParenthesizedWhitespace(
         cst.TrailingWhitespace(),
@@ -211,6 +225,7 @@ def code_for_fn(
       cst.Name(fn.name.value),
       params,
       body,
+      returns=returns,
       decorators=[cst.Decorator(auto_config_expr)] if auto_config_expr else [],
       whitespace_before_params=whitespace_before_params,
       leading_lines=[cst.EmptyLine(), cst.EmptyLine()],

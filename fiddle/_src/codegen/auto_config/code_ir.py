@@ -225,6 +225,7 @@ class FixtureFunction(CodegenNode):
   parameters: List[Parameter]
   variables: List[VariableDeclaration]
   output_value: Any  # Value that can involve VariableReference's
+  return_type_annotation: Optional[Any] = None
 
   def __hash__(self):
     return id(self)
