@@ -91,7 +91,7 @@ class NewCodegenTest(absltest.TestCase):
     from fiddle._src.testing.example import fake_encoder_decoder
 
 
-    def config_fixture():
+    def config_fixture() -> fdl.Config[fake_encoder_decoder.FakeEncoder]:
         mlp = fdl.Config(fake_encoder_decoder.Mlp, dtype='float32',
           use_bias=False, sharding_axes=['embed', 'num_heads', 'head_dim'])
         return fdl.Config(fake_encoder_decoder.FakeEncoder, embedders={'tokens':

@@ -68,6 +68,7 @@ class CodegenNodeTest(parameterized.TestCase):
             (".variables", []),
             (".output_value", fn.output_value),
             (".output_value.x", 2),
+            (".return_type_annotation", None),
         ],
     )
 
