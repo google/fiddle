@@ -26,7 +26,6 @@ import inspect
 from typing import Any
 
 from fiddle._src import config as config_lib
-from fiddle._src import partial
 from fiddle._src import tagging
 import yaml
 
@@ -75,7 +74,7 @@ def _taggedvalue_representer(dumper, data):
 
 
 yaml.SafeDumper.add_representer(config_lib.Config, _config_representer)
-yaml.SafeDumper.add_representer(partial.Partial, _partial_representer)
+yaml.SafeDumper.add_representer(config_lib.Partial, _partial_representer)
 yaml.SafeDumper.add_representer(
     tagging.TaggedValueCls, _taggedvalue_representer
 )

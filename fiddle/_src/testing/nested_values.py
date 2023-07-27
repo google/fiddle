@@ -21,7 +21,6 @@ from typing import Any, List, Union
 
 from fiddle import daglish
 from fiddle._src import config
-from fiddle._src import partial
 from fiddle._src import tagging
 
 
@@ -121,7 +120,7 @@ def generate_nested_value(
     return {key_generator(): generate_value() for _ in range(length)}
 
   def generate_buildable():
-    buildable_type = rng.choice([config.Config, partial.Partial])
+    buildable_type = rng.choice([config.Config, config.Partial])
     arguments = generate_dict(key_generator=generate_string)
     buildable = buildable_type(kwargs_fn, **arguments)
     if generate_bool() and arguments:

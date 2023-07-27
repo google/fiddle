@@ -36,7 +36,6 @@ from fiddle._src import arg_factory
 from fiddle._src import building
 from fiddle._src import config
 from fiddle._src import mutate_buildable
-from fiddle._src import partial
 from fiddle._src.experimental import auto_config_policy
 from fiddle._src.experimental import daglish_legacy
 import libcst as cst
@@ -494,7 +493,7 @@ def _maybe_as_arg_factory(arg_factory_cls, arg):
                              bar=fdl.ArgFactory(bar_factory))
 
   Therefore, we need to wrap `foo_factory` and `bar_factory` in
-  `partial.ArgFactory`. Or, if they are already callable sub-configs, then we
+  `config.ArgFactory`. Or, if they are already callable sub-configs, then we
   wrap them in ArgFactory.
 
   If `foo_factory` or `bar_factory` is not a callable or fdl.Partial, then we
@@ -510,7 +509,7 @@ def _maybe_as_arg_factory(arg_factory_cls, arg):
   Returns:
     ArgFactory version of a configuration or callable.
   """
-  if isinstance(arg, partial.Partial):
+  if isinstance(arg, config.Partial):
     return config.cast(arg_factory_cls, arg)
   elif callable(arg):
     return arg_factory_cls(arg)
@@ -535,7 +534,7 @@ def _make_partial(partial_cls, buildable_or_callable, *args, **kwargs):
   Returns:
     New callable.
   """
-  if isinstance(buildable_or_callable, partial.Partial):
+  if isinstance(buildable_or_callable, config.Partial):
     if args:
       # Note: this can cause an issue even in when not chained, if the built
       # functools.partial object is called with arguments. We may later choose
@@ -585,8 +584,8 @@ def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
 @dataclasses.dataclass(frozen=True)
 class ConfigTypes:
   config_cls: Type[config.Config] = config.Config
-  partial_cls: Type[partial.Partial] = partial.Partial
-  arg_factory_cls: Type[partial.ArgFactory] = partial.ArgFactory
+  partial_cls: Type[config.Partial] = config.Partial
+  arg_factory_cls: Type[config.ArgFactory] = config.ArgFactory
 
 
 def auto_config(

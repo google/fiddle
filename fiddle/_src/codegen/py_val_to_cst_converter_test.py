@@ -96,7 +96,7 @@ class PyValToCstConverterTest(parameterized.TestCase):
       ),
       (
           fdl.Partial(SampleNamedTuple, [4]),
-          'fiddle._src.partial.Partial(SampleNamedTuple, x=[4])',
+          'fiddle._src.config.Partial(SampleNamedTuple, x=[4])',
       ),
       (
           fdl.Config(re.match, 'a|b'),

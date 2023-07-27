@@ -33,7 +33,6 @@ import typing
 
 from fiddle import building
 from fiddle._src import config
-from fiddle._src import partial
 from fiddle._src.experimental import autobuilders
 
 Policy = typing.Callable[[typing.Type[typing.Any]], bool]
@@ -183,7 +182,7 @@ V1_SKIPLIST = [
     autobuilders.Registry.config,
     building.build,
     config.Config,
-    partial.Partial,
+    config.Partial,
     copy.copy,
     copy.deepcopy,
     inspect.signature,

@@ -17,6 +17,7 @@
 
 from fiddle._src.building import build
 from fiddle._src.config import add_tag
+from fiddle._src.config import ArgFactory
 from fiddle._src.config import assign
 from fiddle._src.config import Buildable
 from fiddle._src.config import cast
@@ -28,12 +29,11 @@ from fiddle._src.config import get_callable
 from fiddle._src.config import get_tags
 from fiddle._src.config import NO_VALUE
 from fiddle._src.config import ordered_arguments
+from fiddle._src.config import Partial
 from fiddle._src.config import remove_tag
 from fiddle._src.config import set_tags
 from fiddle._src.config import update_callable
 from fiddle._src.materialize import materialize_defaults
-from fiddle._src.partial import ArgFactory
-from fiddle._src.partial import Partial
 from fiddle._src.tagging import set_tagged
 from fiddle._src.tagging import Tag
 from fiddle._src.tagging import TaggedValue
