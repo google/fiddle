@@ -108,6 +108,14 @@ def format_expr(expr: Any):
           f"(*[{positional_arg_expressions}],"
           f" **{arg_expressions})>"
       )
+    elif isinstance(value, code_ir.ParameterizedTypeExpression):
+      base_expression = state.call(
+          value.base_expression, daglish.Attr("base_expression")
+      )
+      param_expressions = state.call(
+          value.param_expressions, daglish.Attr("param_expressions")
+      )
+      return f"{base_expression}{param_expressions}"
     elif isinstance(value, code_ir.Name):
       return value.value
     elif isinstance(value, type):
