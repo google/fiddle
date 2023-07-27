@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Optional, Type
 
 import fiddle as fdl
 from fiddle._src.codegen import newcg_symbolic_references
+from fiddle._src.codegen.auto_config import add_type_signatures
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import experimental_top_level_api
 from fiddle._src.codegen.auto_config import make_symbolic_references as old_symbolic_references
@@ -59,6 +60,13 @@ class MakeSymbolicReferences(experimental_top_level_api.MutationCodegenPass):
   format_history: Callable[..., Any] = (
       old_symbolic_references.noop_history_comments
   )
+
+
+@dataclasses.dataclass(frozen=True)
+class AddTypeSignatures(experimental_top_level_api.MutationCodegenPass):
+  """Adds return type signatures to fixtures."""
+
+  fn: Callable[..., Any] = add_type_signatures.add_return_types
 
 
 def _get_pass_idx(
@@ -100,6 +108,11 @@ def code_generator(
   # Replace MakeSymbolicReferences
   idx = _get_pass_idx(config, experimental_top_level_api.MakeSymbolicReferences)
   fdl.update_callable(config.passes[idx], MakeSymbolicReferences)
+
+  # Insert type annotations before MakeSymbolicReferences. These type
+  # annotations currently make more sense for non-auto_config cases.
+  config.passes.insert(idx, fdl.Config(AddTypeSignatures))
+
   return config
 
 
