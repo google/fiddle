@@ -22,6 +22,7 @@ import inspect
 from typing import Any, Dict, Union
 
 from absl import logging
+from fiddle._src import special_overrides
 from fiddle._src.codegen import namespace
 import libcst as cst
 
@@ -100,23 +101,6 @@ def get_full_module_name(node: AnyImport) -> str:
     return name_str
 
 
-# Project-specific import aliases.
-_SPECIAL_IMPORT_ALIASES = {
-    "fiddle.config": parse_import("import fiddle as fdl"),
-    "fiddle": parse_import("import fiddle as fdl"),
-    "fiddle._src.config": parse_import("import fiddle as fdl"),
-    "fiddle._src.experimental.auto_config": parse_import(
-        "from fiddle.experimental import auto_config"
-    ),
-    "fiddle._src.arg_factory": parse_import("from fiddle import arg_factory"),
-    "fiddle._src.codegen": parse_import("from fiddle import codegen"),
-    "fiddle._src.codegen.py_val_to_cst_converter": parse_import(
-        "from fiddle.codgen import py_val_to_cst_converter"
-    ),
-    "fiddle._src.daglish": parse_import("from fiddle import daglish"),
-}
-
-
 def register_import_alias(name: str, import_stmt: str) -> None:
   """Registers an import alias.
 
@@ -128,7 +112,10 @@ def register_import_alias(name: str, import_stmt: str) -> None:
     import_stmt: Import statement for this module, which will be parsed by
       LibCST.
   """
-  _SPECIAL_IMPORT_ALIASES[name] = parse_import(import_stmt)
+  import_override = special_overrides.SpecialOverrides(
+      module_name=name, module_import_alias=import_stmt
+  )
+  special_overrides.register_special_override(name, import_override)
 
 
 def _make_import(full_module_name: str) -> AnyImport:
@@ -190,9 +177,11 @@ class ImportManager:
       imports or variables. In a few cases where special import aliases are
       applied, then a name with a "." may be emitted.
     """
-    result = _SPECIAL_IMPORT_ALIASES.get(full_module_name)
+    result = special_overrides.SPECIAL_OVERRIDES_MAP.get(full_module_name)
     if result is None:
       result = _make_import(full_module_name)
+    else:
+      result = parse_import(result.module_import_alias)
 
     # Since multiple things could be aliased to the same import, rewrite
     # the module name to the alias' module name.
