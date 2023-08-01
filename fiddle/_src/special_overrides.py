@@ -45,6 +45,14 @@ SPECIAL_OVERRIDES_MAP = {
     "fiddle._src.config": SpecialOverrides(
         module_name="fiddle._src.config",
         module_import_alias="import fiddle as fdl",
+        migrated_symbol_destination_modules={
+            "Partial": "fiddle._src.partial",
+            "ArgFactory": "fiddle._src.partial",
+        },
+    ),
+    "fiddle._src.experimental": SpecialOverrides(
+        module_name="fiddle._src.experimental",
+        module_import_alias="from fiddle import experimental",
     ),
     "fiddle._src.experimental.auto_config": SpecialOverrides(
         module_name="fiddle._src.experimental.auto_config",
@@ -66,6 +74,10 @@ SPECIAL_OVERRIDES_MAP = {
         module_name="fiddle._src.daglish",
         module_import_alias="from fiddle import daglish",
     ),
+    "fiddle._src.partial": SpecialOverrides(
+        module_name="fiddle._src.partial",
+        module_import_alias="import fiddle as fdl",
+    ),
 }
 
 
@@ -73,3 +85,27 @@ def register_special_override(
     module_name: str, special_overrides: SpecialOverrides
 ) -> None:
   SPECIAL_OVERRIDES_MAP[module_name] = special_overrides
+
+
+def maybe_get_module_override_for_migrated_serialization_symbol(
+    module: str, symbol: str
+) -> str:
+  """Optionally get overridden module qual name for migrated symbol.
+
+  Args:
+    module: the module where the symbol may have been originally present.
+    symbol: the symbol that may have been migrated
+
+  Returns:
+    Overridden module name if the symbol was migrated, else the supplied module
+    name.
+  """
+  if (
+      module in SPECIAL_OVERRIDES_MAP
+      and symbol
+      in SPECIAL_OVERRIDES_MAP[module].migrated_symbol_destination_modules
+  ):
+    return SPECIAL_OVERRIDES_MAP[module].migrated_symbol_destination_modules[
+        symbol
+    ]
+  return module

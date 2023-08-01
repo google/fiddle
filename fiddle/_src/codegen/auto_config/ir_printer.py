@@ -35,7 +35,7 @@ typing_consts = [getattr(typing, name) for name in dir(typing)]
 
 def format_py_reference(value: Any) -> str:
   module_name = inspect.getmodule(value).__name__
-  if module_name == "fiddle._src.config":
+  if module_name in ("fiddle._src.config", "fiddle._src.partial"):
     module_name = "fdl"
   cls_name = value.__qualname__
   return f"{module_name}.{cls_name}"

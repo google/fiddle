@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Set, Tuple
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
+from fiddle._src import partial
 from fiddle._src.codegen import namespace as namespace_lib
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import naming
@@ -452,7 +453,7 @@ def transform_sub_fixtures(
       raise ValueError(msg)
 
   for fixture in sub_fixtures.values():
-    if isinstance(fixture, config_lib.ArgFactory):
+    if isinstance(fixture, partial.ArgFactory):
       raise ValueError(
           "fdl.ArgFactory is not supported in auto-config codegen sub-fixture"
           " transformation."

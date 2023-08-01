@@ -39,6 +39,7 @@ from typing import Any, Dict, Iterable, List, Optional, Type
 from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src import reraised_exception
+from fiddle._src import special_overrides
 from fiddle._src.experimental import daglish_legacy
 from fiddle._src.experimental import lazy_imports
 
@@ -285,6 +286,9 @@ def import_symbol(policy: PyrefPolicy, module: str, symbol: str):
   """
   value = PyrefPolicyError.PRE_IMPORT
   if policy.allows_import(module, symbol):
+    module = special_overrides.maybe_get_module_override_for_migrated_serialization_symbol(
+        module, symbol
+    )
     make_message = functools.partial(_fiddle_pyref_context, module, symbol)
     with reraised_exception.try_with_lazy_message(make_message):
       value = importlib.import_module(module)

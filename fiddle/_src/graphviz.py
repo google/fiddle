@@ -23,13 +23,13 @@ import functools
 import html
 import itertools
 import types
-
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Type, Union
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import diffing
 from fiddle._src import graphviz_custom_object
+from fiddle._src import partial
 from fiddle._src import tag_type
 from fiddle._src import tagging
 from fiddle._src.codegen import formatting_utilities
@@ -251,7 +251,7 @@ class _GraphvizRenderer:
     return tr(header_td(header))
 
   def _config_header_style(self, config: config_lib.Buildable) -> str:
-    if isinstance(config, (config_lib.Partial, config_lib.ArgFactory)):
+    if isinstance(config, (partial.Partial, partial.ArgFactory)):
       return 'dashed'
     else:
       return 'solid'

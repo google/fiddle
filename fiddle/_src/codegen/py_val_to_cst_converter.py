@@ -20,12 +20,12 @@ import enum
 import functools
 import inspect
 import types
-from typing import Any, Callable, Union, Type, List, Optional, NamedTuple, Sequence
+from typing import Any, Callable, List, NamedTuple, Optional, Sequence, Type, Union
 
 from fiddle._src import config as config_lib
+from fiddle._src import partial
 from fiddle._src import tagging
 from fiddle._src.experimental import daglish_legacy
-
 import libcst as cst
 
 # A function that takes any python value, and returns a cst node.
@@ -322,7 +322,7 @@ def _convert_namedtuple(value: Any,
       ])
 
 
-@register_py_val_to_cst_converter([config_lib.Config, config_lib.Partial])
+@register_py_val_to_cst_converter([config_lib.Config, partial.Partial])
 def _convert_buildable(value: Any,
                        conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a fdl.Config or fdl.Partial to CST."""

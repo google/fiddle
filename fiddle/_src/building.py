@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, TypeVar, overload
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
+from fiddle._src import partial
 from fiddle._src import reraised_exception
 
 T = TypeVar('T')
@@ -107,7 +108,7 @@ def call_buildable(
 
 # Define typing overload for `build(Partial[T])`
 @overload
-def build(buildable: config_lib.Partial[T]) -> Callable[..., T]:
+def build(buildable: partial.Partial[T]) -> Callable[..., T]:
   ...
 
 
