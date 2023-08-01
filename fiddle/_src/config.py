@@ -23,7 +23,6 @@ import copy
 import dataclasses
 import functools
 import inspect
-import logging
 import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
 
@@ -907,41 +906,3 @@ def get_tags(
     buildable: Buildable, argument: str
 ) -> FrozenSet[tag_type.TagType]:
   return frozenset(buildable.__argument_tags__[argument])
-
-
-_SUPPORTED_CASTS = set()
-
-
-def cast(new_type: Type[BuildableT], buildable: Buildable) -> BuildableT:
-  """Returns a copy of ``buildable`` that has been converted to ``new_type``.
-
-  Requires that ``type(buildable)`` and ``type(new_type)`` be compatible.
-  If the types may not be compatible, a warning will be issued, but the
-  conversion will be attempted.
-
-  Args:
-    new_type: The type to convert to.
-    buildable: The ``Buildable`` that should be copied and converted.
-  """
-  if not isinstance(buildable, Buildable):
-    raise TypeError(f'Expected `buildable` to be a Buildable, got {buildable}')
-  if not isinstance(new_type, type) and issubclass(new_type, Buildable):
-    raise TypeError(
-        f'Expected `new_type` to be a subclass of Buildable, got {buildable}'
-    )
-  src_type = type(buildable)
-  if (src_type, new_type) not in _SUPPORTED_CASTS:
-    logging.warning(
-        (
-            'Conversion from %s to %s has not been marked as '
-            'officially supported.  If you think this conversion '
-            'should be supported, contact the Fiddle team.'
-        ),
-        src_type,
-        new_type,
-    )
-  return new_type.__unflatten__(*buildable.__flatten__())
-
-
-def register_supported_cast(src_type, dst_type):
-  _SUPPORTED_CASTS.add((src_type, dst_type))

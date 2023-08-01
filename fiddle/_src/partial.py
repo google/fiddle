@@ -263,9 +263,3 @@ class ArgFactory(Generic[T], config.Buildable[T]):
       return _BuiltArgFactory(_build_partial(self.__fn_or_cls__, args, kwargs))
     else:
       return _BuiltArgFactory(self.__fn_or_cls__)
-
-
-for _src_type, _dst_type in itertools.product(
-    [config.Config, Partial, ArgFactory], repeat=2
-):
-  config.register_supported_cast(_src_type, _dst_type)

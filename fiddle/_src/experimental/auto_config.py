@@ -34,6 +34,7 @@ from typing import Any, Callable, Optional, Type, cast
 
 from fiddle._src import arg_factory
 from fiddle._src import building
+from fiddle._src import casting as cast_lib
 from fiddle._src import config
 from fiddle._src import mutate_buildable
 from fiddle._src import partial
@@ -511,7 +512,7 @@ def _maybe_as_arg_factory(arg_factory_cls, arg):
     ArgFactory version of a configuration or callable.
   """
   if isinstance(arg, partial.Partial):
-    return config.cast(arg_factory_cls, arg)
+    return cast_lib.cast(arg_factory_cls, arg)
   elif callable(arg):
     return arg_factory_cls(arg)
   else:

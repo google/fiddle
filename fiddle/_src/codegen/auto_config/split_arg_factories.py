@@ -26,6 +26,7 @@ For example, when lowering the ArgFactory's into
 import copy
 
 from fiddle import daglish
+from fiddle._src import casting
 from fiddle._src import config as config_lib
 from fiddle._src import partial
 from fiddle._src.codegen.auto_config import code_ir
@@ -37,9 +38,7 @@ def lower_arg_factories(task: code_ir.CodegenTask) -> None:
   def traverse(value, state: daglish.State):
     def _convert_arg(arg_value):
       if isinstance(arg_value, partial.ArgFactory):
-        return code_ir.ArgFactoryExpr(
-            config_lib.cast(partial.Partial, arg_value)
-        )
+        return code_ir.ArgFactoryExpr(casting.cast(partial.Partial, arg_value))
       else:
         return arg_value
 

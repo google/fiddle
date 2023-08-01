@@ -16,10 +16,10 @@
 """Init file for the `fiddle` package."""
 
 from fiddle._src.building import build
+from fiddle._src.casting import cast
 from fiddle._src.config import add_tag
 from fiddle._src.config import assign
 from fiddle._src.config import Buildable
-from fiddle._src.config import cast
 from fiddle._src.config import clear_tags
 from fiddle._src.config import Config
 from fiddle._src.config import copy_with
