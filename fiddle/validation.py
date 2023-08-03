@@ -13,10 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Methods to validate Fiddle configs are valid or conform to recommendations.
-
-Please see individual methods' docstrings.
-"""
+"""Functions for config validation. Check function docstring for details."""
 
 # pylint: disable=unused-import
 from fiddle._src.validation.baseline_style import check_baseline_style

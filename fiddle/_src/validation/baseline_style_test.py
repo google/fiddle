@@ -18,8 +18,8 @@
 
 from absl.testing import absltest
 from fiddle._src.testing.example import fake_encoder_decoder
+from fiddle._src.validation import baseline_style
 from fiddle._src.validation import fake_experiment
-from fiddle.validation import baseline_style
 
 
 class BaselineStyleTest(absltest.TestCase):

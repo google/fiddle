@@ -13,7 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Checks that custom objects/instances are not present in a configuration."""
+"""Checks that custom objects/instances are not present in a configuration.
+
+In general, we recommend building configurations from
+
+(a) primitives like int/float/str/etc.
+(b) basic python collections like lists/tuples/dicts
+(c) Fiddle configs like fdl.Config, fdl.Partial
+
+Usually, when a custom user object is present in a config, it can be rewritten
+to be a fdl.Config that constructs that object. For example, instead of
+
+config.foo.preprocessor = MyPreprocessor(dtype="int32")
+
+write,
+
+config.foo.preprocessor = fdl.Config(MyPreprocessor, dtype="int32")
+"""
 
 import dataclasses
 from typing import Any, List, Optional
