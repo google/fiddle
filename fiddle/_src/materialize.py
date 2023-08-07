@@ -52,7 +52,7 @@ def materialize_defaults(value: Any) -> None:
 
   def traverse(node, state: daglish.State):
     if isinstance(node, config.Buildable):
-      for arg in node.__signature__.parameters.values():
+      for arg in node.__signature_info__.parameters.values():
         if arg.default is not arg.empty and arg.name not in node.__arguments__:
           setattr(node, arg.name, arg.default)
     if state.is_traversable(node):
