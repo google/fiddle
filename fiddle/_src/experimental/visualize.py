@@ -146,7 +146,7 @@ def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
 
       should_copy = True
       for name, attr_value in list(value.__arguments__.items()):
-        param = value.__signature__.parameters.get(name, None)
+        param = value.__signature_info__.parameters.get(name, None)
         if param is None:
           continue
         param_default = (

@@ -110,10 +110,10 @@ def _get_annotation(cfg: config.Buildable,
     value = path_element.follow(value)
   if isinstance(value, config.Buildable):
     try:
-      param = value.__signature__.parameters[path[-1].name]
+      param = value.__signature_info__.parameters[path[-1].name]
     except KeyError:
       # Try to use the kwarg annotation
-      for param in value.__signature__.parameters.values():
+      for param in value.__signature_info__.parameters.values():
         if param.kind == param.VAR_KEYWORD:
           return None if param.annotation is param.empty else param.annotation
       return None  # probably a kwarg
@@ -150,7 +150,7 @@ def _rearrange_buildable_args_and_insert_unset_sentinels(
   value = copy.copy(value)
   old_arguments = dict(value.__arguments__)
   new_arguments = {}
-  for param_name, param in value.__signature__.parameters.items():
+  for param_name, param in value.__signature_info__.parameters.items():
     if param.kind in {param.VAR_KEYWORD, param.VAR_POSITIONAL}:
       continue
     elif param_name in old_arguments:
@@ -277,8 +277,9 @@ def _make_per_leaf_histories_recursive(
 
       # Add in unset fields.
       unset_fields = sorted(
-          set(value.__signature__.parameters.keys()) -
-          set(value.__argument_history__.keys()))
+          set(value.__signature_info__.parameters.keys())
+          - set(value.__argument_history__.keys())
+      )
       for name in unset_fields:
         path = (*state.current_path, daglish.Attr(name))
         yield f'{_path_str(path)} = <[unset]>'

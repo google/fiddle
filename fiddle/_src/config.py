@@ -22,7 +22,6 @@ import collections
 import copy
 import dataclasses
 import functools
-import inspect
 import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
 
@@ -121,7 +120,10 @@ def _compare_buildable(x: Buildable, y: Buildable, check_dag: bool = False):
     return False
   if x.__fn_or_cls__ != y.__fn_or_cls__:
     return False
-  assert x._has_var_keyword == y._has_var_keyword, (  # pylint: disable=protected-access
+  assert (
+      x.__signature_info__.has_var_keyword
+      == y.__signature_info__.has_var_keyword
+  ), (  # pylint: disable=protected-access
       'Internal invariant violated: has_var_keyword should be the same if '
       "__fn_or_cls__'s are the same."
   )
@@ -216,11 +218,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   # "Dunder"-style names were chosen here to reduce the possibility of naming
   # conflicts while still making the fields accessible.
   __fn_or_cls__: TypeOrCallableProducingT[T]
-  __signature__: inspect.Signature
   __arguments__: Dict[str, Any]
   __argument_history__: history.History
   __argument_tags__: Dict[str, Set[tag_type.TagType]]
-  _has_var_keyword: bool
+  __signature_info__: signatures.SignatureInfo
 
   def __init__(
       self,
@@ -236,24 +237,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       *args: Any positional arguments to configure for ``fn_or_cls``.
       **kwargs: Any keyword arguments to configure for ``fn_or_cls``.
     """
-    signature = self.__init_callable__(fn_or_cls)
+    self.__init_callable__(fn_or_cls)
     arg_history = history.History()
     arg_history.add_new_value('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__argument_history__', arg_history)
     super().__setattr__('__argument_tags__', collections.defaultdict(set))
-
-    arguments = signature.bind_partial(*args, **kwargs).arguments
-    for name in list(arguments.keys()):  # Make a copy in case we mutate.
-      param = signature.parameters[name]
-      if param.kind == param.VAR_POSITIONAL:
-        # TODO(b/197367863): Add *args support.
-        err_msg = (
-            'Variable positional arguments (aka `*args`) not supported. '
-            f'Found param `{name}` in `{fn_or_cls}`.'
-        )
-        raise NotImplementedError(err_msg)
-      elif param.kind == param.VAR_KEYWORD:
-        arguments.update(arguments.pop(param.name))
+    arguments = signatures.SignatureInfo.signature_binding(
+        fn_or_cls, *args, **kwargs
+    )
 
     for name, value in arguments.items():
       setattr(self, name, value)
@@ -266,7 +257,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __init_callable__(
       self, fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]]
-  ) -> inspect.Signature:
+  ) -> None:
     if isinstance(fn_or_cls, Buildable):
       raise ValueError(
           'Using the Buildable constructor to convert a buildable to a new '
@@ -282,13 +273,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__arguments__', {})
     signature = signatures.get_signature(fn_or_cls)
-    super().__setattr__('__signature__', signature)
-    has_var_keyword = any(
-        param.kind == param.VAR_KEYWORD
-        for param in signature.parameters.values()
+    super().__setattr__(
+        '__signature_info__',
+        signatures.SignatureInfo(signature),
     )
-    super().__setattr__('_has_var_keyword', has_var_keyword)
-    return signature
 
   def __init_subclass__(cls):
     daglish.register_node_traverser(
@@ -335,7 +323,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
           + f'{self.__fn_or_cls__.__qualname__}.{name} '
           + 'since it uses a default_factory.'
       )
-    param = self.__signature__.parameters.get(name)
+    param = self.__signature_info__.parameters.get(name)
     if param is not None and param.default is not param.empty:
       return param.default
     msg = f"No parameter '{name}' has been set on {self!r}."
@@ -352,42 +340,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
     raise AttributeError(msg)
 
-  def __validate_param_name__(self, name) -> None:
-    """Raises an error if ``name`` is not a valid parameter name."""
-    param = self.__signature__.parameters.get(name)
-
-    if param is not None:
-      if param.kind == param.POSITIONAL_ONLY:
-        # TODO(b/197367863): Add positional-only arg support.
-        raise NotImplementedError(
-            'Positional only arguments not supported. '
-            f'Tried to set {name!r} on {self.__fn_or_cls__}'
-        )
-      elif param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-        # Just pretend it doesn't correspond to a valid parameter name... below
-        # a TypeError will be thrown unless there is a **kwargs parameter.
-        param = None
-
-    if param is None and not self._has_var_keyword:
-      if name in self.__signature__.parameters:
-        err_msg = f'Variadic arguments (e.g. *{name}) are not supported.'
-      else:
-        valid_parameter_names = (
-            name
-            for name, param in self.__signature__.parameters.items()
-            if param.kind not in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL)
-        )
-        err_msg = (
-            f"No parameter named '{name}' exists for "
-            f'{self.__fn_or_cls__}; valid parameter names: '
-            f"{', '.join(valid_parameter_names)}."
-        )
-      raise TypeError(err_msg)
-
   def __setattr__(self, name: str, value: Any):
     """Sets parameter ``name`` to ``value``."""
 
-    self.__validate_param_name__(name)
+    self.__signature_info__.validate_param_name(name, self.__fn_or_cls__)
 
     if isinstance(value, TaggedValueCls):
       tags = value.__argument_tags__.get('value', ())
@@ -423,12 +379,8 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     Returns:
       A list of useful attribute names corresponding to set or unset parameters.
     """
-    valid_param_names = {
-        name
-        for name, param in self.__signature__.parameters.items()
-        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
-    }
     set_argument_names = self.__arguments__.keys()
+    valid_param_names = set(self.__signature_info__.valid_param_names)
     all_names = valid_param_names.union(set_argument_names)
     return all_names
 
@@ -440,10 +392,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     formatted_params = []
     # Show parameters from signature first (in signature order) followed by
     # **varkwarg parameters (in the order they were set).
-    param_names = list(self.__signature__.parameters) + [
+    param_names = list(self.__signature_info__.parameters) + [
         name
         for name in self.__arguments__
-        if name not in self.__signature__.parameters
+        if name not in self.__signature_info__.parameters
     ]
 
     for name in param_names:
@@ -492,10 +444,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     return self.__unflatten__(*self.__flatten__())
 
   def __deepcopy__(self, memo: Dict[int, Any]):
-    """Deepcopies this ``Buildable``, skipping copying of ``__signature__``."""
+    """Deepcopies this Buildable, skipping copying of ``__signature_info__``."""
     # Skipping copying inspect.Signature objects, which are generally immutable,
     # is about 2x faster on artificial benchmarks.
-    memo[id(self.__signature__)] = self.__signature__
+    memo[id(self.__signature_info__.signature)] = (
+        self.__signature_info__.signature
+    )
     result = object.__new__(type(self))
     result.__dict__.update(copy.deepcopy(self.__dict__, memo))
     return result
@@ -526,30 +480,31 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __getstate__(self):
     """Gets pickle serialization state, removing some fields.
 
-    For now, we discard the ``__signature__`` (which can be recalculated) and
-    ``__argument_history__``, because these tend to contain values which cannot
-    be serialized.
+    For now, we discard the ``__signature_info__.signature`` (which can be
+    recalculated), because these tend to contain values which cannot be
+    serialized.
 
     Returns:
       Dict of serialized state.
     """
     result = dict(self.__dict__)
-    result.pop('__signature__', None)
+    result['__signature_info__'] = signatures.SignatureInfo(  # pytype: disable=wrong-arg-types
+        None, result['__signature_info__'].has_var_keyword
+    )
     return result
 
   def __setstate__(self, state) -> None:
     """Loads pickle serialization state.
 
-    This re-derives the signature if not present, and adds an empty
-    ``__argument_history__``, if it was removed.
+    This re-derives the signature if not present.
 
     Args:
       state: State dictionary, from ``__getstate__``.
     """
     self.__dict__.update(state)  # Support unpickle.
-    if '__signature__' not in self.__dict__:
-      object.__setattr__(
-          self, '__signature__', signatures.get_signature(self.__fn_or_cls__)
+    if self.__signature_info__.signature is None:
+      self.__signature_info__.signature = signatures.get_signature(
+          self.__fn_or_cls__
       )
 
 
@@ -606,7 +561,7 @@ class Config(Generic[T], Buildable[T]):
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT[T]
-  __signature__: inspect.Signature
+  __signature_info__: signatures.SignatureInfo
 
   def __build__(self, *args, **kwargs):
     """Builds this ``Config`` for the given ``args`` and ``kwargs``.
@@ -659,7 +614,7 @@ class TaggedValueCls(Generic[T], Config[T]):
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
   __fn_or_cls__: TypeOrCallableProducingT[T]
-  __signature__: inspect.Signature
+  __signature_info__: signatures.SignatureInfo
 
   @property
   def tags(self):
@@ -720,10 +675,13 @@ def update_callable(
     raise NotImplementedError(
         'Variable positional arguments (aka `*args`) not supported.'
     )
-  has_var_keyword = any(
-      param.kind == param.VAR_KEYWORD for param in signature.parameters.values()
+  signature_info = signatures.SignatureInfo(signature)
+  object.__setattr__(
+      buildable,
+      '__signature_info__',
+      signature_info,
   )
-  if not has_var_keyword:
+  if not signature_info.has_var_keyword:
     invalid_args = [
         arg for arg in original_args.keys() if arg not in signature.parameters
     ]
@@ -737,10 +695,7 @@ def update_callable(
             f'{buildable.__fn_or_cls__}) because the Buildable would '
             f'have invalid arguments {invalid_args}.'
         )
-
   object.__setattr__(buildable, '__fn_or_cls__', new_callable)
-  object.__setattr__(buildable, '__signature__', signature)
-  object.__setattr__(buildable, '_has_var_keyword', has_var_keyword)
   buildable.__argument_history__.add_new_value('__fn_or_cls__', new_callable)
 
 
@@ -837,7 +792,7 @@ def ordered_arguments(
         'exclude_equal_to_default and include_defaults are mutually exclusive.'
     )
   result = {}
-  for name, param in buildable.__signature__.parameters.items():
+  for name, param in buildable.__signature_info__.parameters.items():
     if param.kind != param.VAR_KEYWORD:
       if name in buildable.__arguments__:
         value = buildable.__arguments__[name]
@@ -850,7 +805,7 @@ def ordered_arguments(
         result[name] = NO_VALUE
   if include_var_keyword:
     for name, value in buildable.__arguments__.items():
-      param = buildable.__signature__.parameters.get(name)
+      param = buildable.__signature_info__.parameters.get(name)
       if param is None or param.kind == param.VAR_KEYWORD:
         result[name] = value
   return result
@@ -858,7 +813,9 @@ def ordered_arguments(
 
 def add_tag(buildable: Buildable, argument: str, tag: tag_type.TagType) -> None:
   """Tags `name` with `tag` in `buildable`."""
-  buildable.__validate_param_name__(argument)
+  buildable.__signature_info__.validate_param_name(
+      argument, buildable.__fn_or_cls__
+  )
   buildable.__argument_tags__[argument].add(tag)
   buildable.__argument_history__.add_updated_tags(
       argument, buildable.__argument_tags__[argument]
@@ -881,7 +838,9 @@ def remove_tag(
     buildable: Buildable, argument: str, tag: tag_type.TagType
 ) -> None:
   """Removes a given tag from a named argument of a Buildable."""
-  buildable.__validate_param_name__(argument)
+  buildable.__signature_info__.validate_param_name(
+      argument, buildable.__fn_or_cls__
+  )
   field_tag_set = buildable.__argument_tags__[argument]
   if tag not in field_tag_set:
     raise ValueError(
@@ -895,7 +854,9 @@ def remove_tag(
 
 def clear_tags(buildable: Buildable, argument: str) -> None:
   """Removes all tags from a named argument of a Buildable."""
-  buildable.__validate_param_name__(argument)
+  buildable.__signature_info__.validate_param_name(
+      argument, buildable.__fn_or_cls__
+  )
   buildable.__argument_tags__[argument].clear()
   buildable.__argument_history__.add_updated_tags(
       argument, buildable.__argument_tags__[argument]
