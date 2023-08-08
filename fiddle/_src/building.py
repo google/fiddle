@@ -73,10 +73,10 @@ def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
       f'{name}={_format_arg(value)}' for name, value in arguments.items())
 
   tag_information = ''
-  bound_args = buildable.__signature_info__.signature.bind_partial(**arguments)
+  bound_args = buildable.__signature__.bind_partial(**arguments)
   bound_args.apply_defaults()
   unset_arg_tags = []
-  for param in buildable.__signature_info__.parameters:
+  for param in buildable.__signature__.parameters:
     if param in bound_args.arguments:
       continue  # User supplied it, all good.
     tags = buildable.__argument_tags__.get(param, None)

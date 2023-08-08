@@ -17,7 +17,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Generic, Mapping, Type
+from typing import Any, Callable, Dict, Generic, Type
 import weakref
 import typing_extensions
 
@@ -128,72 +128,3 @@ def get_type_hints(
     hints = _get_type_hints_uncached(fn_or_cls, include_extras=include_extras)
     _type_hints_cache[fn_or_cls, include_extras] = hints
     return hints
-
-
-@dataclasses.dataclass
-class SignatureInfo:
-  """To store signature related information about the callable."""
-
-  signature: inspect.Signature
-  has_var_keyword: bool = None
-
-  def __post_init__(self):
-    if self.has_var_keyword is None:
-      has_var_keyword = any(
-          param.kind == param.VAR_KEYWORD
-          for param in self.signature.parameters.values()
-      )
-      self.has_var_keyword = has_var_keyword
-
-  @staticmethod
-  def signature_binding(fn_or_cls, signature, *args, **kwargs) -> Any:
-    """Bind partial for arguments and return arguments."""
-    arguments = signature.bind_partial(*args, **kwargs).arguments
-    for name in list(arguments.keys()):  # Make a copy in case we mutate.
-      param = signature.parameters[name]
-      if param.kind == param.VAR_POSITIONAL:
-        # TODO(b/197367863): Add *args support.
-        err_msg = (
-            'Variable positional arguments (aka `*args`) not supported. '
-            f'Found param `{name}` in `{fn_or_cls}`.'
-        )
-        raise NotImplementedError(err_msg)
-      elif param.kind == param.VAR_KEYWORD:
-        arguments.update(arguments.pop(param.name))
-    return arguments
-
-  def validate_param_name(self, name, fn_or_cls) -> None:
-    """Raises an error if ``name`` is not a valid parameter name."""
-    param = self.signature.parameters.get(name)
-
-    if param is not None:
-      if param.kind == param.POSITIONAL_ONLY:
-        # TODO(b/197367863): Add positional-only arg support.
-        raise NotImplementedError(
-            'Positional only arguments not supported. '
-            f'Tried to set {name!r} on {fn_or_cls}'
-        )
-      elif param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
-        # Just pretend it doesn't correspond to a valid parameter name... below
-        # a TypeError will be thrown unless there is a **kwargs parameter.
-        param = None
-
-    if param is None and not self.has_var_keyword:
-      if name in self.signature.parameters:
-        err_msg = f'Variadic arguments (e.g. *{name}) are not supported.'
-      else:
-        valid_parameter_names = (
-            name
-            for name, param in self.signature.parameters.items()
-            if param.kind not in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL)
-        )
-        err_msg = (
-            f"No parameter named '{name}' exists for "
-            f'{fn_or_cls}; valid parameter names: '
-            f"{', '.join(valid_parameter_names)}."
-        )
-      raise TypeError(err_msg)
-
-  @property
-  def parameters(self) -> Mapping[str, inspect.Parameter]:
-    return self.signature.parameters

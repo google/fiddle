@@ -17,13 +17,9 @@
 
 from fiddle._src import config
 
-_buildable_internals_keys = (
-    '__fn_or_cls__',
-    '__arguments__',
-    '__argument_tags__',
-    '__argument_history__',
-    '__signature_info__',
-)
+_buildable_internals_keys = ('__fn_or_cls__', '__signature__', '__arguments__',
+                             '_has_var_keyword', '__argument_tags__',
+                             '__argument_history__')
 
 
 def move_buildable_internals(*, source: config.Buildable,
