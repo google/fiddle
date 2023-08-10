@@ -39,7 +39,7 @@ _COMMAND_RE = re.compile(r"^(config|fiddler|set):(.+)$")
 _F = TypeVar("_F")
 
 
-class FiddleFlag(flags.MultiFlag):
+class _FiddleFlag(flags.MultiFlag):
   """ABSL flag class for a Fiddle config flag."""
 
   def __init__(
@@ -127,8 +127,63 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     default_module: Optional[types.ModuleType] = None,
     flag_values: flags.FlagValues = flags.FLAGS,
 ) -> flags.FlagHolder[Any]:
+  r"""Declare and define a fiddle command line flag object.
+
+  When used in a python binary, after the flags have been parsed from the
+  command line, this command line flag object will have the `fdl.Config` object
+  built.
+
+  Example usage in a python binary:
+  ```
+  .... other imports ...
+  from fiddle import absl_flags as fdl_flags
+
+  _MY_FLAG = fdl_flags.DEFINE_fiddle_config(
+      "my_config",
+      help_string="My binary's fiddle config handle",
+      default_module=sys.modules[__name__],
+  )
+
+  def base_config() -> fdl.Config:
+    return some_import.fixture.as_buildable()
+
+  def set_attributes(config, value: str):
+    config.some_attr = value
+    return config
+
+  def main(argv) -> None:
+    if len(argv) > 1:
+      raise app.UsageError("Too many command-line arguments.")
+    # _MY_FLAG.value contains the config object, built from `base_config()`
+    # with any command line flags and overrides applied in the order passed in
+    # the command line.
+    some_import.do_something(_MY_FLAG.value.some_attr)
+
+  if __name__ == "__main__":
+    app.run(main)
+  ```
+
+  Invoking the above binary with:
+  python3 -m path.to.my.binary --my_config config:base_config \
+  --my_config fiddler:'set_attributes(value="float64")' --my_config \
+  set:some_other_attr.enable=True
+
+  results in the `_MY_FLAG.value` set to the built config object with all the
+  command line flags applied in the order they were passed in.
+
+  Args:
+    name: name of the command line flag.
+    default: default value of the flag.
+    help_string: help string describing what the flag does.
+    default_module: the python module where this flag is defined.
+    flag_values: the ``FlagValues`` instance with which the flag will be
+      registered. This should almost never need to be overridden.
+
+  Returns:
+    A handle to defined flag.
+  """
   return flags.DEFINE_flag(
-      FiddleFlag(
+      _FiddleFlag(
           name=name,
           default_module=default_module,
           default=default,
