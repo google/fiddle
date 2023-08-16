@@ -99,3 +99,16 @@ def fixture():
                                                    bias_init),
           mlp=Mlp(dtype, False, ["num_heads", "head_dim", "embed"]),
       ))
+
+
+@auto_config.auto_config(base_config=fixture)
+def fixture_with_bias():
+  # pylint: disable=no-value-for-parameter
+  # pytype: disable=missing-parameter
+  return FakeEncoderDecoder(
+      encoder=FakeEncoder(
+          mlp=Mlp(use_bias=True),
+      ),
+  )
+  # pytype: enable=missing-parameter
+  # pylint: enable=no-value-for-parameter
