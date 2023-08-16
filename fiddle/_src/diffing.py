@@ -481,7 +481,7 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
   old_by_id = daglish_legacy.collect_value_by_id(old, memoizable_only=True)
   new_by_id = daglish_legacy.collect_value_by_id(new, memoizable_only=True)
   for (value_id, value) in old_by_id.items():
-    # Do not aligh by id for small container objects.
+    # Do not align by id for small container objects.
     if not _is_small_container(value):
       if value_id in new_by_id:
         if alignment.can_align(value, value):
