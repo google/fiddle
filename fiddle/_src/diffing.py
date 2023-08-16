@@ -481,9 +481,11 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
   old_by_id = daglish_legacy.collect_value_by_id(old, memoizable_only=True)
   new_by_id = daglish_legacy.collect_value_by_id(new, memoizable_only=True)
   for (value_id, value) in old_by_id.items():
-    if value_id in new_by_id:
-      if alignment.can_align(value, value):
-        alignment.align(value, value)
+    # Do not aligh by id for small container objects.
+    if not _is_small_container(value):
+      if value_id in new_by_id:
+        if alignment.can_align(value, value):
+          alignment.align(value, value)
 
   # Second pass: align any objects that are reachable by the same path.
   path_to_old = daglish_legacy.collect_value_by_path(old, memoizable_only=True)
@@ -502,6 +504,13 @@ def align_heuristically(old: Any, new: Any, old_name='old', new_name='new'):
             alignment.align(old_value, new_value)
 
   return alignment
+
+
+def _is_small_container(value):
+  """Returns if value is a small Sequence or Mapping."""
+  if isinstance(value, (Sequence, Mapping)) and len(repr(value)) < 80:
+    return True
+  return False
 
 
 def _should_align_by_equality(value):

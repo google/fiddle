@@ -701,6 +701,13 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
                     expected_changes=(diffing.ModifyValue(
                         parse_path('[0]'), set([6])),))
 
+  def test_align_heuristically_identical_configs_w_different_ids(self):
+    a = {'k': [1, 2, 3], 'v': None}
+    b = {'k': [1, 2, 3], 'v': None}
+    x = fdl.Config(make_pair, a, b)
+    y = fdl.Config(make_pair, b, a)
+    self.check_diff(x, y)
+
   def test_root_must_be_aligned(self):
     old = fdl.Config(SimpleClass, 1, 2, 3)
     new = fdl.Config(SimpleClass, 4, 5, 6)
