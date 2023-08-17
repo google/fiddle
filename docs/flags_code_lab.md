@@ -61,7 +61,12 @@ Fiddle pattern includes:
 -   **Base Configuration**: A base configuration function is a function without
     required arguments (a nullary function) that returns a `fdl.Buildable`.
 -   **Fiddler**: A fiddler is a unary function that takes a `fdl.Buildable` and
-    mutates it. (A fiddler returns `None`.)
+    applies some transformations. If the fiddler returns `None`, then it is
+    assumed the input `fdl.Buildable` was mutated by the fiddler, and the
+    mutated input will be passed on to further flag operations. If the fiddler
+    returns a non-`None` value (e.g., a new `fdl.Buildable` obtained from
+    applying a `daglish` traversal routine), the return value of the fiddler is
+    passed on instead.
 
 ## Life of a flag-augmented Fiddle program
 

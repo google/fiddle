@@ -80,7 +80,21 @@ class _FiddleFlag(flags.MultiFlag):
         self.allow_imports,
         "Could not init a buildable from",
     )
-    return fiddler(cfg, *call_expr.args, **call_expr.kwargs)
+
+    # An immutable fiddler function is one that doesn't mutate the original
+    # `fdl.Buildable` object that's passed into it and instead returns a new
+    # `fdl.Buildable` built from the original `fdl.Buildable` after applying the
+    # transform `fiddler`. It is different from a mutable fiddler function that
+    # directly mutates the original `fdl.Buildable` object. Immutable fiddlers
+    # are useful when using various util functions such as
+    # `daglish.MemoizedTraversal.run()` that return a new `fdl.Buildable`
+    # object. Immutable fiddler functions return a non-None value.
+    new_cfg = fiddler(cfg, *call_expr.args, **call_expr.kwargs)
+
+    # If the fiddler is immutable, then return the transformed `fdl.Buildable`
+    # passed into the function. Else, return the mutated original
+    # `fdl.Buildable` object.
+    return new_cfg if new_cfg is not None else cfg
 
   def parse(self, argument):
     parsed = self._parse(argument)
@@ -164,9 +178,9 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
   ```
 
   Invoking the above binary with:
-  python3 -m path.to.my.binary --my_config config:base_config \
-  --my_config fiddler:'set_attributes(value="float64")' --my_config \
-  set:some_other_attr.enable=True
+  python3 -m path.to.my.binary --my_config=config:base_config \
+  --my_config=fiddler:'set_attributes(value="float64")' \
+  --my_config=set:some_other_attr.enable=True
 
   results in the `_MY_FLAG.value` set to the built config object with all the
   command line flags applied in the order they were passed in.
