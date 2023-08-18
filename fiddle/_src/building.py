@@ -96,14 +96,21 @@ def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
 
 def call_buildable(
     buildable: config_lib.Buildable,
-    arguments: Dict[str, Any],
+    kwargs: Dict[str, Any],
     *,
     current_path: daglish.Path,
 ) -> Any:
-  make_message = functools.partial(_make_message, current_path, buildable,
-                                   arguments)
+  """Run the __build__ method on a Buildable given keyword arguments."""
+  make_message = functools.partial(
+      _make_message, current_path, buildable, kwargs
+  )
+  args = []
+  for name in buildable.__signature_info__.positional_arg_names:
+    if name in kwargs:
+      args.append(kwargs.pop(name))
+  args.extend(kwargs.pop('__args__', []))
   with reraised_exception.try_with_lazy_message(make_message):
-    return buildable.__build__(**arguments)
+    return buildable.__build__(*args, **kwargs)
 
 
 # Define typing overload for `build(Partial[T])`

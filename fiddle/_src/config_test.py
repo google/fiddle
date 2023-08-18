@@ -73,6 +73,10 @@ def fn_with_var_args_and_kwargs(arg1, *args, kwarg1=None, **kwargs):  # pylint: 
   return locals()
 
 
+def fn_with_args_and_kwargs_only(*args, **kwargs):
+  return args, kwargs
+
+
 def make_typed_config() -> fdl.Config[SampleClass]:
   """Helper function which returns a fdl.Config whose type is known."""
   return fdl.Config(SampleClass, arg1=1, arg2=2)
@@ -211,6 +215,84 @@ class ConfigTest(parameterized.TestCase):
         'args': 'kwarg_called_arg',
         'kwargs': 'kwarg_called_kwarg'
     })
+
+  # Test variadic positional arguments *args support.
+  def test_args_config_access(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+
+    with self.subTest('ordered_arguments'):
+      self.assertEqual(
+          fdl.ordered_arguments(fn_config),
+          {
+              'arg1': 'foo',
+              '__args__': ['bar', 'baz'],
+          },
+      )
+
+    with self.subTest('posargs_access'):
+      self.assertEqual(fn_config.posargs[0], 'bar')
+      self.assertEqual(fn_config.posargs[1], 'baz')
+      self.assertSequenceEqual(fn_config.posargs, ['bar', 'baz'])
+
+    with self.subTest('index_access'):
+      with self.assertRaisesRegex(
+          TypeError,
+          'Getting arguments by index is only supported when using slice',
+      ):
+        _ = fn_config[0]
+
+    with self.subTest('slice_access'):
+      self.assertEmpty(fn_config[:0])
+      self.assertSequenceEqual(fn_config[:1], ['bar'])
+      self.assertSequenceEqual(fn_config[:], ['bar', 'baz'])
+
+  def test_args_config_posargs_append(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    fn_config.posargs.append('foo')
+    self.assertSequenceEqual(fn_config.posargs, ['bar', 'baz', 'foo'])
+
+  def test_args_config_slice_mutation(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    self.assertSequenceEqual(fn_config[:], ['bar', 'baz'])
+    fn_config[:1] = ['zero', 'one']
+    self.assertSequenceEqual(fn_config[:], ['zero', 'one', 'baz'])
+
+  def test_args_config_shallow_copy(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    self.assertLen(fn_config[:], 2)
+    a_copy = fn_config[:]
+    a_copy.append('foo')
+    self.assertLen(fn_config[:], 2)
+    self.assertLen(a_copy, 3)
+
+  def test_index_mutation(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    fn_config[0] = 'foo'
+    self.assertEqual(fn_config.posargs[0], 'foo')
+    fn_config[-1] = 'last'
+    self.assertLen(fn_config.posargs, 2)
+    self.assertEqual(fn_config.posargs[1], 'last')
+    self.assertEqual(fn_config.posargs[-1], 'last')
+
+  def test_index_out_of_range(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    self.assertLen(fn_config[:], 2)
+    with self.assertRaisesRegex(
+        IndexError, 'list assignment index out of range'
+    ):
+      fn_config[2] = 'index-2'
+
+  def test_args_config_build(self):
+    fn_config = fdl.Config(fn_with_var_args, 'foo', 'bar', 'baz')
+    fn_args = fdl.build(fn_config)
+    self.assertEqual(
+        fn_args,
+        {
+            'arg1': 'foo',
+            'args': ('bar', 'baz'),
+            'kwarg1': None,
+        },
+    )
 
   def test_config_for_dicts(self):
     dict_config = fdl.Config(dict, a=1, b=2)
@@ -745,12 +827,6 @@ class ConfigTest(parameterized.TestCase):
     with self.assertRaisesRegex(TypeError, expected_msg):
       fn_config.args = (1, 2, 3)
 
-  def test_unsupported_var_args_error(self):
-    expected_msg = (r'Variable positional arguments \(aka `\*args`\) not '
-                    r'supported\.')
-    with self.assertRaisesRegex(NotImplementedError, expected_msg):
-      fdl.Config(fn_with_var_args, 1, 2, 3)
-
   def test_build_inside_build(self):
 
     def inner_build(x: int) -> str:
@@ -1074,11 +1150,108 @@ class CallableApisTest(absltest.TestCase):
         }
     }, fdl.build(cfg))
 
-  def test_update_callable_varargs(self):
-    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
-    with self.assertRaisesRegex(NotImplementedError,
-                                'Variable positional arguments'):
-      fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
+  # For `update_callable` involves variadic positional arguments, we test
+  # three patterns below.
+  # Pattern 1: *args -> *args
+  def test_update_args_to_args(self):
+    cfg = fdl.Config(fn_with_var_args, 1, 2, kwarg1=3)
+    fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
+    self.assertEqual(
+        cfg.__arguments__, {'arg1': 1, '__args__': [2], 'kwarg1': 3}
+    )
+    self.assertEqual(
+        fdl.build(cfg),
+        {'arg1': 1, 'args': (2,), 'kwarg1': 3, 'kwargs': {}},
+    )
+
+  def test_update_args_kwargs_only_to_args(self):
+    cfg = fdl.Config(fn_with_args_and_kwargs_only, 1, 2, 3, kwarg1=4, kwarg2=5)
+    cfg.posargs[0] = 10
+    cfg.kwarg1 = 40
+    config_lib.update_callable(cfg, fn_with_var_args_and_kwargs)
+    self.assertEqual(
+        cfg.__arguments__,
+        {'__args__': [10, 2, 3], 'kwarg1': 40, 'kwarg2': 5},
+    )
+    self.assertEqual(
+        fdl.build(cfg),
+        {'arg1': 10, 'args': (2, 3), 'kwarg1': 40, 'kwargs': {'kwarg2': 5}},
+    )
+
+  # Pattern 2: *args -> no *args
+  def test_update_args_to_no_args(self):
+    cfg = fdl.Config(fn_with_var_args, 1, 2, kwarg1=3)
+    fdl.update_callable(cfg, basic_fn)
+    cfg.arg2 = 22
+    self.assertEqual(cfg.__arguments__, {'arg1': 1, 'arg2': 22, 'kwarg1': 3})
+    self.assertEqual(
+        fdl.build(cfg), {'arg1': 1, 'arg2': 22, 'kwarg1': 3, 'kwarg2': None}
+    )
+
+  # Pattern 3: no *args -> *args
+  def test_update_no_args_to_args(self):
+    cfg = fdl.Config(basic_fn, 1, 2, kwarg1=3)
+    fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
+    self.assertEqual(
+        cfg.__arguments__, {'__args__': [], 'arg1': 1, 'arg2': 2, 'kwarg1': 3}
+    )
+    self.assertEqual(
+        fdl.build(cfg),
+        {'arg1': 1, 'args': (), 'kwarg1': 3, 'kwargs': {'arg2': 2}},
+    )
+
+  # Test history tracking for *args
+  def test_update_args_to_no_args_history(self):
+    def no_args_fn(arg1, arg2, arg3, kwarg1):
+      del arg1
+      del arg2
+      del arg3
+      del kwarg1
+
+    cfg = fdl.Config(fn_with_var_args, 1, 2, kwarg1=3)
+    cfg.posargs = [10, 20]
+    del cfg.posargs
+    cfg.posargs = [100, 200]
+    fdl.update_callable(cfg, no_args_fn)
+
+    self.assertEqual(
+        set(['arg1', 'arg2', 'arg3', 'kwarg1', '__args__', '__fn_or_cls__']),
+        set(cfg.__argument_history__.keys()),
+    )
+    self.assertLen(cfg.__argument_history__['arg1'], 1)
+    self.assertLen(cfg.__argument_history__['arg2'], 4)
+    self.assertLen(cfg.__argument_history__['arg3'], 4)
+    self.assertLen(cfg.__argument_history__['kwarg1'], 1)
+    self.assertLen(cfg.__argument_history__['__args__'], 5)
+    self.assertLen(cfg.__argument_history__['__fn_or_cls__'], 2)
+
+    expected_new_value = {
+        'arg2': [2, 10, history.DELETED, 100],
+        'arg3': [history.NOTSET, 20, history.DELETED, 200],
+    }
+    for arg_name in ('arg2', 'arg3'):
+      for index in range(4):
+        self.assertEqual(
+            cfg.__argument_history__[arg_name][index].new_value,
+            expected_new_value[arg_name][index],
+        )
+        self.assertRegex(
+            str(cfg.__argument_history__[arg_name][index].location),
+            r'config_test.py:\d+:test_update_args_to_no_args_history',
+        )
+
+      self.assertLess(
+          cfg.__argument_history__[arg_name][0].sequence_id,
+          cfg.__argument_history__[arg_name][1].sequence_id,
+      )
+      self.assertEqual(
+          cfg.__argument_history__[arg_name][1].sequence_id + 1,
+          cfg.__argument_history__[arg_name][2].sequence_id,
+      )
+      self.assertEqual(
+          cfg.__argument_history__[arg_name][2].sequence_id + 1,
+          cfg.__argument_history__[arg_name][3].sequence_id,
+      )
 
   def test_get_callable(self):
     cfg = fdl.Config(basic_fn)
