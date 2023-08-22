@@ -18,11 +18,12 @@
 import abc
 import copy
 import dataclasses
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple, Union
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import tag_type
+from fiddle._src import tagging
 from fiddle._src.experimental import daglish_legacy
 
 
@@ -186,7 +187,7 @@ class AddTag(DiffOperation):
 
   def apply(self, parent: Any, child: daglish.PathElement):
     if isinstance(child, daglish.Attr):
-      config_lib.add_tag(parent, child.name, self.tag)
+      tagging.add_tag(parent, child.name, self.tag)
     else:
       raise ValueError(f'DeleteValue does not support {child}.')
 
@@ -202,7 +203,7 @@ class RemoveTag(DiffOperation):
 
   def apply(self, parent: Any, child: daglish.PathElement):
     if isinstance(child, daglish.Attr):
-      config_lib.remove_tag(parent, child.name, self.tag)
+      tagging.remove_tag(parent, child.name, self.tag)
     else:
       raise ValueError(f'DeleteValue does not support {child}.')
 
@@ -1007,9 +1008,11 @@ def skeleton_from_diff(diff: Diff):
     if isinstance(change, (ModifyValue, SetValue)):
       daglish_legacy.traverse_with_path(add_reference_target, change.new_value)
     if isinstance(change, RemoveTag):
-      config_lib.add_tag(
-          daglish.follow_path(root, change.target[:-1]), change.target[-1].name,
-          change.tag)
+      tagging.add_tag(
+          daglish.follow_path(root, change.target[:-1]),
+          change.target[-1].name,
+          change.tag,
+      )
   daglish_legacy.traverse_with_path(add_reference_target,
                                     diff.new_shared_values)
 

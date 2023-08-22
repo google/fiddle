@@ -126,7 +126,7 @@ def generate_nested_value(
     buildable = buildable_type(kwargs_fn, **arguments)
     if generate_bool() and arguments:
       argument = rng.choice(list(arguments))
-      config.set_tags(buildable, argument, {SampleTag})
+      tagging.set_tags(buildable, argument, {SampleTag})
     return buildable
 
   def generate_alias():

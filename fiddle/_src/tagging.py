@@ -140,7 +140,7 @@ def TaggedValue(  # pylint: disable=invalid-name
   if default is not NO_VALUE:
     result.value = default
   for tag in tags:
-    config.add_tag(result, 'value', tag)
+    add_tag(result, 'value', tag)
   return result
 
 
@@ -239,3 +239,65 @@ def materialize_tags(
       return value
 
   return daglish.MemoizedTraversal.run(transform, buildable)
+
+
+def add_tag(
+    buildable: config.Buildable, argument: str, tag: tag_type.TagType
+) -> None:
+  """Tags `name` with `tag` in `buildable`."""
+  buildable.__signature_info__.validate_param_name(
+      argument, buildable.__fn_or_cls__
+  )
+  buildable.__argument_tags__[argument].add(tag)
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument]
+  )
+
+
+def set_tags(
+    buildable: config.Buildable,
+    argument: str,
+    tags: Collection[tag_type.TagType],
+) -> None:
+  """Sets tags for a parameter in `buildable`, overriding existing tags."""
+  clear_tags(buildable, argument)
+  for tag in tags:
+    add_tag(buildable, argument, tag)
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument]
+  )
+
+
+def remove_tag(
+    buildable: config.Buildable, argument: str, tag: tag_type.TagType
+) -> None:
+  """Removes a given tag from a named argument of a Buildable."""
+  buildable.__signature_info__.validate_param_name(
+      argument, buildable.__fn_or_cls__
+  )
+  field_tag_set = buildable.__argument_tags__[argument]
+  if tag not in field_tag_set:
+    raise ValueError(
+        f'{tag} not set on {argument}; current tags: {field_tag_set}.'
+    )
+  field_tag_set.remove(tag)
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument]
+  )
+
+
+def clear_tags(buildable: config.Buildable, argument: str) -> None:
+  """Removes all tags from a named argument of a Buildable."""
+  buildable.__signature_info__.validate_param_name(
+      argument, buildable.__fn_or_cls__
+  )
+  buildable.__argument_tags__[argument].clear()
+  buildable.__argument_history__.add_updated_tags(
+      argument, buildable.__argument_tags__[argument]
+  )
+
+
+def get_tags(
+    buildable: config.Buildable, argument: str
+) -> FrozenSet[tag_type.TagType]:
+  return frozenset(buildable.__argument_tags__[argument])

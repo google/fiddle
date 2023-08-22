@@ -78,6 +78,10 @@ SPECIAL_OVERRIDES_MAP = {
         module_name="fiddle._src.partial",
         module_import_alias="import fiddle as fdl",
     ),
+    "fiddle._src.tagging": SpecialOverrides(
+        module_name="fiddle._src.tagging",
+        module_import_alias="import fiddle as fdl",
+    ),
 }
 
 

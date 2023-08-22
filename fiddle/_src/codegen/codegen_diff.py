@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 from fiddle import daglish
 from fiddle import diffing
 from fiddle._src import config as config_lib
+from fiddle._src import tagging
 from fiddle._src.codegen import import_manager as import_manager_lib
 from fiddle._src.codegen import namespace as namespace_lib
 from fiddle._src.codegen import py_val_to_cst_converter
@@ -378,12 +379,15 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         deletes.append(
             cst.Expr(
                 cst.Call(
-                    func=pyval_to_cst(config_lib.remove_tag),
+                    func=pyval_to_cst(tagging.remove_tag),
                     args=[
                         cst.Arg(parent_cst),
                         cst.Arg(pyval_to_cst(arg_name)),
-                        cst.Arg(pyval_to_cst(change.tag))
-                    ])))
+                        cst.Arg(pyval_to_cst(change.tag)),
+                    ],
+                )
+            )
+        )
 
       elif isinstance(change, (diffing.SetValue, diffing.ModifyValue)):
         new_value_cst = pyval_to_cst(change.new_value)
@@ -396,12 +400,15 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         assigns.append(
             cst.Expr(
                 value=cst.Call(
-                    func=pyval_to_cst(config_lib.add_tag),
+                    func=pyval_to_cst(tagging.add_tag),
                     args=[
                         cst.Arg(parent_cst),
                         cst.Arg(pyval_to_cst(arg_name)),
-                        cst.Arg(pyval_to_cst(change.tag))
-                    ])))
+                        cst.Arg(pyval_to_cst(change.tag)),
+                    ],
+                )
+            )
+        )
 
       else:
         raise ValueError(f'Unsupported DiffOperation {type(change)}')

@@ -29,7 +29,6 @@ from fiddle._src import config as config_lib
 from fiddle._src.experimental import daglish_legacy
 from fiddle._src.testing.example import demo_configs
 import pytype_extensions
-from typing_extensions import Annotated
 
 
 class Tag1(fdl.Tag):
@@ -101,14 +100,6 @@ class DataclassChild:
 @dataclasses.dataclass
 class DataclassParent:
   child: DataclassChild = dataclasses.field(default_factory=DataclassChild)
-
-
-@dataclasses.dataclass
-class DataclassAnnotated:
-  one: Annotated[int, Tag1]
-  two: Annotated[str, Tag1, Tag2]
-
-  three: 'Annotated[float, Tag2]'
 
 
 def raise_error():
@@ -539,100 +530,6 @@ class ConfigTest(parameterized.TestCase):
 
     self.assertEqual(4, fn_config.arg2)
 
-  def test_tagging(self):
-    cfg = fdl.Config(SampleClass)
-    fdl.add_tag(cfg, 'arg1', Tag1)
-
-    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
-    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'arg2'))
-
-    fdl.add_tag(cfg, 'arg1', Tag2)
-    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'arg1'))
-
-    fdl.remove_tag(cfg, 'arg1', Tag2)
-    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
-
-    with self.assertRaisesRegex(ValueError, '.*not set.*'):
-      fdl.remove_tag(cfg, 'arg1', Tag2)
-
-  def test_tag_annotations(self):
-    cfg = fdl.Config(DataclassAnnotated)
-
-    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'one'))
-    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'two'))
-    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg, 'three'))
-
-  def test_tags_flattening_and_unflattening(self):
-    def flatten_unflatten(config):
-      values, metadata = config.__flatten__()
-      return type(config).__unflatten__(values, metadata)
-
-    with self.subTest('tagged_field_without_value'):
-      cfg = fdl.Config(DataclassAnnotated)
-      self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'one'))
-      cfg2 = flatten_unflatten(cfg)
-      self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg2, 'one'))
-
-    with self.subTest('untagged_field_without_value'):
-      cfg = fdl.Config(DataclassAnnotated)
-      fdl.clear_tags(cfg, 'one')
-      self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'one'))
-      cfg2 = flatten_unflatten(cfg)
-      self.assertEqual(frozenset([]), fdl.get_tags(cfg2, 'one'))
-
-    with self.subTest('tagged_field_with_value'):
-      cfg = fdl.Config(DataclassAnnotated)
-      cfg.one = fdl.TaggedValue([Tag2], 3)
-      self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 'one'))
-      cfg2 = flatten_unflatten(cfg)
-      self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg2, 'one'))
-
-    with self.subTest('untagged_field_with_value'):
-      cfg = fdl.Config(DataclassAnnotated)
-      cfg.one = 3
-      fdl.clear_tags(cfg, 'one')
-      self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'one'))
-      cfg2 = flatten_unflatten(cfg)
-      self.assertEqual(frozenset([]), fdl.get_tags(cfg2, 'one'))
-
-  def test_setting_tagged_values_with_daglish_traversal(self):
-    cfg = fdl.Config(DataclassAnnotated, one=3)
-
-    def traverse(value, state):
-      if isinstance(value, int):
-        return fdl.TaggedValue([Tag2], value)
-      else:
-        return state.map_children(value)
-
-    # We expect the TaggedValue class *not* to be unwrapped by the constructor
-    # now, because __new__ is called directly.
-    cfg2 = traverse(cfg, daglish.MemoizedTraversal.begin(traverse, cfg))
-    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg2, 'one'))
-    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg2.one, 'value'))
-
-  def test_clear_tags(self):
-    cfg = fdl.Config(SampleClass)
-    fdl.add_tag(cfg, 'arg1', Tag1)
-    fdl.add_tag(cfg, 'arg1', Tag2)
-    fdl.clear_tags(cfg, 'arg1')
-    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 'arg1'))
-
-  def test_set_tags(self):
-    cfg = fdl.Config(SampleClass)
-    fdl.add_tag(cfg, 'arg1', Tag1)
-    fdl.add_tag(cfg, 'arg1', Tag2)
-    fdl.set_tags(cfg, 'arg1', {Tag2})
-    self.assertEqual(frozenset([Tag2]), fdl.get_tags(cfg, 'arg1'))
-
-  def test_flatten_unflatten_tags(self):
-    cfg = fdl.Config(SampleClass)
-    fdl.add_tag(cfg, 'arg1', Tag1)
-    values, metadata = cfg.__flatten__()
-    copied = fdl.Config.__unflatten__(values, metadata)
-    fdl.add_tag(copied, 'arg1', Tag2)
-    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 'arg1'))
-    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(copied, 'arg1'))
-
   def test_flatten_unflatten_histories(self):
     cfg = fdl.Config(SampleClass)
     cfg.arg1 = 4
@@ -703,26 +600,6 @@ class ConfigTest(parameterized.TestCase):
     expected_repr = (
         '<Config[fn_with_var_kwargs(arg1=1, kwarg1=5, x=2, z=3, y=4)]>')
     self.assertEqual(repr(cfg), expected_repr)
-
-  def test_repr_class_tags(self):
-    config = fdl.Config(
-        SampleClass,
-        1,
-        kwarg1='kwarg1',
-        kwarg2=fdl.Config(
-            SampleClass, 'nested value might be large so ' +
-            'put tag next to param, not after value.'))
-    fdl.add_tag(config, 'arg1', Tag1)
-    fdl.add_tag(config, 'arg2', Tag2)
-    fdl.add_tag(config, 'kwarg2', Tag1)
-    fdl.add_tag(config, 'kwarg2', Tag2)
-    expected_repr = """<Config[SampleClass(
-  arg1[#{module}.Tag1]=1,
-  arg2[#{module}.Tag2],
-  kwarg1='kwarg1',
-  kwarg2[#{module}.Tag1, #{module}.Tag2]=<Config[SampleClass(
-    arg1='nested value might be large so put tag next to param, not after value.')]>)]>"""
-    self.assertEqual(repr(config), expected_repr.format(module=__name__))
 
   def test_nonexistent_attribute_error(self):
     class_config = fdl.Config(SampleClass, 1)
@@ -862,31 +739,6 @@ class ConfigTest(parameterized.TestCase):
     cfg = fdl.Config(basic_fn, fdl.Config(SampleClass, 1), 2)
     with self.assertRaisesRegex(
         TypeError, r'.*missing 1 required.*\n\n.*<root>\.arg1.*arg1=1'):
-      fdl.build(cfg)
-
-  def test_build_reraises_nice_error_with_tag_information(self):
-    cfg = fdl.Config(SampleClass)
-    fdl.add_tag(cfg, 'arg2', Tag1)
-
-    with self.assertRaisesRegex(
-        TypeError,
-        r'.*Tags for unset arguments:\n - arg2: #{module}.Tag1.*'.format(
-            module=__name__
-        ),
-    ):
-      fdl.build(cfg)
-
-  def test_build_reraises_nice_error_multiple_tags(self):
-    cfg = fdl.Config(SampleClass)
-    fdl.add_tag(cfg, 'arg1', Tag2)
-    fdl.add_tag(cfg, 'arg2', Tag1)
-    fdl.add_tag(cfg, 'arg2', Tag2)
-
-    expected_match = (
-        r'.* - arg1: #{module}.Tag2\n - arg2: #{module}.Tag1 #{module}.Tag2.*'
-        .format(module=__name__)
-    )
-    with self.assertRaisesRegex(TypeError, expected_match):
       fdl.build(cfg)
 
   def test_build_raises_exception_on_call(self):
