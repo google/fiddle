@@ -22,5 +22,6 @@ from fiddle._src.config import BuildableTraverserMetadata
 from fiddle._src.config import Config
 from fiddle._src.config import NO_VALUE
 from fiddle._src.config import NoValue
+from fiddle._src.config import VARARGS
 from fiddle._src.partial import ArgFactory
 from fiddle._src.partial import Partial

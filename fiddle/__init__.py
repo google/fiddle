@@ -26,6 +26,7 @@ from fiddle._src.config import get_callable
 from fiddle._src.config import NO_VALUE
 from fiddle._src.config import ordered_arguments
 from fiddle._src.config import update_callable
+from fiddle._src.config import VARARGS
 from fiddle._src.materialize import materialize_defaults
 from fiddle._src.partial import ArgFactory
 from fiddle._src.partial import Partial

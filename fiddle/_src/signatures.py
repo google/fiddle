@@ -17,7 +17,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Generic, Mapping, Tuple, Type
+from typing import Any, Callable, Dict, Generic, List, Mapping, Optional, Tuple, Type
 import weakref
 import typing_extensions
 
@@ -135,15 +135,33 @@ class SignatureInfo:
   """To store signature related information about the callable."""
 
   signature: inspect.Signature
-  has_var_keyword: bool = None
+  has_var_keyword: Optional[bool] = None
+  var_positional_name: Optional[str] = None
+  positional_arg_names: Optional[List[str]] = dataclasses.field(
+      default_factory=list
+  )
 
   def __post_init__(self):
-    if self.has_var_keyword is None:
-      has_var_keyword = any(
-          param.kind == param.VAR_KEYWORD
-          for param in self.signature.parameters.values()
-      )
-      self.has_var_keyword = has_var_keyword
+    # During serilization, signature is set to None so no action is needed.
+    if self.signature is None:
+      return
+
+    # If *args exists, we must pass things before it in positional format. This
+    # list tracks those arguments.
+    maybe_positional_args = []
+    positional_only_args = []
+    for param in self.signature.parameters.values():
+      if param.kind == param.POSITIONAL_ONLY:
+        positional_only_args.append(param.name)
+      elif param.kind == param.POSITIONAL_OR_KEYWORD:
+        maybe_positional_args.append(param.name)
+      elif param.kind == param.VAR_POSITIONAL:
+        positional_only_args.extend(maybe_positional_args)
+        if not self.var_positional_name:
+          self.var_positional_name = param.name
+      elif param.kind == param.VAR_KEYWORD and self.has_var_keyword is None:
+        self.has_var_keyword = True
+    self.positional_arg_names = positional_only_args
 
   @staticmethod
   def signature_binding(fn_or_cls, *args, **kwargs) -> Any:
@@ -152,29 +170,37 @@ class SignatureInfo:
     arguments = signature.bind_partial(*args, **kwargs).arguments
     for name in list(arguments.keys()):  # Make a copy in case we mutate.
       param = signature.parameters[name]
-      if param.kind == param.VAR_POSITIONAL:
-        # TODO(b/197367863): Add *args support.
-        err_msg = (
-            'Variable positional arguments (aka `*args`) not supported. '
-            f'Found param `{name}` in `{fn_or_cls}`.'
-        )
-        raise NotImplementedError(err_msg)
-      elif param.kind == param.VAR_KEYWORD:
+      if param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
     return arguments
 
-  def validate_param_name(self, name, fn_or_cls) -> None:
+  def get_positional_names(self) -> Tuple[List[str], List[str], str]:
+    """Get positional argument names."""
+    positional_only = []
+    keyword_or_positional = []
+    for param in self.signature.parameters.values():
+      if param.kind == param.POSITIONAL_ONLY:
+        positional_only.append(param.name)
+      elif param.kind == param.POSITIONAL_OR_KEYWORD:
+        keyword_or_positional.append(param.name)
+    return positional_only, keyword_or_positional, self.var_positional_name
+
+  def validate_param_name(
+      self, name, fn_or_cls, allow_postional_argument=False
+  ) -> None:
     """Raises an error if ``name`` is not a valid parameter name."""
     param = self.signature.parameters.get(name)
 
     if param is not None:
-      if param.kind == param.POSITIONAL_ONLY:
-        # TODO(b/197367863): Add positional-only arg support.
-        raise NotImplementedError(
-            'Positional only arguments not supported. '
-            f'Tried to set {name!r} on {fn_or_cls}'
+      if param.kind == param.POSITIONAL_ONLY and not allow_postional_argument:
+        raise AttributeError(
+            f'Cannot access POSITIONAL_ONLY parameter {name!r} on {fn_or_cls}'
         )
-      elif param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+      elif param.kind == param.VAR_POSITIONAL and not allow_postional_argument:
+        raise AttributeError(
+            f'Cannot access VAR_POSITIONAL parameter {name!r} on {fn_or_cls}'
+        )
+      elif param.kind == param.VAR_KEYWORD:
         # Just pretend it doesn't correspond to a valid parameter name... below
         # a TypeError will be thrown unless there is a **kwargs parameter.
         param = None
