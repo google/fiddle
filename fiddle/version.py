@@ -13,5 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Current Fiddle version at head on Github."""
-__version__ = "0.2.10"
+"""Current Fiddle version at head on GitHub."""
+__version__ = "0.2.11"
