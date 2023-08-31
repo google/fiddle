@@ -28,6 +28,7 @@ from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable
 from fiddle._src import daglish
 from fiddle._src import history
 from fiddle._src import signatures
+from fiddle._src import strict_validation
 from fiddle._src import tag_type
 
 
@@ -247,6 +248,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     )
 
     for name, value in arguments.items():
+      if not strict_validation.is_valid(value, [Buildable], True):
+        raise ValueError(
+            f'Argument {name!r} is invalid: only primitives and structures of '
+            'primitives are allowed when strict validation is enabled.'
+        )
       setattr(self, name, value)
 
     for name, tags in tag_type.find_tags_from_annotations(fn_or_cls).items():
