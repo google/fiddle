@@ -15,6 +15,9 @@
 
 """Legacy API to use command line flags with Fiddle Buildables.
 
+NOTE: Deprecation: These are legacy APIs. Please refer to the new API usage in
+flags.py and find the documentation in flags_code_lab.md.
+
 While it's generally better to check in the full configuration into a source-
 control system, there are some instances (e.g. hyperparameter sweeps) where it's
 most effective to set initialization parameters (hyperparameters) from command
@@ -171,7 +174,14 @@ def _print_stderr(*args, **kwargs):
 
 
 def apply_overrides_to(cfg: config.Buildable):
-  """Applies all command line flags to `cfg`."""
+  """[DEPRECATED] Applies all command line flags to `cfg`.
+
+  Deprecation: This is a legacy API. Please refer to the new API usage in
+  flags.py and find the documentation in flags_code_lab.md.
+
+  Args:
+    cfg: The configuration to apply overrides to.
+  """
   for flag in _FDL_SET.value:
     utils.set_value(cfg, flag)
 
@@ -228,7 +238,18 @@ def flags_parser(args: Sequence[str]):
 
 
 def set_tags(cfg: config.Buildable):
-  """Sets tags based on their name, from CLI flags."""
+  """[DEPRECATED] Sets tags based on their name, from CLI flags.
+
+  Deprecation: This is a legacy API. Please refer to the new API usage in
+  flags.py and find the documentation in flags_code_lab.md.
+
+  Args:
+    cfg: The configuration to set tags on.
+
+  Raises:
+    ValueError: If no tags with the given name are found.
+    EnvironmentError: If multiple tags with the given name are found.
+  """
   all_tags = tagging.list_tags(cfg, add_superclasses=True)
   for flag in _FDL_TAGS_SET.value:
     name, value = flag.split('=', maxsplit=1)
@@ -256,7 +277,17 @@ def set_tags(cfg: config.Buildable):
 def apply_fiddlers_to(cfg: config.Buildable,
                       source_module: Any,
                       allow_imports=False):
-  """Applies fiddlers to `cfg`."""
+  """[DEPRECATED] Applies fiddlers to `cfg`.
+
+  Deprecation: This is a legacy API. Please refer to the new API usage in
+  flags.py and find the documentation in flags_code_lab.md.
+
+  Args:
+    cfg: The configuration to apply fiddlers to.
+    source_module: source py module where fiddlers are defined.
+    allow_imports: If true, then fully qualified dotted names may be used to
+      specify configs or fiddlers that should be automatically imported.
+  """
   for fiddler_value in _FIDDLER.value:
     call_expr = utils.CallExpression.parse(fiddler_value)
     fiddler_name = call_expr.func_name
@@ -315,7 +346,10 @@ def create_buildable_from_flags(
     allow_imports=False,
     pyref_policy: Optional[serialization.PyrefPolicy] = None,
 ) -> config.Buildable:
-  """Returns a fdl.Buildable based on standardized flags.
+  """[DEPRECATED] Returns a fdl.Buildable based on standardized flags.
+
+  Deprecation: This is a legacy API. Please refer to the new API usage in
+  flags.py and find the documentation in flags_code_lab.md.
 
   NOTE: the flags aren't applied in the order they are passed in on the command
   line. The order followed is:
@@ -332,6 +366,9 @@ def create_buildable_from_flags(
       specify configs or fiddlers that should be automatically imported.
     pyref_policy: An optional `serialization.PyrefPolicy` to use if parsing a
       serialized Fiddle config (passed via `--fdl_config_file`).
+
+  Returns:
+    A `fdl.Buildable` based on standardized flags.
   """
   missing_base_config = not _FDL_CONFIG.value and not _FDL_CONFIG_FILE.value
   if not _FDL_HELP.value and missing_base_config:
