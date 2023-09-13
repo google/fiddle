@@ -19,7 +19,7 @@ import contextlib
 import functools
 import logging
 import threading
-from typing import Any, Callable, Dict, TypeVar, overload
+from typing import Any, Callable, Dict, Sequence, TypeVar, overload
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
@@ -60,8 +60,12 @@ def _format_arg(arg: Any) -> str:
     return f'<ERROR FORMATTING {type(arg)} ARGUMENT>'
 
 
-def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
-                  arguments: Dict[str, Any]) -> str:
+def _make_message(
+    current_path: daglish.Path,
+    buildable: config_lib.Buildable,
+    args: Sequence[Any],
+    kwargs: Dict[str, Any],
+) -> str:
   """Returns Fiddle-related debugging information for an exception."""
   path_str = '<root>' + daglish.path_str(current_path)
   fn_or_cls = config_lib.get_callable(buildable)
@@ -69,11 +73,15 @@ def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
     fn_or_cls_name = fn_or_cls.__qualname__
   except AttributeError:
     fn_or_cls_name = str(fn_or_cls)  # callable instances, etc.
+  args_str = ', '.join(f'{_format_arg(value)}' for value in args)
   kwargs_str = ', '.join(
-      f'{name}={_format_arg(value)}' for name, value in arguments.items())
+      f'{name}={_format_arg(value)}' for name, value in kwargs.items()
+  )
 
   tag_information = ''
-  bound_args = buildable.__signature_info__.signature.bind_partial(**arguments)
+  bound_args = buildable.__signature_info__.signature.bind_partial(
+      *args, **kwargs
+  )
   bound_args.apply_defaults()
   unset_arg_tags = []
   for param in buildable.__signature_info__.parameters:
@@ -90,7 +98,8 @@ def _make_message(current_path: daglish.Path, buildable: config_lib.Buildable,
   return (
       '\n\nFiddle context: failed to construct or call '
       f'{fn_or_cls_name} at {path_str} '
-      f'with arguments ({kwargs_str}){tag_information}'
+      f'with positional arguments: ({args_str}), '
+      f'keyword arguments: ({kwargs_str}){tag_information}.'
   )
 
 
@@ -100,10 +109,25 @@ def call_buildable(
     *,
     current_path: daglish.Path,
 ) -> Any:
-  make_message = functools.partial(_make_message, current_path, buildable,
-                                   arguments)
+  """Prepare positional arguments and actually build the buildable."""
+  positional_only, keyword_or_positional, var_positional = (
+      buildable.__signature_info__.get_positional_names()
+  )
+  positional_arguments = []
+  for name in positional_only:
+    if name in arguments:
+      positional_arguments.append(arguments.pop(name))
+  if var_positional is not None:
+    for name in keyword_or_positional:
+      if name in arguments:
+        positional_arguments.append(arguments.pop(name))
+    if var_positional in arguments:
+      positional_arguments.extend(arguments.pop(var_positional))
+  make_message = functools.partial(
+      _make_message, current_path, buildable, positional_arguments, arguments
+  )
   with reraised_exception.try_with_lazy_message(make_message):
-    return buildable.__build__(**arguments)
+    return buildable.__build__(*positional_arguments, **arguments)
 
 
 # Define typing overload for `build(Partial[T])`

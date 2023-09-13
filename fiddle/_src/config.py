@@ -22,6 +22,7 @@ import collections
 import copy
 import dataclasses
 import functools
+import inspect
 import types
 from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
 
@@ -58,6 +59,9 @@ NO_VALUE = NoValue()
 # None or other commonly-used sentinel.
 _UNSET_SENTINEL = object()
 
+# Unique object instance that represents the index where varadic positional
+# arguments start for a Buildable.
+VARARGS = object()
 
 _defaults_aware_traverser_registry = daglish.NodeTraverserRegistry(
     use_fallback=True
@@ -247,7 +251,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     )
 
     for name, value in arguments.items():
-      setattr(self, name, value)
+      self._setattr(name, value, allow_postional_argument=True)
 
     for name, tags in tag_type.find_tags_from_annotations(fn_or_cls).items():
       self.__argument_tags__[name].update(tags)
@@ -258,6 +262,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __init_callable__(
       self, fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]]
   ) -> None:
+    """Save information on `fn_or_cls` to the `Buildable`."""
     if isinstance(fn_or_cls, Buildable):
       raise ValueError(
           'Using the Buildable constructor to convert a buildable to a new '
@@ -273,9 +278,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__arguments__', {})
     signature = signatures.get_signature(fn_or_cls)
+    # Several attributes are computed automatically by SignatureInfo during
+    # `__post_init__`.
     super().__setattr__(
         '__signature_info__',
-        signatures.SignatureInfo(signature),
+        signatures.SignatureInfo(signature=signature),
     )
 
   def __init_subclass__(cls):
@@ -312,6 +319,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __getattr__(self, name: str):
     """Get parameter with given ``name``."""
     value = self.__arguments__.get(name, _UNSET_SENTINEL)
+    param = self.__signature_info__.parameters.get(name)
+    if param is not None and (
+        param.kind in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL)
+    ):
+      raise AttributeError(
+          'Cannot access positional-only or variadic positional arguments '
+          f'{name} on {self!r} by attributes.'
+      )
 
     if value is not _UNSET_SENTINEL:
       return value
@@ -323,7 +338,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
           + f'{self.__fn_or_cls__.__qualname__}.{name} '
           + 'since it uses a default_factory.'
       )
-    param = self.__signature_info__.parameters.get(name)
     if param is not None and param.default is not param.empty:
       return param.default
     msg = f"No parameter '{name}' has been set on {self!r}."
@@ -340,10 +354,15 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
     raise AttributeError(msg)
 
-  def __setattr__(self, name: str, value: Any):
-    """Sets parameter ``name`` to ``value``."""
-
-    self.__signature_info__.validate_param_name(name, self.__fn_or_cls__)
+  def _setattr(
+      self, name: str, value: Any, allow_postional_argument: bool = False
+  ):
+    """The __setattr__ implementation."""
+    self.__signature_info__.validate_param_name(
+        name,
+        self.__fn_or_cls__,
+        allow_postional_argument=allow_postional_argument,
+    )
 
     if isinstance(value, TaggedValueCls):
       tags = value.__argument_tags__.get('value', ())
@@ -360,6 +379,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     self.__arguments__[name] = value
     self.__argument_history__.add_new_value(name, value)
 
+  def __setattr__(self, name: str, value: Any):
+    """Sets parameter ``name`` to ``value``."""
+    self._setattr(name, value)
+
   def __delattr__(self, name):
     """Unsets parameter ``name``."""
     try:
@@ -368,6 +391,90 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     except KeyError:
       err = AttributeError(f"No parameter '{name}' has been set on {self!r}")
       raise err from None
+
+  def _get_all_positional_args(self):
+    """Get a full list of positional arguments."""
+    positional_only, keyword_or_positional, var_positional = (
+        self.__signature_info__.get_positional_names()
+    )
+    positional_arguments = []
+    for name in positional_only:
+      positional_arguments.append(self.__arguments__[name])
+    if var_positional:
+      for name in keyword_or_positional:
+        positional_arguments.append(self.__arguments__[name])
+      positional_arguments += self.__arguments__.get(var_positional, [])
+    return positional_arguments
+
+  def _replace_varargs_handle(self, key):
+    """Replace VARARGS handle in index key if exists."""
+    positional_only, keyword_or_positional, _ = (
+        self.__signature_info__.get_positional_names()
+    )
+    start = len(positional_only) + len(keyword_or_positional)
+    if isinstance(key, slice) and key.start is VARARGS:
+      return slice(start, key.stop, key.step)
+    elif key is VARARGS:
+      return start
+    return key
+
+  def __getitem__(self, key: Any):
+    """Get positional arguments by index."""
+    key = self._replace_varargs_handle(key)
+    all_positional_args = self._get_all_positional_args()
+    return all_positional_args[key]
+
+  def __setitem__(self, key: Any, value: Any):
+    """Set positional arguments by index."""
+    key = self._replace_varargs_handle(key)
+    assert isinstance(
+        key, (int, slice)
+    ), f'Key of __setitem__ must be an int or slice, got {key}.'
+    positional_only, keyword_or_positional, var_positional = (
+        self.__signature_info__.get_positional_names()
+    )
+    positional_names = positional_only
+    if var_positional:
+      positional_names += keyword_or_positional
+    old_positional_args = self._get_all_positional_args()
+    # Set positional arguments values using a comparison approach.
+    # Because setting values directly will lead to very complex logics due to
+    # various indices patterns, as well as the case where key is a slice but
+    # the value is not a sequence object.
+    new_positional_args = copy.deepcopy(old_positional_args)
+    new_positional_args[key] = value
+
+    # Handle non-variadic positional arguments
+    for index, name in enumerate(positional_names):
+      if index < len(new_positional_args):
+        if old_positional_args[index] != new_positional_args[index]:
+          new_value = new_positional_args[index]
+          self.__arguments__[name] = new_value
+          self.__argument_history__.add_new_value(name, new_value)
+      else:
+        del self.__arguments__[name]
+        self.__argument_history__.add_deleted_value(name)
+
+    # Handle variadic positional arguments
+    if var_positional is None:
+      if len(new_positional_args) > len(positional_names):
+        raise ValueError(
+            'Too many arguments are provided. There are only '
+            f'{len(positional_names)} positional arguments but '
+            f'{len(new_positional_args)} are provided to '
+            f'{self.__fn_or_cls__.__qualname__}.'
+        )
+    else:
+      if len(new_positional_args) <= len(positional_names):
+        del self.__arguments__[var_positional]
+        self.__argument_history__.add_deleted_value(var_positional)
+      else:
+        new_var_positional_arg = new_positional_args[len(positional_names) :]
+        if new_var_positional_arg != self.__arguments__.get(var_positional, []):
+          self.__arguments__[var_positional] = new_var_positional_arg
+          self.__argument_history__.add_new_value(
+              var_positional, new_var_positional_arg
+          )
 
   def __dir__(self) -> Collection[str]:
     """Provide a useful list of attribute names, optimized for Jupyter/Colab.
@@ -488,9 +595,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       Dict of serialized state.
     """
     result = dict(self.__dict__)
-    result['__signature_info__'] = signatures.SignatureInfo(  # pytype: disable=wrong-arg-types
-        None, result['__signature_info__'].has_var_keyword
-    )
+    result['__signature_info__'] = signatures.SignatureInfo(None)  # pytype: disable=wrong-arg-types
     return result
 
   def __setstate__(self, state) -> None:
@@ -503,8 +608,10 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     """
     self.__dict__.update(state)  # Support unpickle.
     if self.__signature_info__.signature is None:
-      self.__signature_info__.signature = signatures.get_signature(
-          self.__fn_or_cls__
+      signature = signatures.get_signature(self.__fn_or_cls__)
+      super().__setattr__(
+          '__signature_info__',
+          signatures.SignatureInfo(signature=signature),
       )
 
 
@@ -637,11 +744,123 @@ def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
   return False
 
 
+def _update_positional_args(
+    buildable: Buildable,
+    original_signature: inspect.Signature,
+    new_signature: inspect.Signature,
+    drop_invalid_args: bool = False,
+) -> None:
+  """Update positional arguments in place.
+
+  The naive approach to update positional arguments when changing the callable
+  is to update each individual argument. However, the mapping problem (for
+  example, some positional arugments may have differnt names now, or need to map
+  *args to concrete positional arguments) is very challenging, because there
+  are mulitple possible conditions depending on if the origial and the new
+  callable have varadic positional arugments.
+
+  This method adopts the approach that first builds a full list of all
+  positional arguments, and then try to map the argument list accroding to the
+  signature of new callable.
+
+  Args:
+    buildable: A ``Buildable`` (e.g. a ``fdl.Config``) to update.
+    original_signature: Signature of the original callable.
+    new_signature: Signature of the new callable.
+    drop_invalid_args: If True, arguments that don't exist in the new callable
+      will be removed from buildable. If False, raise an exception for such
+      arguments.
+
+  Raises:
+    TypeError: If fails to match the origial positional arguments to the new
+      callable.
+  """
+  positional_argument_names = []
+  positional_argument_values = []
+  keyword_or_positional_argument_names = []
+  keyword_or_positional_argument_values = []
+  var_positional_name = None
+
+  for param in original_signature.parameters.values():
+    if param.name not in buildable.__arguments__:
+      break
+    if param.kind == param.POSITIONAL_ONLY:
+      positional_argument_names.append(param.name)
+      value = buildable.__arguments__[param.name]
+      positional_argument_values.append(value)
+    if param.kind == param.POSITIONAL_OR_KEYWORD:
+      keyword_or_positional_argument_names.append(param.name)
+      value = buildable.__arguments__[param.name]
+      keyword_or_positional_argument_values.append(value)
+    if param.kind == param.VAR_POSITIONAL:
+      var_positional_name = param.name
+      values = buildable.__arguments__[param.name]
+      if values:
+        # if *args exist, keyword-or-positional arguments will become
+        # positional arguments.
+        positional_argument_names.extend(keyword_or_positional_argument_names)
+        positional_argument_values.extend(keyword_or_positional_argument_values)
+        positional_argument_names.extend([None for _ in values])
+        positional_argument_values.extend(values)
+      break
+
+  for index, param in enumerate(new_signature.parameters.values()):
+    if index >= len(positional_argument_values):
+      break
+    new_name = param.name
+    old_name = positional_argument_names[index]
+    if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD):
+      new_value = positional_argument_values[index]
+      if old_name == new_name and (
+          buildable.__arguments__[old_name] == new_value
+      ):
+        continue
+      buildable.__arguments__[new_name] = new_value
+      buildable.__argument_history__.add_new_value(new_name, new_value)
+      if old_name != new_name and old_name is not None:
+        del buildable.__arguments__[old_name]
+        buildable.__argument_history__.add_deleted_value(old_name)
+    if param.kind == param.VAR_POSITIONAL:
+      # All positional arguments will be matched to *args, so delte all
+      # remaining positional-only and positional-or-keyword arguments in the
+      # current `__arguments__` dict.
+      new_value = positional_argument_values[index:]
+      for name in positional_argument_names[index:]:
+        if name and name in buildable.__arguments__:
+          del buildable.__arguments__[name]
+          buildable.__argument_history__.add_deleted_value(name)
+      if var_positional_name and var_positional_name in buildable.__arguments__:
+        if new_name != var_positional_name:
+          del buildable.__arguments__[var_positional_name]
+          buildable.__argument_history__.add_deleted_value(var_positional_name)
+        else:
+          # Varadic positional arguments have the same name and value
+          if new_value == buildable.__arguments__[var_positional_name]:
+            break
+      buildable.__arguments__[new_name] = new_value
+      buildable.__argument_history__.add_new_value(param.kind, new_value)
+      # All positional arguments have been matched, exit the for loop.
+      break
+    if param.kind in (param.KEYWORD_ONLY, param.VAR_KEYWORD):
+      if drop_invalid_args:
+        raise NotImplementedError(
+            'Drop invalid positional arguments are not supported yet.'
+        )
+      else:
+        raise TypeError(
+            f'Fail to match buildable {buildable} from signature'
+            f'{original_signature} to {new_signature}.'
+        )
+    if var_positional_name in buildable.__arguments__:
+      del buildable.__arguments__[var_positional_name]
+      buildable.__argument_history__.add_deleted_value(var_positional_name)
+
+
 def update_callable(
     buildable: Buildable,
     new_callable: TypeOrCallableProducingT,
     drop_invalid_args: bool = False,
-):
+) -> None:
   """Updates ``config`` to build ``new_callable`` instead.
 
   When extending a base configuration, it can often be useful to swap one class
@@ -666,24 +885,26 @@ def update_callable(
   #
   # Note: can't call `setattr` on all the args to validate them, because that
   # will result in duplicate history entries.
-  original_args = buildable.__arguments__
-  signature = signatures.get_signature(new_callable)
-  if any(
-      param.kind == param.VAR_POSITIONAL
-      for param in signature.parameters.values()
-  ):
-    raise NotImplementedError(
-        'Variable positional arguments (aka `*args`) not supported.'
-    )
-  signature_info = signatures.SignatureInfo(signature)
-  object.__setattr__(
+  new_signature = signatures.get_signature(new_callable)
+  # Update the signature early so that we can set arguments by position.
+  # Otherwise, parameter validation logics would complain about argument
+  # name not exists.
+  object.__setattr__(buildable, '__signature__', new_signature)
+  new_signature_info = signatures.SignatureInfo(signature=new_signature)
+  original_signature_info = buildable.__signature_info__
+  object.__setattr__(buildable, '__signature_info__', new_signature_info)
+  _update_positional_args(
       buildable,
-      '__signature_info__',
-      signature_info,
+      original_signature_info.signature,
+      new_signature_info.signature,
+      drop_invalid_args,
   )
-  if not signature_info.has_var_keyword:
+
+  if not new_signature_info.has_var_keyword:
     invalid_args = [
-        arg for arg in original_args.keys() if arg not in signature.parameters
+        arg
+        for arg in buildable.__arguments__.keys()
+        if arg not in new_signature.parameters
     ]
     if invalid_args:
       if drop_invalid_args:
