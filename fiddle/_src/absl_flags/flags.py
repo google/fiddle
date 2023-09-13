@@ -39,7 +39,7 @@ _COMMAND_RE = re.compile(r"^(config|fiddler|set):(.+)$")
 _F = TypeVar("_F")
 
 
-class _FiddleFlag(flags.MultiFlag):
+class FiddleFlag(flags.MultiFlag):
   """ABSL flag class for a Fiddle config flag."""
 
   def __init__(
@@ -197,7 +197,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     A handle to defined flag.
   """
   return flags.DEFINE_flag(
-      _FiddleFlag(
+      FiddleFlag(
           name=name,
           default_module=default_module,
           default=default,
