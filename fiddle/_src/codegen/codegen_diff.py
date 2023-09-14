@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 from fiddle import daglish
 from fiddle import diffing
 from fiddle._src import config as config_lib
+from fiddle._src import mutate_buildable
 from fiddle._src import tagging
 from fiddle._src.codegen import import_manager as import_manager_lib
 from fiddle._src.codegen import namespace as namespace_lib
@@ -367,9 +368,10 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         new_value_cst = pyval_to_cst(change.new_value)
         update_callable = cst.Expr(
             cst.Call(
-                func=pyval_to_cst(config_lib.update_callable),
-                args=[cst.Arg(parent_cst),
-                      cst.Arg(new_value_cst)]))
+                func=pyval_to_cst(mutate_buildable.update_callable),
+                args=[cst.Arg(parent_cst), cst.Arg(new_value_cst)],
+            )
+        )
 
       elif isinstance(change, diffing.DeleteValue):
         deletes.append(cst.Del(target=child_cst))

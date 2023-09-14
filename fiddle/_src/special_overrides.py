@@ -50,6 +50,14 @@ SPECIAL_OVERRIDES_MAP = {
             "ArgFactory": "fiddle._src.partial",
         },
     ),
+    "fiddle._src.mutate_buildable": SpecialOverrides(
+        module_name="fiddle._src.mutate_buildable",
+        module_import_alias="import fiddle as fdl",
+    ),
+    "fiddle._src.copy": SpecialOverrides(
+        module_name="fiddle._src.copying",
+        module_import_alias="import fiddle as fdl",
+    ),
     "fiddle._src.experimental": SpecialOverrides(
         module_name="fiddle._src.experimental",
         module_import_alias="from fiddle import experimental",

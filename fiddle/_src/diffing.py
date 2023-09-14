@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
+from fiddle._src import mutate_buildable
 from fiddle._src import tag_type
 from fiddle._src import tagging
 from fiddle._src.experimental import daglish_legacy
@@ -147,7 +148,7 @@ class ModifyValue(DiffOperation):
   def apply(self, parent: Any, child: daglish.PathElement):
     """Replaces `child.follow(parent)` with self.new_value."""
     if isinstance(child, daglish.BuildableFnOrCls):
-      config_lib.update_callable(parent, self.new_value)
+      mutate_buildable.update_callable(parent, self.new_value)
     elif isinstance(child, daglish.Attr):
       setattr(parent, child.name, self.new_value)
     elif isinstance(child, daglish.Index):

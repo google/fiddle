@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the `fiddle.config` module."""
+"""Tests for the `fiddle._src.config` module."""
 
 import copy
 import dataclasses
@@ -794,51 +794,6 @@ class ConfigTest(parameterized.TestCase):
     self.assertEqual(1, obj)
     self.assertEqual(3, output)
 
-  def test_assign(self):
-    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
-    fdl.assign(cfg, a='a', b='b')
-    self.assertEqual({
-        'arg1': 1,
-        'kwarg1': 2,
-        'kwargs': {
-            'a': 'a',
-            'b': 'b'
-        }
-    }, fdl.build(cfg))
-
-  def test_assign_wrong_argument(self):
-    cfg = fdl.Config(basic_fn)
-    with self.assertRaisesRegex(TypeError, 'not_there'):
-      fdl.assign(cfg, arg1=1, not_there=2)
-
-  def test_copy_with(self):
-    cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])
-    fdl.add_tag(cfg1, 'arg1', Tag1)
-
-    expected_cfg1 = dict(arg1=1, kwarg1=2, kwargs=dict(c=[]))
-    expected_cfg2 = dict(arg1=5, kwarg1=2, kwargs=dict(a='a', b='b', c=[]))
-
-    with self.subTest('cfg1_value'):
-      self.assertEqual(expected_cfg1, fdl.build(cfg1))
-
-    with self.subTest('shallow_copy'):
-      cfg2 = fdl.copy_with(cfg1, arg1=5, a='a', b='b')
-      self.assertIsNot(cfg1, cfg2)
-      self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
-      self.assertIsNot(cfg1.__argument_tags__, cfg2.__argument_tags__)
-      self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
-      self.assertIs(cfg1.c, cfg2.c)  # Shallow copy.
-      self.assertEqual(expected_cfg2, fdl.build(cfg2))
-
-    with self.subTest('deep_copy'):
-      cfg2 = fdl.deepcopy_with(cfg1, arg1=5, a='a', b='b')
-      self.assertIsNot(cfg1, cfg2)
-      self.assertIsNot(cfg1.__arguments__, cfg2.__arguments__)
-      self.assertIsNot(cfg1.__argument_tags__, cfg2.__argument_tags__)
-      self.assertEqual(cfg1.__argument_tags__, cfg2.__argument_tags__)
-      self.assertIsNot(cfg1.c, cfg2.c)  # Deep copy.
-      self.assertEqual(expected_cfg2, fdl.build(cfg2))
-
   def test_copy_constructor_errors(self):
     cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
     fdl.add_tag(cfg1, 'arg1', Tag1)
@@ -866,75 +821,6 @@ class ConfigTest(parameterized.TestCase):
       cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
       cfg.child.x = 5  # now it's ok to configure child.
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
-
-  @absltest.skip('Enable this after dropping pyhon 3.7 support')
-  def test_config_for_fn_with_special_arg_names(self):
-    # The reason that these tests pass is that we use positional-only
-    # parameters for self, etc. in functions such as Config.__build__.
-    # If we used keyword-or-positional parameters instead, then these
-    # tests would fail with a "multiple values for argument" TypeError.
-
-    def f(self, fn_or_cls, buildable=0):
-      return self + fn_or_cls + buildable
-
-    cfg = fdl.Config(f)
-    cfg.self = 100
-    cfg.fn_or_cls = 200
-    self.assertEqual(fdl.build(cfg), 300)
-
-    fdl.assign(cfg, buildable=10)  # pytype: disable=duplicate-keyword-argument
-    self.assertEqual(fdl.build(cfg), 310)
-
-    cfg2 = fdl.Config(f, self=5, fn_or_cls=1)  # pytype: disable=duplicate-keyword-argument
-    self.assertEqual(fdl.build(cfg2), 6)
-
-
-class CallableApisTest(absltest.TestCase):
-
-  def test_update_callable(self):
-    cfg = fdl.Config(basic_fn, 1, 'xyz', kwarg1='abc')
-    fdl.update_callable(cfg, SampleClass)
-    cfg.kwarg2 = '123'
-    obj = fdl.build(cfg)
-    self.assertIsInstance(obj, SampleClass)
-    self.assertEqual(1, obj.arg1)
-    self.assertEqual('xyz', obj.arg2)
-    self.assertEqual('abc', obj.kwarg1)
-    self.assertEqual('123', obj.kwarg2)
-
-  def test_update_callable_invalid_arg(self):
-    cfg = fdl.Config(fn_with_var_kwargs, abc='123', xyz='321')
-    with self.assertRaisesRegex(TypeError,
-                                r"have invalid arguments \['abc', 'xyz'\]"):
-      fdl.update_callable(cfg, SampleClass)
-
-  def test_update_callable_drop_invalid_arg(self):
-    cfg = fdl.Config(fn_with_var_kwargs, arg1='123', xyz='321')
-    fdl.update_callable(cfg, SampleClass, drop_invalid_args=True)
-    self.assertEqual(cfg, fdl.Config(SampleClass, arg1='123'))
-
-  def test_update_callable_new_kwargs(self):
-    cfg = fdl.Config(SampleClass)
-    cfg.arg1 = 1
-    fdl.update_callable(cfg, fn_with_var_kwargs)
-    cfg.abc = '123'  # A **kwargs value should now be allowed.
-    self.assertEqual({
-        'arg1': 1,
-        'kwarg1': None,
-        'kwargs': {
-            'abc': '123'
-        }
-    }, fdl.build(cfg))
-
-  def test_update_callable_varargs(self):
-    cfg = fdl.Config(fn_with_var_kwargs, 1, 2)
-    with self.assertRaisesRegex(NotImplementedError,
-                                'Variable positional arguments'):
-      fdl.update_callable(cfg, fn_with_var_args_and_kwargs)
-
-  def test_get_callable(self):
-    cfg = fdl.Config(basic_fn)
-    self.assertIs(fdl.get_callable(cfg), basic_fn)
 
 
 class OrderedArgumentsTest(parameterized.TestCase):

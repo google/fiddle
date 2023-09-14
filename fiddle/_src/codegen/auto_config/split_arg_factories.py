@@ -28,6 +28,7 @@ import copy
 from fiddle import daglish
 from fiddle._src import casting
 from fiddle._src import config as config_lib
+from fiddle._src import mutate_buildable
 from fiddle._src import partial
 from fiddle._src.codegen.auto_config import code_ir
 
@@ -49,7 +50,7 @@ def lower_arg_factories(task: code_ir.CodegenTask) -> None:
           for name, arg in arguments.items()
       }
       value = copy.copy(value)
-      config_lib.assign(value, **arguments)
+      mutate_buildable.assign(value, **arguments)
       return value
     else:
       return state.map_children(value)

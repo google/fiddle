@@ -36,6 +36,7 @@ from fiddle._src import arg_factory
 from fiddle._src import building
 from fiddle._src import casting as cast_lib
 from fiddle._src import config
+from fiddle._src import copying
 from fiddle._src import mutate_buildable
 from fiddle._src import partial
 from fiddle._src.experimental import auto_config_policy
@@ -547,7 +548,7 @@ def _make_partial(partial_cls, buildable_or_callable, *args, **kwargs):
           'functools.partial(functools.partial(foo, ...), ...), only keyword '
           f'arguments can be supplied to the outer call. Got: {args!r}'
       )
-    return config.copy_with(buildable_or_callable, **kwargs)
+    return copying.copy_with(buildable_or_callable, **kwargs)
   else:
     return partial_cls(buildable_or_callable, *args, **kwargs)
 

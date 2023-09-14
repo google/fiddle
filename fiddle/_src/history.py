@@ -83,9 +83,11 @@ _exclude_locations: Set[str] = set(
         os.path.normpath,
         [
             "fiddle/_src/config.py",
+            "fiddle/_src/copying.py",
             "fiddle/_src/daglish.py",
             "fiddle/_src/history.py",
             "fiddle/_src/materialize.py",
+            "fiddle/_src/mutate_buildable.py",
             "fiddle/_src/experimental/auto_config.py",
         ],
     )
