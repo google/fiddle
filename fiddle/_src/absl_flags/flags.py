@@ -20,11 +20,12 @@ import types
 from typing import Any, Optional, TypeVar
 
 from absl import flags
+from etils import epath
 from fiddle._src import config
 from fiddle._src.absl_flags import legacy_flags
 from fiddle._src.absl_flags import utils
 from fiddle._src.experimental import auto_config
-
+from fiddle._src.experimental import serialization
 
 # Legacy API aliases
 apply_fiddlers_to = legacy_flags.apply_fiddlers_to
@@ -35,7 +36,7 @@ rewrite_fdl_args = legacy_flags.rewrite_fdl_args
 fdl_flags_supplied = legacy_flags.fdl_flags_supplied
 
 # New API
-_COMMAND_RE = re.compile(r"^(config|fiddler|set):(.+)$")
+_COMMAND_RE = re.compile(r"^(config|config_file|fiddler|set):(.+)$")
 _F = TypeVar("_F")
 
 
@@ -47,10 +48,12 @@ class FiddleFlag(flags.MultiFlag):
       *args,
       default_module: Optional[types.ModuleType] = None,
       allow_imports: bool = True,
+      pyref_policy: Optional[serialization.PyrefPolicy] = None,
       **kwargs,
   ):
     self.allow_imports = allow_imports
     self.default_module = default_module
+    self._pyref_policy = pyref_policy
     self.first_command = None
     self._initial_config_expression = None
     super().__init__(*args, **kwargs)
@@ -103,28 +106,36 @@ class FiddleFlag(flags.MultiFlag):
       if not match:
         raise ValueError(
             f"All flag values to {self.name} must begin with 'config:', "
-            "'set:', or 'fiddler:'."
+            "'config_file:', 'set:', or 'fiddler:'."
         )
       command, expression = match.groups()
 
       if self.first_command is None:
-        if command != "config":
+        if command != "config" and command != "config_file":
           raise ValueError(
-              "First flag command must specify the input config. Received"
-              f" command: {command} instead."
+              "First flag command must specify the input config via either "
+              "config or config_file commands. "
+              f"Received command: {command} instead."
           )
         self.first_command = command
 
-      if command == "config":
+      if command == "config" or command == "config_file":
         if self._initial_config_expression:
           raise ValueError(
               "Only one base configuration is permitted. Received"
-              f" {expression} after {self._initial_config_expression} was"
+              f"{command}:{expression} after "
+              f"{self.first_command}:{self._initial_config_expression} was"
               " already provided."
           )
         else:
           self._initial_config_expression = expression
-        self.value = self._initial_config(expression)
+        if command == "config":
+          self.value = self._initial_config(expression)
+        elif command == "config_file":
+          with epath.Path(expression).open() as f:
+            self.value = serialization.load_json(
+                f.read(), pyref_policy=self._pyref_policy
+            )
       elif command == "set":
         utils.set_value(self.value, expression)
       elif command == "fiddler":
@@ -184,6 +195,9 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
 
   results in the `_MY_FLAG.value` set to the built config object with all the
   command line flags applied in the order they were passed in.
+
+  To load a Fiddle config from a serialized file:
+  python3 -m path.to.my.binary --my_config=file://path/to/my_file
 
   Args:
     name: name of the command line flag.
