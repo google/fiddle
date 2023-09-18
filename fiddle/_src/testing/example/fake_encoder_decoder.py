@@ -53,14 +53,14 @@ class TokenEmbedder:
 # this test.
 @dataclasses.dataclass
 class FakeEncoder:
-  embedders: Dict[str, Any]
+  embedders: Dict[str, TokenEmbedder]
   attention: Attention
   mlp: Mlp
 
 
 @dataclasses.dataclass
 class FakeDecoder:
-  embedders: Dict[str, Any]
+  embedders: Dict[str, TokenEmbedder]
   self_attention: Attention
   encoder_decoder_attention: CrossAttention
   mlp: Mlp
