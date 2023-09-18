@@ -41,7 +41,37 @@ _F = TypeVar("_F")
 
 
 class FiddleFlag(flags.MultiFlag):
-  """ABSL flag class for a Fiddle config flag."""
+  """ABSL flag class for a Fiddle config flag.
+
+  This class is used to parse command line flags to construct a Fiddle `Config`
+  object with certain transformations applied as specified in the command line
+  flags.
+
+  Most users should rely on the `DEFINE_fiddle_config()` API below. Using this
+  class directly provides flexibility to users to parse Fiddle flags themselves
+  programmatically. Also see the documentation for `DEFINE_fiddle_config()`
+  below.
+
+  Example usage where this flag is parsed from existing flag:
+  ```
+  from fiddle import absl_flags as fdl_flags
+
+  _MY_CONFIG = fdl_flags.DEFINE_multi_string(
+      "my_config",
+      "Name of the fiddle config"
+  )
+
+  fiddle_flag = absl_flags.FiddleFlag(
+      name="config",
+      default_module=my_module,
+      default=None,
+      parser=flags.ArgumentParser(),
+      serializer=None,
+      help_string="My fiddle flag",
+  )
+  fiddle_flag.parse(_MY_CONFIG.value)
+  config = fiddle_flag.value
+  """
 
   def __init__(
       self,
