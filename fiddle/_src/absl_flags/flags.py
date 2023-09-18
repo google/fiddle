@@ -71,6 +71,7 @@ class FiddleFlag(flags.MultiFlag):
   )
   fiddle_flag.parse(_MY_CONFIG.value)
   config = fiddle_flag.value
+  ```
   """
 
   def __init__(
