@@ -15,7 +15,7 @@
 
 import dataclasses
 import sys
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 import unittest
 
 from absl.testing import absltest
@@ -62,6 +62,11 @@ class BadTokenEmbedder:
 class UnionAndOptionalHolder:
   union_field: Union[str, fake_encoder_decoder.TokenEmbedder]
   optional_field: Optional[str]
+
+
+@dataclasses.dataclass
+class StackedEncoder:
+  encoders: List[fake_encoder_decoder.FakeEncoder]
 
 
 class CheckTypesTest(absltest.TestCase, unittest.TestCase):
@@ -200,6 +205,60 @@ class CheckTypesTest(absltest.TestCase, unittest.TestCase):
         " .*BadTokenEmbedder.* is not of annotated/declared"
         " type: typing.Union.*str,"
         " fiddle._src.testing.example.fake_encoder_decoder.TokenEmbedder.*",
+    ):
+      check_types.check_types(cfg)
+
+  def test_subscripted_generic_types_succeeds(self):
+    cfg = config.Config(
+        StackedEncoder,
+        encoders=[
+            fake_encoder_decoder.FakeEncoder(
+                embedders={},
+                attention=fake_encoder_decoder.Attention(
+                    "float32", "uniform()", "zeros()"
+                ),
+                mlp=fake_encoder_decoder.Mlp(
+                    "float32", False, ["embed", "num_heads", "head_dim"]
+                ),
+            )
+        ],
+    )
+    check_types.check_types(cfg)
+
+  def test_subscripted_generic_types_invalid_leaf_nodes_not_type_checked(self):
+    # Passing in incorrect types as leaf nodes inside standard containers won't
+    # be type validated, and will succeed
+    cfg = config.Config(
+        StackedEncoder,
+        encoders=[
+            BadDataset(),  # incorrect type passed
+            MyDataset(),  # incorrect type passed
+        ],
+    )
+    check_types.check_types(cfg)
+
+  def test_subscripted_generic_types_invalid_non_leaf_nodes_type_checked(self):
+    # However, passing a dict for `encoders` should trigger an error, since the
+    # type of `encoders` is a list:
+    cfg = config.Config(
+        StackedEncoder,
+        encoders={
+            "encoder1": fake_encoder_decoder.FakeEncoder(
+                embedders={},
+                attention=fake_encoder_decoder.Attention(
+                    "float32", "uniform()", "zeros()"
+                ),
+                mlp=fake_encoder_decoder.Mlp(
+                    "float32", False, ["embed", "num_heads", "head_dim"]
+                ),
+            )
+        },
+    )
+    with self.assertRaisesRegex(
+        TypeError,
+        ".*For attribute .*encoders provided type:"
+        " .*dict.* is not of annotated/declared"
+        " type: typing.List.*FakeEncoder.*",
     ):
       check_types.check_types(cfg)
 

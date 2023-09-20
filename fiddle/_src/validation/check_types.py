@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """Checks that values in a `Buildable` conform to their type annotations."""
-from typing import Any
+from typing import Any, get_origin
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
@@ -23,6 +23,9 @@ from fiddle._src import signatures
 
 def get_type_errors(config: config_lib.Buildable) -> list[str]:
   """Returns a list of type errors found in the given `config`.
+
+  NOTE: Please see the documentation of `check_types()` below for a list of
+  limitations of this API.
 
   Args:
     config: A ``Buildable`` instance to build, or a nested structure of
@@ -40,24 +43,30 @@ def get_type_errors(config: config_lib.Buildable) -> list[str]:
       type_hints = signatures.get_type_hints(value.__fn_or_cls__)
 
       for arg_name, arg_value in arguments.items():
+        if isinstance(arg_value, config_lib.Buildable):
+          # For args configured as `fdl.Config` or `fdl.Partial` don't
+          # raise a TypeError.
+          continue
         if arg_name in type_hints and type_hints[arg_name] != Any:
+          add_error = False
           try:
-            if isinstance(arg_value, config_lib.Buildable):
-              # For args configured as `fdl.Config` or `fdl.Partial` don't
-              # raise a TypeError.
-              continue
             if not isinstance(arg_value, type_hints[arg_name]):
-              path_str = daglish.path_str(state.current_path)
-              errors.append(
-                  'For attribute'
-                  f' <config>{path_str}.{arg_name} provided type:'
-                  f' {type(arg_value)} is not of annotated/declared type:'
-                  f' {type_hints[arg_name]}'
-              )
+              add_error = True
           except TypeError:
-            # Subscripted generics as type hints are not supported for type
-            # validations yet, so don't raise a TypeError.
-            continue
+            # isinstance() calls for objects whose types are subscripted
+            # generics raise a `TypeError`. For these, get their origin type and
+            # check that the origin types match.
+            type_hint_origin = get_origin(type_hints[arg_name])
+            if not isinstance(arg_value, type_hint_origin):
+              add_error = True
+          if add_error:
+            path_str = daglish.path_str(state.current_path)
+            errors.append(
+                'For attribute'
+                f' <config>{path_str}.{arg_name} provided type:'
+                f' {type(arg_value)} is not of annotated/declared type:'
+                f' {type_hints[arg_name]}'
+            )
 
     return state.map_children(value)
 
@@ -72,8 +81,6 @@ def check_types(config: config_lib.Buildable):
   - Leaf values inside standard collections aren't type checked (e.g., no
     attempt is made to ensure that a collection annotated as `list[int]` only
     contains `int` values).
-  - Subscripted generics as type hints are not yet supported for type
-  validations, as these fail the isinstance() checks.
 
   Args:
     config: A ``Buildable`` instance to build, or a nested structure of
