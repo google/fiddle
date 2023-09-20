@@ -14,14 +14,14 @@
 # limitations under the License.
 
 """Checks that values in a `Buildable` conform to their type annotations."""
-from typing import Any, get_origin
+from typing import Any, List, get_origin
 
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import signatures
 
 
-def get_type_errors(config: config_lib.Buildable) -> list[str]:
+def get_type_errors(config: config_lib.Buildable) -> List[str]:
   """Returns a list of type errors found in the given `config`.
 
   NOTE: Please see the documentation of `check_types()` below for a list of

@@ -48,7 +48,7 @@ setup(
     include_package_data=True,
     packages=find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},
-    python_requires='>=3.9',
+    python_requires='>=3.8',
     install_requires=[
         'absl-py',
         'graphviz',
@@ -89,6 +89,7 @@ setup(
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
 
