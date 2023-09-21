@@ -185,13 +185,12 @@ class Partial(Generic[T], config.Buildable[T]):
       assert instance.arg == 2
       assert instance.kwarg == 'kwarg'
 
-  A ``Partial`` can also be created from an existing ``Config``, by passing it
-  to the ``Partial`` constructor. This results in a shallow copy that is
-  decoupled from the ``Config`` used to create it. In the example below, any
-  further changes to ``partial_config`` are not reflected by ``class_config``
-  (and vice versa)::
+  A ``Partial`` can also be created from an existing ``Config``, by using the
+  ``fdl.cast()`` function. This results in a shallow copy that is decoupled from
+  the ``Config`` used to create it. In the example below, any further changes to
+  ``partial_config`` are not reflected by ``class_config`` (and vice versa)::
 
-      partial_config = Partial(class_config)
+      partial_config = fdl.cast(Partial, class_config)
       class_config.arg = 'new value'  # Further modification to `class_config`.
       partial_class = build(partial_config)
       instance = partial_class()
