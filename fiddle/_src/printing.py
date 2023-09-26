@@ -19,7 +19,7 @@ import copy
 import dataclasses
 import inspect
 import types
-from typing import Any, Iterator, List, Optional, Type
+from typing import Any, Dict, Iterator, List, Optional, Type
 
 from fiddle._src import config
 from fiddle._src import daglish
@@ -131,8 +131,9 @@ def _get_tags(cfg, path):
     return None
 
 
-def _rearrange_buildable_args_and_insert_unset_sentinels(
-    value: config.Buildable) -> config.Buildable:
+def _rearrange_buildable_args(
+    value: config.Buildable, insert_unset_sentinels: bool = True
+) -> config.Buildable:
   """Returns a copy of a Buildable with normalized arguments.
 
   This normalizes arguments by re-creating the __arguments__ dictionary in the
@@ -141,6 +142,8 @@ def _rearrange_buildable_args_and_insert_unset_sentinels(
 
   Args:
     value: Buildable to copy and normalize.
+    insert_unset_sentinels: If true, insert unset sentinels to arguments as the
+      default values.
 
   Returns:
     Copy of `value` with arguments normalized.
@@ -155,7 +158,7 @@ def _rearrange_buildable_args_and_insert_unset_sentinels(
       continue
     elif param_name in old_arguments:
       new_arguments[param_name] = old_arguments.pop(param_name)
-    else:
+    elif insert_unset_sentinels:
       new_arguments[param_name] = _UnsetValue(param)
   new_arguments.update(old_arguments)  # Add in kwargs, in current order.
   object.__setattr__(value, '__arguments__', new_arguments)
@@ -190,7 +193,7 @@ def as_str_flattened(cfg: config.Buildable,
 
     # Rearrange parameters in signature order, and add "unset" sentinels.
     if isinstance(value, config.Buildable):
-      value = _rearrange_buildable_args_and_insert_unset_sentinels(value)
+      value = _rearrange_buildable_args(value)
 
     if isinstance(value, tagging.TaggedValueCls):
       value = _TaggedValueWrapper(value)
@@ -331,3 +334,43 @@ def _make_per_leaf_history_text(path: daglish.Path,
       value_history[-1].new_value, raw_value_repr=raw_value_repr)
   current = f'{current_value} @ {value_history[-1].location}'
   return f'{_path_str(path)} = {current}{past}'
+
+
+def as_dict_flattened(cfg: config.Buildable) -> Dict[str, Any]:
+  """Returns a flattened dict of cfg's paths (dot syntax) and values.
+
+  Default values won't be included in the flattened dict.
+
+  Args:
+    cfg: A buildable to generate a string representation for.
+
+  Returns: A flattened Dict representation of `cfg`.
+  """
+
+  def dict_generate(value, state=None) -> Iterator[_LeafSetting]:
+    state = state or daglish.BasicTraversal.begin(dict_generate, value)
+
+    tags = _get_tags(cfg, state.current_path)
+    if tags:
+      value = tagging.TaggedValue(tags=tags, default=value)
+
+    # Rearrange parameters in signature order, and add "unset" sentinels.
+    if isinstance(value, config.Buildable):
+      value = _rearrange_buildable_args(value, insert_unset_sentinels=False)
+
+    if isinstance(value, tagging.TaggedValueCls):
+      value = _TaggedValueWrapper(value)
+      yield _LeafSetting(state.current_path, None, value)
+    elif not _has_nested_builder(value):
+      yield _LeafSetting(state.current_path, None, value)
+    else:
+      # value must be a Buildable or a traversable containing a Buidable.
+      assert state.is_traversable(value)
+      for sub_result in state.flattened_map_children(value).values:
+        yield from sub_result
+
+  args_dict = {}
+  for leaf in dict_generate(cfg):
+    args_dict[_path_str(leaf.path)] = leaf.value
+
+  return args_dict
