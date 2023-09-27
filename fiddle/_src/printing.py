@@ -342,7 +342,7 @@ def as_dict_flattened(cfg: config.Buildable) -> Dict[str, Any]:
   Default values and tags won't be included in the flattened dict.
 
   Args:
-    cfg: A buildable to generate a string representation for.
+    cfg: A buildable to generate a flattened dict representation for.
 
   Returns: A flattened Dict representation of `cfg`.
   """
@@ -350,7 +350,7 @@ def as_dict_flattened(cfg: config.Buildable) -> Dict[str, Any]:
   def dict_generate(value, state=None) -> Iterator[_LeafSetting]:
     state = state or daglish.BasicTraversal.begin(dict_generate, value)
 
-    # Rearrange parameters in signature order, and add "unset" sentinels.
+    # Rearrange parameters in signature order.
     if isinstance(value, config.Buildable):
       value = _rearrange_buildable_args(value, insert_unset_sentinels=False)
 
