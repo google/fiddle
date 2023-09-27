@@ -473,5 +473,164 @@ class HistoryPerLeafParamTests(absltest.TestCase):
     self.assertRegex(output, expected)
 
 
+class AsFlattenedDictTests(absltest.TestCase):
+
+  def test_simple_flattened_dict(self):
+    cfg = fdl.Config(fn_x_y, 1, 'abc')
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 1, 'y': 'abc'}
+    self.assertEqual(output, expected)
+
+  def test_skip_unset_argument(self):
+    cfg = fdl.Config(fn_x_y, 3.14)
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 3.14}
+    self.assertEqual(output, expected)
+
+  def test_nested(self):
+    cfg = fdl.Config(fn_x_y, 'x', fdl.Config(fn_x_y, 'nest_x', 123))
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 'x', 'y.x': 'nest_x', 'y.y': 123}
+    self.assertEqual(output, expected)
+
+  def test_class(self):
+    cfg = fdl.Config(SampleClass, 'a_param', b=123)
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'a': 'a_param', 'b': 123}
+    self.assertEqual(output, expected)
+
+  def test_kwargs(self):
+    cfg = fdl.Config(fn_with_kwargs, 1, abc='extra kwarg value')
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 1, 'abc': 'extra kwarg value'}
+    self.assertEqual(output, expected)
+
+  def test_nested_kwargs(self):
+    cfg = fdl.Config(
+        fn_with_kwargs, extra=fdl.Config(fn_with_kwargs, 1, nested_extra='whee')
+    )
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'extra.x': 1, 'extra.nested_extra': 'whee'}
+    self.assertEqual(output, expected)
+
+  def test_nested_collections(self):
+    cfg = fdl.Config(
+        fn_x_y, [fdl.Config(fn_x_y, 1, '1'), fdl.Config(SampleClass, 2)]
+    )
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x[0].x': 1, 'x[0].y': '1', 'x[1].a': 2}
+    self.assertEqual(output, expected)
+
+  def test_multiple_nested_collections(self):
+    cfg = fdl.Config(
+        fn_x_y,
+        {'a': fdl.Config(fn_with_kwargs, abc=[1, 2, 3]), 'b': [3, 2, 1]},
+        [fdl.Config(fn_x_y, [fdl.Config(fn_x_y, 1, 2)])],
+    )
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {
+        "x['a'].abc": [1, 2, 3],
+        "x['b']": [3, 2, 1],
+        'y[0].x[0].x': 1,
+        'y[0].x[0].y': 2,
+    }
+    self.assertEqual(output, expected)
+
+  def test_skip_default_values(self):
+    def test_fn(w, x, y=3, z='abc'):  # pylint: disable=unused-argument
+      pass
+
+    cfg = fdl.Config(test_fn, 1)
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'w': 1}
+    self.assertEqual(output, expected)
+
+  def test_tagged_values(self):
+    cfg = fdl.Config(fn_x_y, x=SampleTag.new(), y=SampleTag.new(default='abc'))
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'y': 'abc'}
+    self.assertEqual(output, expected)
+
+    fdl.set_tagged(cfg, tag=SampleTag, value='cba')
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 'cba', 'y': 'cba'}
+    self.assertEqual(output, expected)
+
+  def test_partial(self):
+    partial = fdl.Partial(fn_x_y)
+    partial.x = 'abc'
+    output = printing.as_dict_flattened(partial)
+
+    expected = {'x': 'abc'}
+    self.assertEqual(output, expected)
+
+  def test_builtin_types_annotations(self):
+    cfg = fdl.Config(fn_with_type_annotations, 1)
+    cfg.y = 'abc'
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 1, 'y': 'abc'}
+    self.assertEqual(output, expected)
+
+  def test_annotated_kwargs(self):
+    cfg = fdl.Config(annotated_kwargs_helper, x=1, y='oops')
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 1, 'y': 'oops'}
+    self.assertEqual(output, expected)
+
+  def test_disabling_type_annotations(self):
+    cfg = fdl.Config(fn_with_type_annotations, 1)
+    cfg.y = 'abc'
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 1, 'y': 'abc'}
+    self.assertEqual(output, expected)
+
+  def test_union_type(self):
+    def to_integer(x: Union[int, str]):
+      return int(x)
+
+    cfg = fdl.Config(to_integer, 1)
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': 1}
+    self.assertEqual(output, expected)
+
+  def test_parameterized_generic(self):
+    if not (sys.version_info.major == 3 and sys.version_info.minor >= 9):
+      self.skipTest('types.GenericAlias is 3.9+ only.')
+
+    def takes_list(x: list[int]):
+      return x
+
+    cfg = fdl.Config(takes_list, [1, 2, 3])
+    output = printing.as_dict_flattened(cfg)
+
+    expected = {'x': [1, 2, 3]}
+    self.assertEqual(output, expected)
+
+  def test_materialized_default_values(self):
+    def test_fn(w, x, y=3, z='abc'):
+      del w, x, y, z  # Unused.
+
+    cfg = fdl.Config(test_fn, 1)
+    fdl.materialize_defaults(cfg)
+    output = printing.as_dict_flattened(cfg)
+    expected = {'w': 1, 'y': 3, 'z': 'abc'}
+    self.assertEqual(output, expected)
+
+
 if __name__ == '__main__':
   absltest.main()

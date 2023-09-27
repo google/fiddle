@@ -16,5 +16,6 @@
 """Functions to output representations of `fdl.Buildable`s."""
 
 # pylint: disable=unused-import
+from fiddle._src.printing import as_dict_flattened
 from fiddle._src.printing import as_str_flattened
 from fiddle._src.printing import history_per_leaf_parameter
