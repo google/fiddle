@@ -651,7 +651,7 @@ def ordered_arguments(
     include_var_keyword: bool = True,
     include_defaults: bool = False,
     include_unset: bool = False,
-    exclude_equal_to_default: bool = False,
+    include_equal_to_default: bool = True,
 ) -> Dict[str, Any]:
   """Returns arguments of a Buildable, ordered by the signature.
 
@@ -661,27 +661,27 @@ def ordered_arguments(
       by the buildable's callable's `VAR_KEYWORD` parameter (e.g. `**kwargs`).
     include_defaults: If True, then include arguments that have not been
       explicitly set, but that have a default value.  Can not be combined with
-      `exclude_equal_to_default=True`.
+      `include_equal_to_default=False`.
     include_unset: If True, then include arguments that have not been explicitly
       set, that don't have a default value.  The value for these parameters will
       be `fdl.NO_VALUE`.
-    exclude_equal_to_default: If True, then exclude arguments that are equal to
+    include_equal_to_default: If False, then exclude arguments that are equal to
       their default value (using `==`).  Can not be combined with
       `include_defaults=True`.
 
   Returns:
     A dictionary mapping argument names to values or `fdl.NO_VALUE`.
   """
-  if exclude_equal_to_default and include_defaults:
+  if not include_equal_to_default and include_defaults:
     raise ValueError(
-        'exclude_equal_to_default and include_defaults are mutually exclusive.'
+        'Exclude_equal_to_default and include_defaults are mutually exclusive.'
     )
   result = {}
   for name, param in buildable.__signature_info__.parameters.items():
     if param.kind != param.VAR_KEYWORD:
       if name in buildable.__arguments__:
         value = buildable.__arguments__[name]
-        if (not exclude_equal_to_default) or (value != param.default):
+        if include_equal_to_default or (value != param.default):
           result[name] = value
       elif param.default is not param.empty:
         if include_defaults:

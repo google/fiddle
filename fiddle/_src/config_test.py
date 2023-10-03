@@ -854,29 +854,73 @@ class OrderedArgumentsTest(parameterized.TestCase):
           tuple(path_element.name for path_element in path_elements))
 
   @parameterized.parameters([
-      # incl_var_kw, incl_defaults, incl_unset, excl_eq_to_default, expected
-      (False, False, False, False, [('arg2', 5), ('kwarg2', 99)]),
-      (False, True, False, False, [('arg2', 5), ('kwarg1', None),
-                                   ('kwarg2', 99)]),
-      (False, False, True, False, [('arg1', fdl.NO_VALUE), ('arg2', 5),
-                                   ('kwarg2', 99)]),
-      (False, True, True, False, [('arg1', fdl.NO_VALUE), ('arg2', 5),
-                                  ('kwarg1', None), ('kwarg2', 99)]),
-      (True, False, False, False, [('arg2', 5), ('kwarg2', 99), ('foo', 12)]),
-      (True, True, False, False, [('arg2', 5), ('kwarg1', None), ('kwarg2', 99),
-                                  ('foo', 12)]),
-      (True, False, True, False, [('arg1', fdl.NO_VALUE), ('arg2', 5),
-                                  ('kwarg2', 99), ('foo', 12)]),
-      (True, True, True, False, [('arg1', fdl.NO_VALUE), ('arg2', 5),
-                                 ('kwarg1', None), ('kwarg2', 99),
-                                 ('foo', 12)]),
-      (False, False, False, True, [('arg2', 5)]),
-      (True, False, False, True, [('arg2', 5), ('foo', 12)]),
+      # incl_var_kw, incl_defaults, incl_unset, incl_eq_to_default, expected
+      (False, False, False, True, [('arg2', 5), ('kwarg2', 99)]),
+      (
+          False,
+          True,
+          False,
+          True,
+          [('arg2', 5), ('kwarg1', None), ('kwarg2', 99)],
+      ),
+      (
+          False,
+          False,
+          True,
+          True,
+          [('arg1', fdl.NO_VALUE), ('arg2', 5), ('kwarg2', 99)],
+      ),
+      (
+          False,
+          True,
+          True,
+          True,
+          [
+              ('arg1', fdl.NO_VALUE),
+              ('arg2', 5),
+              ('kwarg1', None),
+              ('kwarg2', 99),
+          ],
+      ),
+      (True, False, False, True, [('arg2', 5), ('kwarg2', 99), ('foo', 12)]),
+      (
+          True,
+          True,
+          False,
+          True,
+          [('arg2', 5), ('kwarg1', None), ('kwarg2', 99), ('foo', 12)],
+      ),
+      (
+          True,
+          False,
+          True,
+          True,
+          [('arg1', fdl.NO_VALUE), ('arg2', 5), ('kwarg2', 99), ('foo', 12)],
+      ),
+      (
+          True,
+          True,
+          True,
+          True,
+          [
+              ('arg1', fdl.NO_VALUE),
+              ('arg2', 5),
+              ('kwarg1', None),
+              ('kwarg2', 99),
+              ('foo', 12),
+          ],
+      ),
+      (False, False, False, False, [('arg2', 5)]),
+      (True, False, False, False, [('arg2', 5), ('foo', 12)]),
   ])
-  def test_ordered_arguments_options(self, include_var_keyword,
-                                     include_defaults, include_unset,
-                                     exclude_equal_to_default, expected):
-
+  def test_ordered_arguments_options(
+      self,
+      include_var_keyword,
+      include_defaults,
+      include_unset,
+      include_equal_to_default,
+      expected,
+  ):
     def fn(arg1, arg2, kwarg1=None, kwarg2=99, **kwargs):
       return (arg1, arg2, kwarg1, kwarg2, kwargs)
 
@@ -893,7 +937,8 @@ class OrderedArgumentsTest(parameterized.TestCase):
         include_var_keyword=include_var_keyword,
         include_defaults=include_defaults,
         include_unset=include_unset,
-        exclude_equal_to_default=exclude_equal_to_default)
+        include_equal_to_default=include_equal_to_default,
+    )
     self.assertEqual(list(args.items()), expected)
 
 
