@@ -87,6 +87,10 @@ class FiddleFlag(flags.MultiFlag):
     self._pyref_policy = pyref_policy
     self.first_command = None
     self._initial_config_expression = None
+    # A `directive` is a str of the form e.g. 'config:...'.
+    # Due to the lazy evaluation of `value`, this list is needed to keep
+    # track of the remaining `directives`.
+    self._remaining_directives = []
     super().__init__(*args, **kwargs)
 
   def _initial_config(self, expression: str):
@@ -130,9 +134,25 @@ class FiddleFlag(flags.MultiFlag):
     # `fdl.Buildable` object.
     return new_cfg if new_cfg is not None else cfg
 
-  def parse(self, argument):
-    parsed = self._parse(argument)
-    for item in parsed:
+  def parse(self, arguments):
+    new_parsed = self._parse(arguments)
+    self._remaining_directives.extend(new_parsed)
+    self.present += len(new_parsed)
+
+  def unparse(self) -> None:
+    self.value = self.default
+    self.using_default_value = True
+    # Reset it so that all `directives` not being processed yet will be
+    # discarded.
+    self._remaining_directives = []
+    self.present = 0
+
+  @property
+  def value(self):
+    while self._remaining_directives:
+      # Pop already processed `directive` so that _value won't be updated twice
+      # by the same argument.
+      item = self._remaining_directives.pop(0)
       match = _COMMAND_RE.fullmatch(item)
       if not match:
         raise ValueError(
@@ -161,18 +181,23 @@ class FiddleFlag(flags.MultiFlag):
         else:
           self._initial_config_expression = expression
         if command == "config":
-          self.value = self._initial_config(expression)
+          self._value = self._initial_config(expression)
         elif command == "config_file":
           with epath.Path(expression).open() as f:
-            self.value = serialization.load_json(
+            self._value = serialization.load_json(
                 f.read(), pyref_policy=self._pyref_policy
             )
       elif command == "set":
-        utils.set_value(self.value, expression)
+        utils.set_value(self._value, expression)
       elif command == "fiddler":
-        self.value = self._apply_fiddler(self.value, expression)
+        self._value = self._apply_fiddler(self._value, expression)
       else:
         raise AssertionError("Internal error; should not be reached.")
+    return self._value
+
+  @value.setter
+  def value(self, value):
+    self._value = value
 
 
 def DEFINE_fiddle_config(  # pylint: disable=invalid-name
