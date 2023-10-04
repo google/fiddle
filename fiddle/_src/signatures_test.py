@@ -18,6 +18,7 @@
 import collections
 import dataclasses
 import inspect
+import sys
 import typing
 
 from absl.testing import absltest
@@ -84,9 +85,11 @@ class SignatureCacheTest(absltest.TestCase):
       signatures.get_signature(SomeClass())
 
   def test_nonexistent_signature_for_builtin(self):
-    self.assertFalse(signatures.has_signature(print))
-    with self.assertRaises(ValueError):
-      signatures.get_signature(print)
+    version = sys.version_info
+    if version.major <= 3 and version.minor <= 10:
+      self.assertFalse(signatures.has_signature(print))
+      with self.assertRaises(ValueError):
+        signatures.get_signature(print)
 
   def check_parameter(self, param: inspect.Parameter, *, name, default, kind):
     self.assertIsInstance(param, inspect.Parameter)
