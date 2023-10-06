@@ -7,20 +7,21 @@ to Fiddle's absl_flags integration! This code lab will describe how it all
 works. Configuration of fiddle config objects via command line arguments is
 supported using 2 APIs:
 
-| API        | Purpose                                                         |
-| ---------- | --------------------------------------------------------------- |
-| New API    | Defines custom configurations per binary using the API          |
-:            : `DEFINE_fiddle_config()` which returns a built config object    :
-:            : handle after applying all the command line overrides in order.  :
-:            : The usage of this API is more intuitive than the legacy API,    :
-:            : and it provides the ability to define custom overrides per      :
-:            : binary. Additionally, the overrides are applied in order, which :
-:            : is a more intuitive user experience than the current order      :
-:            : followed by the legacy API                                      :
-| Legacy API | Invoked via `create_buildable_from_flags()` that returns a      |
-:            : built config object. Command line overrides are NOT applied in  :
-:            : order; all fiddlers are applied first, followed by all tags,    :
-:            : followed by all overrides.                                      :
+| API        | Purpose                                                        |
+| ---------- | -------------------------------------------------------------- |
+| New API    | Defines custom configurations per binary using the API         |
+:            : `DEFINE_fiddle_config()` which returns a built config object   :
+:            : handle after applying all the command line overrides in order. :
+:            : The usage of this API is more intuitive than the legacy API,   :
+:            : and it provides the ability to define custom overrides per     :
+:            : binary as well as read serialized configs from a file or       :
+:            : strings on the command line. Additionally, the overrides are   :
+:            : applied in order, which is a more intuitive user experience    :
+:            : than the current order followed by the legacy API.             :
+| Legacy API | Invoked via `create_buildable_from_flags()` that returns a     |
+:            : built config object. Command line overrides are NOT applied in :
+:            : order; all fiddlers are applied first, followed by all tags,   :
+:            : followed by all overrides.                                     :
 
 > NOTE: New usages of the legacy flags API are discouraged and users should
 > migrate their legacy usage to the new API.
@@ -160,7 +161,11 @@ that was set as the `name` argument for `DEFINE_fiddle_config` and the command
 `config`. For example, if the flag object was instantiated as
 `DEFINE_fiddle_config(name="my_flag", ...)`, then the base config is specified
 by using `--my_flag
-config:some_function_returning_fiddle_config_to_be_overridden()`.
+config:some_function_returning_fiddle_config_to_be_overridden()`. One can also
+use the command `config_file` to read from a JSON serialized config written to a
+file, or the command `config_str` to read from a JSON serialized config in
+encoded string form (the additional encoding involves zlib compression followed
+by base64 encoding).
 
 ### Legacy API {.new-tab}
 

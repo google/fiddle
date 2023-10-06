@@ -16,6 +16,7 @@
 """Utilities to use command line flags with Fiddle Buildables."""
 
 import ast
+import base64
 import dataclasses
 import enum
 import importlib
@@ -23,11 +24,13 @@ import re
 import types
 import typing
 from typing import Any, Dict, Optional, Tuple
+import zlib
 
 from fiddle._src import config
 from fiddle._src import daglish
 from fiddle._src import daglish_extensions
 from fiddle._src import module_reflection
+from fiddle._src.experimental import serialization
 
 
 class ImportDottedNameDebugContext(enum.Enum):
@@ -275,3 +278,26 @@ def set_value(cfg: config.Buildable, assignment: str) -> None:
       raise ValueError(f'Unexpected path element {last}.')
   except Exception as e:
     raise ValueError(f'Could not set "{path}" to "{value}".') from e
+
+
+class ZlibJSONSerializer:
+  """Serializer that uses JSON, zlib, and base64 encoding."""
+
+  def serialize(
+      self,
+      cfg: config.Buildable,
+      pyref_policy: Optional[serialization.PyrefPolicy] = None,
+  ) -> str:
+    return base64.urlsafe_b64encode(
+        zlib.compress(serialization.dump_json(cfg, pyref_policy).encode())
+    ).decode('ascii')
+
+  def deserialize(
+      self,
+      serialized: str,
+      pyref_policy: Optional[serialization.PyrefPolicy] = None,
+  ) -> config.Buildable:
+    return serialization.load_json(
+        zlib.decompress(base64.urlsafe_b64decode(serialized)).decode(),
+        pyref_policy=pyref_policy,
+    )

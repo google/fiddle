@@ -36,8 +36,9 @@ rewrite_fdl_args = legacy_flags.rewrite_fdl_args
 fdl_flags_supplied = legacy_flags.fdl_flags_supplied
 
 # New API
-_COMMAND_RE = re.compile(r"^(config|config_file|fiddler|set):(.+)$")
+_COMMAND_RE = re.compile(r"^(config|config_file|config_str|fiddler|set):(.+)$")
 _F = TypeVar("_F")
+_BASE_CONFIG_DIRECTIVES = {"config", "config_file", "config_str"}
 
 
 class FiddleFlag(flags.MultiFlag):
@@ -147,6 +148,29 @@ class FiddleFlag(flags.MultiFlag):
     self._remaining_directives = []
     self.present = 0
 
+  def _parse_config(self, command: str, expression: str) -> None:
+    if self._initial_config_expression:
+      raise ValueError(
+          "Only one base configuration is permitted. Received"
+          f"{command}:{expression} after "
+          f"{self.first_command}:{self._initial_config_expression} was"
+          " already provided."
+      )
+    else:
+      self._initial_config_expression = expression
+    if command == "config":
+      self.value = self._initial_config(expression)
+    elif command == "config_file":
+      with epath.Path(expression).open() as f:
+        self.value = serialization.load_json(
+            f.read(), pyref_policy=self._pyref_policy
+        )
+    elif command == "config_str":
+      serializer = utils.ZlibJSONSerializer()
+      self.value = serializer.deserialize(
+          expression, pyref_policy=self._pyref_policy
+      )
+
   @property
   def value(self):
     while self._remaining_directives:
@@ -162,31 +186,21 @@ class FiddleFlag(flags.MultiFlag):
       command, expression = match.groups()
 
       if self.first_command is None:
-        if command != "config" and command != "config_file":
+        if command not in _BASE_CONFIG_DIRECTIVES:
           raise ValueError(
               "First flag command must specify the input config via either "
-              "config or config_file commands. "
+              "config or config_file or config_str commands. "
               f"Received command: {command} instead."
           )
         self.first_command = command
 
-      if command == "config" or command == "config_file":
-        if self._initial_config_expression:
-          raise ValueError(
-              "Only one base configuration is permitted. Received"
-              f"{command}:{expression} after "
-              f"{self.first_command}:{self._initial_config_expression} was"
-              " already provided."
-          )
-        else:
-          self._initial_config_expression = expression
-        if command == "config":
-          self._value = self._initial_config(expression)
-        elif command == "config_file":
-          with epath.Path(expression).open() as f:
-            self._value = serialization.load_json(
-                f.read(), pyref_policy=self._pyref_policy
-            )
+      if (
+          command == "config"
+          or command == "config_file"
+          or command == "config_str"
+      ):
+        self._parse_config(command, expression)
+
       elif command == "set":
         utils.set_value(self._value, expression)
       elif command == "fiddler":
