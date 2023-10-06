@@ -62,7 +62,7 @@ class FiddleFlag(flags.MultiFlag):
       "Name of the fiddle config"
   )
 
-  fiddle_flag = absl_flags.FiddleFlag(
+  fiddle_flag = fdl_flags.FiddleFlag(
       name="config",
       default_module=my_module,
       default=None,
