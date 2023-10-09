@@ -19,8 +19,6 @@ See https://github.com/google/fiddle for documentation.
 """
 
 # pyformat: disable
-
-import sys
 from setuptools import find_packages
 from setuptools import setup
 
@@ -67,7 +65,7 @@ setup(
             'graphviz',
             'pytest',
             'pytype',
-        ] + ['seqio-nightly'] if sys.platform != 'darwin' else []
+        ]
     },
     description='Fiddle: A Python-first configuration library',
     long_description=long_description,

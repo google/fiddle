@@ -25,4 +25,4 @@ jobs:
           pip install -e .[testing]
       - name: Test with pytest
         run: |
-          pytest --ignore=fiddle/_src/extensions/seqio_test.py fiddle
+          pytest fiddle
