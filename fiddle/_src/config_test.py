@@ -72,6 +72,14 @@ def fn_with_var_args_and_kwargs(arg1, *args, kwarg1=None, **kwargs):  # pylint: 
   return locals()
 
 
+def fn_with_args_and_kwargs_only(*args, **kwargs):  # pylint: disable=unused-argument
+  return locals()
+
+
+def fn_with_position_args(a, b=0, /, c=1, *args, kwarg1=None, **kwargs):  # pylint: disable=keyword-arg-before-vararg, unused-argument
+  return locals()
+
+
 def make_typed_config() -> fdl.Config[SampleClass]:
   """Helper function which returns a fdl.Config whose type is known."""
   return fdl.Config(SampleClass, arg1=1, arg2=2)
@@ -195,13 +203,217 @@ class ConfigTest(parameterized.TestCase):
     fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
 
-    fn_config.args = 'kwarg_called_arg'
     fn_config.kwargs = 'kwarg_called_kwarg'
     fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['kwargs'], {
-        'args': 'kwarg_called_arg',
         'kwargs': 'kwarg_called_kwarg'
     })
+
+  def test_positional_args_access(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    self.assertEqual(fn_config[0], 1)
+    self.assertEqual(fn_config[-1], 5)
+    self.assertSequenceEqual(fn_config[3:], [4, 5])
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3, 4, 5])
+
+  def test_positional_args_modification(self):
+    with self.subTest('with_var_positional'):
+      fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+      fn_config[0] = 0
+      self.assertSequenceEqual(fn_config[:], [0, 2, 3, 4, 5])
+      fn_config[:3] = [5, 6, 7]
+      self.assertSequenceEqual(fn_config[:], [5, 6, 7, 4, 5])
+      fn_config[3:] = [8, 9, 10]
+      self.assertSequenceEqual(fn_config[:], [5, 6, 7, 8, 9, 10])
+      fn_config[:] = [1, 2, 3, 4, 5, 6]
+      self.assertSequenceEqual(fn_config[:], [1, 2, 3, 4, 5, 6])
+
+    with self.subTest('wo_var_positional'):
+
+      def foo(a, b, /, c):
+        return a, b, c
+
+      fn_config = fdl.Config(foo, 1, 2, 3)
+      fn_config[0] = 0
+      self.assertSequenceEqual(fn_config[:], [0, 2, 3])
+      fn_config[:2] = [4, 5]
+      self.assertSequenceEqual(fn_config[:], [4, 5, 3])
+
+  def test_positional_args_delete(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5, 6)
+    del fn_config[0]
+    self.assertEqual(fn_config[:], [config_lib.NO_VALUE, 2, 3, 4, 5, 6])
+    del fn_config[-1]
+    self.assertEqual(fn_config[:], [config_lib.NO_VALUE, 2, 3, 4, 5])
+    del fn_config[3:]
+    self.assertEqual(fn_config[:], [config_lib.NO_VALUE, 2, 3])
+
+  def test_negative_index_access(self):
+    fn_config = fdl.Config(fn_with_position_args, 0, 1, 2, 3, 4, 5)
+    del fn_config.c
+    self.assertEqual(fn_config[:], [0, 1, 1, 3, 4, 5])
+    self.assertEqual(fn_config[-1], 5)
+    self.assertEqual(fn_config[-6], 0)
+
+  def test_negative_index_modify(self):
+    fn_config = fdl.Config(fn_with_position_args, 0, 1, 2, 3, 4, 5)
+    del fn_config.c
+    self.assertEqual(fn_config[:], [0, 1, 1, 3, 4, 5])
+    fn_config[-1] = -5
+    self.assertEqual(fn_config[:], [0, 1, 1, 3, 4, -5])
+    fn_config[-6] = 6
+    self.assertEqual(fn_config[:], [6, 1, 1, 3, 4, -5])
+
+  def test_modify_positional_only_args(self):
+    def foo(a, b, c, /):
+      return a, b, c
+
+    fn_config = fdl.Config(foo)
+    fn_config[2] = 5
+    self.assertEqual(
+        fn_config[:], [config_lib.NO_VALUE, config_lib.NO_VALUE, 5]
+    )
+
+  def test_negative_index_delete(self):
+    fn_config = fdl.Config(fn_with_position_args, 0, 1, 2, 3, 4, 5)
+    del fn_config.c
+    self.assertEqual(fn_config[:], [0, 1, 1, 3, 4, 5])
+    del fn_config[-1]
+    self.assertEqual(fn_config[:], [0, 1, 1, 3, 4])
+    del fn_config[-5]
+    self.assertEqual(
+        fn_config[:],
+        [config_lib.NO_VALUE, 1, 1, 3, 4],
+    )
+
+  def test_varargs_index_handle_access(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    self.assertEqual(fn_config[fdl.VARARGS], 4)
+    self.assertSequenceEqual(fn_config[fdl.VARARGS :], [4, 5])
+
+  def test_varargs_index_handle_modify(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    fn_config[fdl.VARARGS :] = []
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3])
+    fn_config[fdl.VARARGS :] = [7, 8, 9]
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3, 7, 8, 9])
+    fn_config[fdl.VARARGS] = 0
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3, 0, 8, 9])
+
+  def test_varargs_index_handle_delete(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    del fn_config[fdl.VARARGS]
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3, 5])
+    del fn_config[fdl.VARARGS :]
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3])
+
+  def test_modification_when_var_args_are_empty(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3)
+    self.assertEmpty(fn_config[fdl.VARARGS :])
+    fn_config[fdl.VARARGS :] = ['a', 'b', 'c']
+    self.assertSequenceEqual(fn_config[:], [1, 2, 3, 'a', 'b', 'c'])
+
+  def test_only_some_positional_args_are_defined(self):
+    fn_cfg = config_lib.Config(fn_with_position_args, 0)
+    self.assertEqual(fn_cfg[:], [0, 0, 1])
+    fn_cfg[:2] = [5, 6]
+    self.assertEqual(fn_cfg[:], [5, 6, 1])
+
+  def test_positional_args_direct_access_is_forbidden(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    with self.assertRaisesRegex(
+        AttributeError,
+        'Cannot access positional-only or variadic positional arguments',
+    ):
+      _ = fn_config.args
+
+    with self.assertRaisesRegex(
+        AttributeError,
+        'Cannot access positional-only or variadic positional arguments',
+    ):
+      _ = fn_config.a
+
+  def test_positional_args_direct_modification_is_forbidden(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    with self.assertRaisesRegex(
+        AttributeError, 'Cannot access VAR_POSITIONAL parameter'
+    ):
+      fn_config.args = [0]
+
+    with self.assertRaisesRegex(
+        AttributeError, 'Cannot access POSITIONAL_ONLY parameter'
+    ):
+      fn_config.a = 0
+
+  def test_positional_or_keyword_args_have_consistent_values(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    fn_config[2] = 'arg-c'
+    self.assertEqual(fn_config.c, 'arg-c')
+    fn_config.c = 'index-2'
+    self.assertEqual(fn_config[2], 'index-2')
+
+  def test_set_out_of_range_index(self):
+    fn_config = config_lib.Config(fn_with_position_args)
+    arr = [1, 2, 3]
+    added = [7, 8, 9]
+    fn_config[:3] = arr
+    fn_config[10:] = added
+    arr[10:] = added
+    self.assertSequenceEqual(fn_config[:], arr)
+
+  def test_index_out_of_range(self):
+    fn_config = fdl.Config(fn_with_var_args, 1, 2)
+    self.assertLen(fn_config[:], 2)
+    with self.assertRaisesRegex(IndexError, 'index out of range'):
+      fn_config[2] = 'index-2'
+    with self.assertRaisesRegex(IndexError, 'index out of range'):
+      _ = fn_config[2]
+
+  def test_args_config_shallow_copy(self):
+    fn_config = fdl.Config(fn_with_var_args, 1, 2)
+    self.assertLen(fn_config[:], 2)
+    a_copy = fn_config[:]
+    a_copy.append('3')
+    self.assertLen(fn_config[:], 2)
+    self.assertLen(a_copy, 3)
+
+  def test_args_config_build(self):
+    fn_config = fdl.Config(fn_with_position_args, 1, 2, 3, 4, 5)
+    self.assertEqual(
+        fdl.build(fn_config),
+        {'a': 1, 'b': 2, 'c': 3, 'args': (4, 5), 'kwarg1': None, 'kwargs': {}},
+    )
+
+  def test_nested_positional_args_config_build(self):
+    fn_config = fdl.Config(
+        fn_with_position_args,
+        1,
+        2,
+        3,
+        4,
+        5,
+        kwarg1=fdl.Config(
+            fn_with_position_args, 'a', 'b', kwarg1='kwarg1', kwarg2='kwarg2'
+        ),
+    )
+    self.assertEqual(
+        fdl.build(fn_config),
+        {
+            'a': 1,
+            'b': 2,
+            'c': 3,
+            'args': (4, 5),
+            'kwarg1': {
+                'a': 'a',
+                'b': 'b',
+                'c': 1,
+                'kwarg1': 'kwarg1',
+                'args': tuple(),
+                'kwargs': {'kwarg2': 'kwarg2'},
+            },
+            'kwargs': {},
+        },
+    )
 
   def test_config_for_dicts(self):
     dict_config = fdl.Config(dict, a=1, b=2)
@@ -448,6 +660,15 @@ class ConfigTest(parameterized.TestCase):
     cfg_b = fdl.Config(SampleClass.a_classmethod)
     self.assertEqual(cfg_a, cfg_b)
 
+  def test_equality_positional_args_default_value(self):
+    cfg_a = fdl.Config(fn_with_position_args, 'a')
+    cfg_b = fdl.Config(fn_with_position_args, 'a', 0)
+    cfg_c = fdl.Config(fn_with_position_args, 'a', c=1)
+    cfg_d = fdl.Config(fn_with_position_args, 'a', 0, 1, 2, 3, 4, 5)
+    self.assertEqual(cfg_a, cfg_b)
+    self.assertEqual(cfg_a, cfg_c)
+    self.assertNotEqual(cfg_a, cfg_d)
+
   def test_default_value_equality(self):
     cfg1 = fdl.Config(SampleClass, 1, 2)
     cfg2 = fdl.Config(SampleClass, 1, 2, None, kwarg2=None)
@@ -613,20 +834,8 @@ class ConfigTest(parameterized.TestCase):
     expected_msg = (r"No parameter named 'nonexistent_arg' exists for "
                     r"<class '.*\.SampleClass'>; valid parameter names: "
                     r'arg1, arg2, kwarg1, kwarg2\.')
-    with self.assertRaisesRegex(TypeError, expected_msg):
+    with self.assertRaisesRegex(AttributeError, expected_msg):
       class_config.nonexistent_arg = 'error!'
-
-  def test_nonexistent_var_args_parameter_error(self):
-    fn_config = fdl.Config(fn_with_var_args)
-    expected_msg = (r'Variadic arguments \(e.g. \*args\) are not supported\.')
-    with self.assertRaisesRegex(TypeError, expected_msg):
-      fn_config.args = (1, 2, 3)
-
-  def test_unsupported_var_args_error(self):
-    expected_msg = (r'Variable positional arguments \(aka `\*args`\) not '
-                    r'supported\.')
-    with self.assertRaisesRegex(NotImplementedError, expected_msg):
-      fdl.Config(fn_with_var_args, 1, 2, 3)
 
   def test_build_inside_build(self):
 
@@ -737,15 +946,21 @@ class ConfigTest(parameterized.TestCase):
 
   def test_build_raises_nice_error_too_few_args(self):
     cfg = fdl.Config(basic_fn, fdl.Config(SampleClass, 1), 2)
-    with self.assertRaisesRegex(
-        TypeError, r'.*missing 1 required.*\n\n.*<root>\.arg1.*arg1=1'):
+    with self.assertRaises(TypeError) as e:
       fdl.build(cfg)
+    self.assertEqual(
+        e.exception.proxy_message,  # pytype: disable=attribute-error
+        '\n\nFiddle context: failed to construct or call SampleClass at '
+        '<root>.arg1 with positional arguments: (), keyword arguments: '
+        '(arg1=1).',
+    )
 
   def test_build_raises_exception_on_call(self):
     cfg = fdl.Config(raise_error)
     msg = (
         'My fancy exception\n\nFiddle context: failed to construct or call '
-        'raise_error at <root> with arguments ()'
+        'raise_error at <root> with positional arguments: (), '
+        'keyword arguments: ().'
     )
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
       fdl.build(cfg)
@@ -762,7 +977,9 @@ class ConfigTest(parameterized.TestCase):
     self.assertEqual(
         e.exception.proxy_message,  # pytype: disable=attribute-error
         '\n\nFiddle context: failed to construct or call basic_fn at <root>.'
-        "arg1[1]['c'] with arguments (arg1=1)")
+        "arg1[1]['c'] with positional arguments: (), keyword arguments: "
+        '(arg1=1).',
+    )
 
   def test_multithreaded_build(self):
     """Two threads can each invoke build.build without interfering."""
@@ -826,32 +1043,55 @@ class ConfigTest(parameterized.TestCase):
 class OrderedArgumentsTest(parameterized.TestCase):
 
   def test_ordered_arguments(self):
-    cfg = fdl.Config(fn_with_var_kwargs)
-    cfg.var_kwarg1 = 3
+    cfg = fdl.Config(fn_with_position_args, 0, 1, 2, 3, 4)
+    cfg.var_kwarg1 = 5
     cfg.kwarg1 = 'hi'
-    cfg.arg1 = 4
-    cfg.var_kwarg2 = 0
+    cfg.var_kwarg2 = 6
+    cfg.c = -2
     self.assertEqual(
-        list(cfg.__arguments__.items()), [
-            ('var_kwarg1', 3),
+        list(cfg.__arguments__.items()),
+        [
+            ('c', -2),
+            (0, 0),
+            (1, 1),
+            (3, 3),
+            (4, 4),
+            ('var_kwarg1', 5),
             ('kwarg1', 'hi'),
-            ('arg1', 4),
-            ('var_kwarg2', 0),
-        ])
+            ('var_kwarg2', 6),
+        ],
+    )
     self.assertEqual(
-        list(config_lib.ordered_arguments(cfg).items()), [
-            ('arg1', 4),
+        list(config_lib.ordered_arguments(cfg).items()),
+        [
+            (0, 0),
+            (1, 1),
+            ('c', -2),
+            (3, 3),
+            (4, 4),
             ('kwarg1', 'hi'),
-            ('var_kwarg1', 3),
-            ('var_kwarg2', 0),
-        ])
+            ('var_kwarg1', 5),
+            ('var_kwarg2', 6),
+        ],
+    )
 
     with self.subTest('path element and keys match up'):
       _, metadata = cfg.__flatten__()
       path_elements = cfg.__path_elements__()
+      names = []
+      for path_element in path_elements:
+        if isinstance(path_element, daglish.Attr):
+          names.append(path_element.name)
+        elif isinstance(path_element, daglish.Index):
+          names.append(path_element.index)
+        else:
+          raise ValueError(
+              'No other path element should exists, got:', path_element
+          )
       self.assertEqual(
           metadata.argument_names,
-          tuple(path_element.name for path_element in path_elements))
+          tuple(names),
+      )
 
   @parameterized.parameters([
       # incl_var_kw, incl_defaults, incl_unset, incl_eq_to_default, expected
@@ -940,6 +1180,13 @@ class OrderedArgumentsTest(parameterized.TestCase):
         include_equal_to_default=include_equal_to_default,
     )
     self.assertEqual(list(args.items()), expected)
+
+  def test_include_positional(self):
+    cfg = fdl.Config(fn_with_position_args, 0, 1, 2, 3, 4, 5, kwarg='hi')
+    self.assertEqual(
+        config_lib.ordered_arguments(cfg, include_positional=False),
+        {'c': 2, 'kwarg': 'hi'},
+    )
 
 
 if __name__ == '__main__':

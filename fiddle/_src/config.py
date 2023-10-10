@@ -34,24 +34,9 @@ from fiddle._src import tag_type
 T = TypeVar('T')
 TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
 
-
-class NoValue:
-  """Sentinel class for arguments with no value."""
-
-  def __repr__(self):
-    return 'fdl.NO_VALUE'
-
-  def __deepcopy__(self, memo):
-    """Override for deepcopy that does not copy this sentinel object."""
-    del memo
-    return self
-
-  def __copy__(self):
-    """Override for `copy.copy()` that does not copy this sentinel object."""
-    return self
-
-
-NO_VALUE = NoValue()
+NoValue = signatures.NoValue
+# A sentinel object that represents no value is set for the argument.
+NO_VALUE = signatures.NO_VALUE
 
 # Unique object instance that should never be used by end-users, and can thus
 # be used to differentiate between unset values and user-set values that are
@@ -62,6 +47,16 @@ _UNSET_SENTINEL = object()
 _defaults_aware_traverser_registry = daglish.NodeTraverserRegistry(
     use_fallback=True
 )
+
+
+class _Placeholder(object):
+  """A Placeholder class to represent config arguments."""
+
+  def __init__(self, index):
+    self.index = index
+
+  def __eq__(self, other):
+    return self.index == other.index
 
 
 def _buildable_flatten(
@@ -91,10 +86,10 @@ def _buildable_flatten(
 
 def _buildable_path_elements(
     buildable: Buildable, include_defaults: bool = False
-) -> Tuple[daglish.Attr]:
+) -> Tuple[daglish.PathElement]:
   """Implement Buildable.__path_elements__ method."""
   return tuple(
-      daglish.Attr(name)
+      daglish.Attr(name) if isinstance(name, str) else daglish.Index(name)
       for name in ordered_arguments(
           buildable, include_defaults=include_defaults
       ).keys()
@@ -129,9 +124,16 @@ def _compare_buildable(x: Buildable, y: Buildable, check_dag: bool = False):
   )
 
   missing = object()
+
+  def get_value_or_default(key: Union[str, int], buildable: Buildable) -> Any:
+    value = buildable.__arguments__.get(key, missing)
+    if value is missing:
+      value = buildable.__signature_info__.get_default(key, missing)
+    return value
+
   for key in set(x.__arguments__) | set(y.__arguments__):
-    v1 = getattr(x, key, missing)
-    v2 = getattr(y, key, missing)
+    v1 = get_value_or_default(key, x)
+    v2 = get_value_or_default(key, y)
     assert not (v1 is missing and v2 is missing)
     if v1 is missing or v2 is missing:
       return False
@@ -183,7 +185,7 @@ class BuildableTraverserMetadata(NamedTuple):
   """
 
   fn_or_cls: Callable[..., Any]
-  argument_names: Tuple[str, ...]
+  argument_names: Tuple[Union[str, int], ...]
   argument_tags: Dict[str, FrozenSet[tag_type.TagType]]
   argument_history: Mapping[str, Tuple[history.HistoryEntry, ...]] = (
       types.MappingProxyType({})
@@ -213,14 +215,20 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   Buildable types implement a ``__build__`` method that is called during
   ``fdl.build()`` with arguments set on the ``Buildable`` to get output for the
   corresponding instance.
+
+  Arguments are stored in the `__arguments__` dict with the following
+  "canonical storage format":
+  Positional-only and variadic-positional arguments use the position index of
+  the argument as a key (of type int); all other arguments use the name of the
+  argument as a key (of type str).
   """
 
   # "Dunder"-style names were chosen here to reduce the possibility of naming
   # conflicts while still making the fields accessible.
   __fn_or_cls__: TypeOrCallableProducingT[T]
-  __arguments__: Dict[str, Any]
+  __arguments__: Dict[Union[str, int], Any]
   __argument_history__: history.History
-  __argument_tags__: Dict[str, Set[tag_type.TagType]]
+  __argument_tags__: Dict[Union[str, int], Set[tag_type.TagType]]
   __signature_info__: signatures.SignatureInfo
 
   def __init__(
@@ -246,8 +254,13 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
         fn_or_cls, *args, **kwargs
     )
 
-    for name, value in arguments.items():
-      setattr(self, name, value)
+    for key, value in arguments.items():
+      if isinstance(key, (str, int)):
+        self._arguments_set_value(key, value)
+      else:
+        raise ValueError(
+            f'Unexpected type received for the argument name: {key!r}'
+        )
 
     for name, tags in tag_type.find_tags_from_annotations(fn_or_cls).items():
       self.__argument_tags__[name].update(tags)
@@ -258,6 +271,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __init_callable__(
       self, fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]]
   ) -> None:
+    """Save information on `fn_or_cls` to the `Buildable`."""
     if isinstance(fn_or_cls, Buildable):
       raise ValueError(
           'Using the Buildable constructor to convert a buildable to a new '
@@ -273,9 +287,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     super().__setattr__('__fn_or_cls__', fn_or_cls)
     super().__setattr__('__arguments__', {})
     signature = signatures.get_signature(fn_or_cls)
+    # Several attributes are computed automatically by SignatureInfo during
+    # `__post_init__`.
     super().__setattr__(
         '__signature_info__',
-        signatures.SignatureInfo(signature),
+        signatures.SignatureInfo(signature=signature),
     )
 
   def __init_subclass__(cls):
@@ -306,12 +322,21 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     object.__setattr__(rebuilt, '__arguments__', metadata.arguments(values))
     return rebuilt
 
-  def __path_elements__(self) -> Tuple[daglish.Attr]:
+  def __path_elements__(self) -> Tuple[daglish.PathElement]:
     return _buildable_path_elements(self, include_defaults=False)
 
   def __getattr__(self, name: str):
     """Get parameter with given ``name``."""
     value = self.__arguments__.get(name, _UNSET_SENTINEL)
+    # Check that positional-only arguments cannot be accessed by keywords.
+    param = self.__signature_info__.parameters.get(name)
+    if param is not None and (
+        param.kind in (param.POSITIONAL_ONLY, param.VAR_POSITIONAL)
+    ):
+      raise AttributeError(
+          'Cannot access positional-only or variadic positional arguments '
+          f'{name} on {self!r} using attributes.'
+      )
 
     if value is not _UNSET_SENTINEL:
       return value
@@ -323,7 +348,6 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
           + f'{self.__fn_or_cls__.__qualname__}.{name} '
           + 'since it uses a default_factory.'
       )
-    param = self.__signature_info__.parameters.get(name)
     if param is not None and param.default is not param.empty:
       return param.default
     msg = f"No parameter '{name}' has been set on {self!r}."
@@ -340,34 +364,176 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
     raise AttributeError(msg)
 
-  def __setattr__(self, name: str, value: Any):
-    """Sets parameter ``name`` to ``value``."""
-
-    self.__signature_info__.validate_param_name(name, self.__fn_or_cls__)
-
+  def _arguments_set_value(self, key: Union[int, str], value: Any):
+    """Set `self.__arguments__` values directly."""
     if isinstance(value, TaggedValueCls):
       tags = value.__argument_tags__.get('value', ())
       if tags:
-        self.__argument_tags__[name].update(tags)
+        self.__argument_tags__[key].update(tags)
         self.__argument_history__.add_updated_tags(
-            name, self.__argument_tags__[name]
+            key, self.__argument_tags__[key]
         )
       if 'value' in value.__arguments__:
         value = value.__arguments__['value']
       else:
         return
 
-    self.__arguments__[name] = value
-    self.__argument_history__.add_new_value(name, value)
+    self.__arguments__[key] = value
+    self.__argument_history__.add_new_value(key, value)
+
+  def _arguments_del_value(self, key: Union[int, str]):
+    """Delete `self.__arguments__` values directly."""
+    del self.__arguments__[key]
+    self.__argument_history__.add_deleted_value(key)
+
+  def __setattr__(self, name: str, value: Any):
+    """Sets parameter ``name`` to ``value``."""
+    self.__signature_info__.validate_param_name(name, self.__fn_or_cls__)
+    self._arguments_set_value(name, value)
 
   def __delattr__(self, name):
     """Unsets parameter ``name``."""
     try:
-      del self.__arguments__[name]
-      self.__argument_history__.add_deleted_value(name)
+      self._arguments_del_value(name)
     except KeyError:
       err = AttributeError(f"No parameter '{name}' has been set on {self!r}")
       raise err from None
+
+  def __getitem__(self, key: Any):
+    """Get positional arguments by index."""
+    key = self.__signature_info__.replace_varargs_handle(key)
+    all_positional_args, _ = self.__signature_info__.transform_to_args_kwargs(
+        self.__arguments__,
+        include_pos_or_kw_in_args=True,
+        include_no_value=True,
+    )
+    params = list(self.__signature_info__.parameters.values())
+    for index, value in enumerate(all_positional_args):
+      if value is NO_VALUE and index < len(params):
+        param = params[index]
+        if param.default is not param.empty:
+          all_positional_args[index] = param.default
+    return all_positional_args[key]
+
+  def __delitem__(self, key: Any):
+    """Delete positional arguments by index."""
+    key = self.__signature_info__.replace_varargs_handle(key)
+    all_positional_args, _ = self.__signature_info__.transform_to_args_kwargs(
+        self.__arguments__,
+        include_pos_or_kw_in_args=True,
+        include_no_value=True,
+    )
+    var_positional_start = self.__signature_info__.var_positional_start
+    if isinstance(key, slice):
+      key = key.indices(len(all_positional_args))
+      indices = list(range(*key))
+    else:
+      if key < 0:
+        key += len(all_positional_args)
+      indices = [key]
+
+    old_placeholders = [
+        _Placeholder(index) for index in range(len(all_positional_args))
+    ]
+    new_placeholders = old_placeholders.copy()
+    # Traverse from largest index to maintain order of undeleted indices.
+    for index in indices[::-1]:
+      if index < var_positional_start:
+        k = self.__signature_info__.index_to_key(index, self.__arguments__)
+        if k in self.__arguments__:
+          self._arguments_del_value(k)
+      else:
+        del new_placeholders[index]
+
+    # Delete var-positional args and compact the *args list.
+    for index in range(var_positional_start, len(old_placeholders)):
+      if index < len(new_placeholders):
+        if new_placeholders[index] != old_placeholders[index]:
+          new_value = self.__arguments__[new_placeholders[index].index]
+          self._arguments_set_value(index, new_value)
+      else:
+        self._arguments_del_value(index)
+
+  def _set_item_by_index(self, key: int, value: Any):
+    """Set positional arguments by index."""
+    key = self.__signature_info__.index_to_key(key, self.__arguments__)
+    positional_num = self.__signature_info__.var_positional_start
+    if positional_num is None:
+      # *args does not exist
+      positional_num = len(self.__signature_info__.parameters)
+      if self.__signature_info__.var_keyword_name:
+        # Exclude **kwargs
+        positional_num -= 1
+
+    # Cannot set item when index is beyond current positional args list length.
+    # Only index that points to *args can be out of range.
+    if (
+        isinstance(key, int)
+        and key >= positional_num
+        and key not in self.__arguments__
+    ):
+      raise IndexError(
+          f'Cannot set positional argument with index {key}'
+          ' (index out of range).'
+      )
+    self._arguments_set_value(key, value)
+
+  def _set_item_by_slice(self, slice_key: slice, value: Any):
+    """Set positional arguments by slice."""
+    all_positional_args, _ = self.__signature_info__.transform_to_args_kwargs(
+        self.__arguments__,
+        include_pos_or_kw_in_args=True,
+        include_no_value=True,
+    )
+    var_positional_start = self.__signature_info__.var_positional_start
+    index_range = slice_key.indices(len(all_positional_args))
+    if var_positional_start is None or index_range[0] < var_positional_start:
+      # The slice key spans on non-variadic positional arguments, this set item
+      # operation cannot modify the total length of full positiona args list.
+      indices = range(*index_range)
+      if len(indices) != len(value):
+        raise ValueError(
+            'Cannot modify the total length of full positional arguments list'
+            ' with __setitem__ when the slice key spans over non-variadic'
+            ' positional arguments. To remove values, use `del config[key]`.'
+            ' To append values to variadic positional arguments, you can use '
+            ' config[fdl.VARARGS:] = value.'
+        )
+      for index, v in zip(indices, value):
+        self._set_item_by_index(index, v)
+    else:
+      # The slice key only spans on variadic positional arguments
+      old_placeholders = [
+          _Placeholder(index) for index in range(len(all_positional_args))
+      ]
+      new_placeholders = old_placeholders.copy()
+      new_placeholders[slice_key] = value
+      for index in range(var_positional_start, len(old_placeholders)):
+        if index < len(new_placeholders):
+          new_value = new_placeholders[index]
+          if isinstance(new_value, _Placeholder):
+            if new_value == old_placeholders[index]:
+              continue
+            else:
+              new_value = self.__arguments__[new_value.index]
+          self._arguments_set_value(index, new_value)
+        else:
+          self._arguments_del_value(index)
+      len_old = len(old_placeholders)
+      len_new = len(new_placeholders)
+      for index in range(len_old, len_new):
+        new_value = new_placeholders[index]
+        if isinstance(new_value, _Placeholder):
+          new_value = self.__arguments__[new_value.index]
+        self._arguments_set_value(index, new_value)
+
+  def __setitem__(self, key: Any, value: Any):
+    """Set positional arguments by index."""
+    key = self.__signature_info__.replace_varargs_handle(key)
+    if isinstance(key, int):
+      self._set_item_by_index(key, value)
+    elif isinstance(key, slice):
+      self._set_item_by_slice(key, value)
 
   def __dir__(self) -> Collection[str]:
     """Provide a useful list of attribute names, optimized for Jupyter/Colab.
@@ -400,12 +566,12 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     for name in param_names:
       tags = self.__argument_tags__.get(name, ())
-      value = self.__arguments__.get(name, _UNSET_SENTINEL)
-      if tags or (value is not _UNSET_SENTINEL):
-        param_str = name
+      value = self.__arguments__.get(name, NO_VALUE)
+      if tags or (value is not NO_VALUE):
+        param_str = str(name)
         if tags:
           param_str += f"[{', '.join(sorted(str(tag) for tag in tags))}]"
-        if value is not _UNSET_SENTINEL:
+        if value is not NO_VALUE:
           param_str += f'={value!r}'
         formatted_params.append(param_str)
 
@@ -488,9 +654,9 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       Dict of serialized state.
     """
     result = dict(self.__dict__)
-    result['__signature_info__'] = signatures.SignatureInfo(  # pytype: disable=wrong-arg-types
-        None, result['__signature_info__'].has_var_keyword
-    )
+    # During serialization, set `__signature_info__` as None to avoid signature
+    # serialization issues.
+    result['__signature_info__'] = None
     return result
 
   def __setstate__(self, state) -> None:
@@ -502,9 +668,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       state: State dictionary, from ``__getstate__``.
     """
     self.__dict__.update(state)  # Support unpickle.
-    if self.__signature_info__.signature is None:
-      self.__signature_info__.signature = signatures.get_signature(
-          self.__fn_or_cls__
+    if self.__signature_info__ is None:
+      signature = signatures.get_signature(self.__fn_or_cls__)
+      super().__setattr__(
+          '__signature_info__',
+          signatures.SignatureInfo(signature=signature),
       )
 
 
@@ -552,7 +720,7 @@ class Config(Generic[T], Buildable[T]):
 
   If the same ``Config`` instance is used in multiple places within the
   configuration tree, its function or class is invoked only once during
-  ``build``, and the result shared across all occurences of the ``Config``
+  ``build``, and the result shared across all occurrences of the ``Config``
   instance. (See ``build`` documentation for further details.) To create a new
   instance of a ``Config`` with the same parameter settings that will yield a
   separate instance during ``build``, ``copy.copy()`` or ``copy.deepcopy()``
@@ -651,8 +819,9 @@ def ordered_arguments(
     include_var_keyword: bool = True,
     include_defaults: bool = False,
     include_unset: bool = False,
+    include_positional: bool = True,
     include_equal_to_default: bool = True,
-) -> Dict[str, Any]:
+) -> Dict[Union[int, str], Any]:
   """Returns arguments of a Buildable, ordered by the signature.
 
   Args:
@@ -665,6 +834,8 @@ def ordered_arguments(
     include_unset: If True, then include arguments that have not been explicitly
       set, that don't have a default value.  The value for these parameters will
       be `fdl.NO_VALUE`.
+    include_positional: If False, positional-only and variadic positional
+      arguments will be excluded from the output.
     include_equal_to_default: If False, then exclude arguments that are equal to
       their default value (using `==`).  Can not be combined with
       `include_defaults=True`.
@@ -677,20 +848,46 @@ def ordered_arguments(
         'Exclude_equal_to_default and include_defaults are mutually exclusive.'
     )
   result = {}
-  for name, param in buildable.__signature_info__.parameters.items():
-    if param.kind != param.VAR_KEYWORD:
-      if name in buildable.__arguments__:
-        value = buildable.__arguments__[name]
-        if include_equal_to_default or (value != param.default):
-          result[name] = value
+  unset = object()
+  for index, (name, param) in enumerate(
+      buildable.__signature_info__.parameters.items()
+  ):
+    if param.kind not in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+      value = unset
+      if name in buildable.__arguments__ or (
+          index in buildable.__arguments__
+          and param.kind == param.POSITIONAL_ONLY
+      ):
+        if name in buildable.__arguments__:
+          value = buildable.__arguments__[name]
+        else:
+          value = buildable.__arguments__[index]
       elif param.default is not param.empty:
         if include_defaults:
-          result[name] = param.default
+          value = param.default
       elif include_unset:
-        result[name] = NO_VALUE
+        value = NO_VALUE
+      if value is not unset:
+        if include_equal_to_default or (value != param.default):
+          if param.kind == param.POSITIONAL_ONLY:
+            result[index] = value
+          else:
+            result[name] = value
+
+    if param.kind == param.VAR_POSITIONAL:
+      # Cannot add defaults for *args in Python, so ignore defaults related
+      # flags and `include_unset` flag here.
+      while index in buildable.__arguments__:
+        result[index] = buildable.__arguments__[index]
+        index += 1
+
   if include_var_keyword:
     for name, value in buildable.__arguments__.items():
       param = buildable.__signature_info__.parameters.get(name)
       if param is None or param.kind == param.VAR_KEYWORD:
         result[name] = value
+
+  if not include_positional:
+    result = {k: v for k, v in result.items() if isinstance(k, str)}
+
   return result

@@ -93,18 +93,18 @@ class CallableApisTest(absltest.TestCase):
         building.build(cfg),
     )
 
-  def test_update_callable_varargs(self):
-    cfg = config_lib.Config(config_test.fn_with_var_kwargs, 1, 2)
-    with self.assertRaisesRegex(
-        NotImplementedError, 'Variable positional arguments'
-    ):
-      mutate_buildable.update_callable(
-          cfg, config_test.fn_with_var_args_and_kwargs
-      )
-
   def test_get_callable(self):
     cfg = config_lib.Config(config_test.basic_fn)
-    self.assertIs(config_lib.get_callable(cfg), config_test.basic_fn)
+    self.assertIs(fdl.get_callable(cfg), config_test.basic_fn)
+
+  def test_positional_args(self):
+    cfg = config_lib.Config(config_test.fn_with_position_args, 1, 2)
+    with self.assertRaisesRegex(
+        NotImplementedError, 'positional arguments is not supported'
+    ):
+      mutate_buildable.update_callable(
+          cfg, config_test.fn_with_args_and_kwargs_only
+      )
 
 
 class AssignTest(absltest.TestCase):
@@ -119,7 +119,7 @@ class AssignTest(absltest.TestCase):
 
   def test_assign_wrong_argument(self):
     cfg = config_lib.Config(config_test.basic_fn)
-    with self.assertRaisesRegex(TypeError, 'not_there'):
+    with self.assertRaisesRegex(AttributeError, 'not_there'):
       mutate_buildable.assign(cfg, arg1=1, not_there=2)
 
   @absltest.skip('Enable this after dropping pyhon 3.7 support')

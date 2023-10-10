@@ -61,7 +61,7 @@ def update_callable(
     buildable: config_lib.Buildable,
     new_callable: TypeOrCallableProducingT,
     drop_invalid_args: bool = False,
-):
+) -> None:
   """Updates ``config`` to build ``new_callable`` instead.
 
   When extending a base configuration, it can often be useful to swap one class
@@ -81,29 +81,29 @@ def update_callable(
     TypeError: if ``new_callable`` has varargs, or if there are arguments set on
       ``config`` that are invalid to pass to ``new_callable``.
   """
+  for key in buildable.__arguments__.keys():
+    if isinstance(key, int):
+      raise NotImplementedError(
+          'Update callable for configs with positional arguments is not'
+          ' supported yet.'
+      )
   # Note: can't just call config.__init__(new_callable, **config.__arguments__)
   # to preserve history.
   #
   # Note: can't call `setattr` on all the args to validate them, because that
   # will result in duplicate history entries.
-  original_args = buildable.__arguments__
-  signature = signatures.get_signature(new_callable)
-  if any(
-      param.kind == param.VAR_POSITIONAL
-      for param in signature.parameters.values()
-  ):
-    raise NotImplementedError(
-        'Variable positional arguments (aka `*args`) not supported.'
-    )
-  signature_info = signatures.SignatureInfo(signature)
-  object.__setattr__(
-      buildable,
-      '__signature_info__',
-      signature_info,
-  )
-  if not signature_info.has_var_keyword:
+  new_signature = signatures.get_signature(new_callable)
+  # Update the signature early so that we can set arguments by position.
+  # Otherwise, parameter validation logic would complain about argument
+  # name not exists.
+  new_signature_info = signatures.SignatureInfo(signature=new_signature)
+  object.__setattr__(buildable, '__signature__', new_signature)
+  object.__setattr__(buildable, '__signature_info__', new_signature_info)
+  if not new_signature_info.has_var_keyword:
     invalid_args = [
-        arg for arg in original_args.keys() if arg not in signature.parameters
+        arg
+        for arg in buildable.__arguments__.keys()
+        if arg not in new_signature.parameters and isinstance(arg, str)
     ]
     if invalid_args:
       if drop_invalid_args:

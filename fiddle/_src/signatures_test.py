@@ -22,6 +22,7 @@ import sys
 import typing
 
 from absl.testing import absltest
+from absl.testing import parameterized
 from fiddle._src import signatures
 from fiddle._src.signatures_test_helper import DataclassBaseWithLocalType
 import typing_extensions
@@ -35,6 +36,14 @@ class ChildClassWithNonLocalType(DataclassBaseWithLocalType):
 @dataclasses.dataclass
 class TaggedDataclass:
   pseudo_tagged: typing_extensions.Annotated[int, 'some_metadata'] = 5
+
+
+def args_and_kwargs_fn(*args, **kwargs):  # pylint: disable=unused-argument
+  return locals()
+
+
+def positional_args_fn(a, b=0, /, c=1, *args, kwarg1=None, **kwargs):  # pylint: disable=keyword-arg-before-vararg, unused-argument
+  return locals()
 
 
 class SignatureCacheTest(absltest.TestCase):
@@ -224,6 +233,127 @@ class TypeHintsCacheTest(absltest.TestCase):
   def test_cross_module_dataclass_with_local_type(self):
     hints = signatures.get_type_hints(ChildClassWithNonLocalType)
     self.assertEqual(hints.keys(), {'one', 'two', 'three'}, hints)
+
+
+class SignatureInfoTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    self.signature_positional = signatures.SignatureInfo(
+        inspect.signature(positional_args_fn)
+    )
+    self.signature_args_and_kwargs = signatures.SignatureInfo(
+        inspect.signature(args_and_kwargs_fn)
+    )
+
+  def test_signature_binding(self):
+    arguments = signatures.SignatureInfo.signature_binding(
+        positional_args_fn, 'a', 'b', 'c', 'd', kwarg1=1, kwarg2=2
+    )
+    self.assertEqual(
+        arguments, {0: 'a', 1: 'b', 'c': 'c', 3: 'd', 'kwarg1': 1, 'kwarg2': 2}
+    )
+
+  def test_var_positional_start(self):
+    self.assertEqual(self.signature_positional.var_positional_start, 3)
+    self.assertEqual(self.signature_args_and_kwargs.var_positional_start, 0)
+
+  def test_replace_varargs_handle(self):
+    slc = slice(signatures.VARARGS, -2)
+    self.assertEqual(
+        self.signature_positional.replace_varargs_handle(slc), slice(3, -2)
+    )
+    self.assertEqual(
+        self.signature_positional.replace_varargs_handle(signatures.VARARGS), 3
+    )
+
+  def test_index_to_key(self):
+    arguments = {0: 'a', 1: 'b', 'c': 'c', 3: 'd'}
+    self.assertEqual(self.signature_positional.index_to_key(0, arguments), 0)
+    self.assertEqual(self.signature_positional.index_to_key(1, arguments), 1)
+    self.assertEqual(self.signature_positional.index_to_key(2, arguments), 'c')
+    self.assertEqual(self.signature_positional.index_to_key(3, arguments), 3)
+    self.assertEqual(self.signature_positional.index_to_key(-1, arguments), 3)
+    self.assertEqual(self.signature_positional.index_to_key(-2, arguments), 'c')
+    self.assertEqual(self.signature_positional.index_to_key(-3, arguments), 1)
+    self.assertEqual(self.signature_positional.index_to_key(-4, arguments), 0)
+
+    arguments = {0: 'a', 1: 'b', 2: 'c'}
+    self.assertEqual(
+        self.signature_args_and_kwargs.index_to_key(0, arguments), 0
+    )
+    self.assertEqual(
+        self.signature_args_and_kwargs.index_to_key(1, arguments), 1
+    )
+    self.assertEqual(
+        self.signature_args_and_kwargs.index_to_key(-1, arguments), 2
+    )
+
+  def test_get_default(self):
+    missing = object()
+    self.assertEqual(self.signature_positional.get_default(0, missing), missing)
+    self.assertEqual(self.signature_positional.get_default(1, missing), 0)
+    self.assertEqual(self.signature_positional.get_default(2, missing), 1)
+    self.assertEqual(self.signature_positional.get_default('c', missing), 1)
+    self.assertEqual(
+        self.signature_args_and_kwargs.get_default(0, missing), missing
+    )
+    self.assertEqual(
+        self.signature_args_and_kwargs.get_default(1, missing), missing
+    )
+
+  @parameterized.parameters(
+      [
+          {0: 'a', 1: 'b', 'c': 'c', 3: 'd', 'kwarg1': 1, 'kwarg2': 2},
+          False,
+          False,
+          ['a', 'b', 'c', 'd'],
+          {'kwarg1': 1, 'kwarg2': 2},
+      ],
+      [
+          {0: 'a', 1: 'b', 'c': 'c'},
+          False,
+          False,
+          ['a', 'b'],
+          {'c': 'c'},
+      ],
+      [
+          {1: 'b', 'kwarg1': 1, 'kwarg2': 2},
+          False,
+          True,
+          [signatures.NO_VALUE, 'b'],
+          {'kwarg1': 1, 'kwarg2': 2},
+      ],
+      [
+          {0: 'a', 1: 'b', 'c': 'c', 3: 'd', 'kwarg1': 1, 'kwarg2': 2},
+          True,
+          True,
+          ['a', 'b', 'c', 'd'],
+          {'kwarg1': 1, 'kwarg2': 2},
+      ],
+      [
+          {0: 'a', 1: 'b', 'kwarg1': 1, 'kwarg2': 2},
+          True,
+          True,
+          ['a', 'b', 1],
+          {'kwarg1': 1, 'kwarg2': 2},
+      ],
+  )
+  def test_transform_to_args_kwargs(
+      self,
+      arguments,
+      include_pos_or_kw_in_args,
+      include_no_value,
+      expected_args,
+      expected_kwargs,
+  ):
+    args, kwargs = self.signature_positional.transform_to_args_kwargs(
+        arguments,
+        include_pos_or_kw_in_args=include_pos_or_kw_in_args,
+        include_no_value=include_no_value,
+    )
+    self.assertEqual(args, expected_args)
+    self.assertEqual(kwargs, expected_kwargs)
 
 
 if __name__ == '__main__':

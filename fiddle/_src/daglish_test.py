@@ -56,6 +56,12 @@ def sample_fn(arg, kwarg="test"):
   return arg, kwarg
 
 
+def fn_with_position_args(  # pylint: disable=keyword-arg-before-vararg
+    a, b, /, c=1, *args, kwarg1=None, karg2=None, **kwargs
+):  # pylint: disable=unused-argument
+  return locals()
+
+
 @dataclasses.dataclass
 class TraversalLoggingMapFunction:
   call_args: List[Any] = dataclasses.field(default_factory=list)
@@ -212,6 +218,20 @@ class TraverserRegistryTest(parameterized.TestCase):
 
   @parameterized.named_parameters([
       ("config", fdl.Config(Foo, bar=1, baz=2)),
+      (
+          "positional_config",
+          fdl.Config(
+              fn_with_position_args,
+              0,
+              1,
+              2,
+              3,
+              4,
+              kwarg1=5,
+              var_kwarg1=6,
+              var_kwarg2=7,
+          ),
+      ),
       ("tagged_value", SampleTag.new()),
       ("namedtuple", SampleNamedTuple("a", "b")),
       ("list", [1, 2, 3]),
@@ -487,6 +507,33 @@ class IterateTest(absltest.TestCase):
             (3, "['dataclass'].bar"),
             (fdl.Config(sample_fn, "arg"), "['dataclass'].baz"),
             ("arg", "['dataclass'].baz.arg"),
+        ],
+    )
+
+  def test_walk_positional_arguments(self):
+    config = fdl.Config(
+        fn_with_position_args,
+        0,
+        1,
+        2,
+        3,
+        4,
+        kwarg1=5,
+        var_kwarg1=6,
+        var_kwarg2=7,
+    )
+    self.assertEqual(
+        _iterate_path_strings(config),
+        [
+            (config, ""),
+            (config[0], "[0]"),
+            (config[1], "[1]"),
+            (config.c, ".c"),
+            (config[3], "[3]"),
+            (config[4], "[4]"),
+            (config.kwarg1, ".kwarg1"),
+            (config.var_kwarg1, ".var_kwarg1"),
+            (config.var_kwarg2, ".var_kwarg2"),
         ],
     )
 

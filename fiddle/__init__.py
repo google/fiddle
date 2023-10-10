@@ -29,6 +29,7 @@ from fiddle._src.mutate_buildable import assign
 from fiddle._src.mutate_buildable import update_callable
 from fiddle._src.partial import ArgFactory
 from fiddle._src.partial import Partial
+from fiddle._src.signatures import VARARGS
 from fiddle._src.tagging import add_tag
 from fiddle._src.tagging import clear_tags
 from fiddle._src.tagging import get_tags
