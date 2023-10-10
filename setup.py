@@ -67,7 +67,12 @@ setup(
             'graphviz',
             'pytest',
             'pytype',
-        ] + ['seqio-nightly'] if sys.platform != 'darwin' else []
+        ] + [
+            'seqio',
+            # Temporarily pin the TFDS version to avoid pip backtracking during
+            # unit tests.
+            'tfds_nightly>=4.9.2.dev202308090034',
+        ] if sys.platform != 'darwin' else []
     },
     description='Fiddle: A Python-first configuration library',
     long_description=long_description,
