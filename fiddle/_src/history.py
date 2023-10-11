@@ -35,11 +35,11 @@ The history functionality has a few bits of non-trivial logic:
 import contextlib
 import dataclasses
 import enum
+import inspect
 import itertools
 import os
 import re
 import threading
-import traceback
 from typing import Any, Callable, FrozenSet, Iterator, Optional, Set, Union
 
 from fiddle._src import tag_type
@@ -115,7 +115,9 @@ def _stacktrace_location_provider() -> Location:
   Raises:
     RuntimeError: if no suitable stack frame can be found.
   """
-  for frame, line_number in traceback.walk_stack(None):
+  frame = inspect.currentframe()
+  while frame:
+    line_number = frame.f_lineno
     filename = frame.f_code.co_filename
     if not _exclude_regex.search(filename):
       function_name = frame.f_code.co_name
@@ -123,6 +125,7 @@ def _stacktrace_location_provider() -> Location:
           filename=filename,
           line_number=line_number,
           function_name=function_name)
+    frame = frame.f_back
   raise RuntimeError("Cannot find a suitable frame in the stack trace!")
 
 
