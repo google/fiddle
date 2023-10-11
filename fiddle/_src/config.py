@@ -708,6 +708,42 @@ class Config(Generic[T], Buildable[T]):
       fn_config = Config(test_function, 1)
       fn_config.kwarg = 'kwarg'
 
+  If the class/function has positional arguments, they can be accessed through
+  the `[]` syntax::
+
+      def test_function(a, b, /, c, *args):
+        return locals()
+
+      fn_config = Config(test_function, 1, 2, 3, 4, 5)
+
+      # Read
+      assert fn_config[0] == 1
+      assert fn_config[:] == [1, 2, 3, 4, 5]
+
+      # Modify
+      fn_config[0] = 'a'
+      fn_config.c = 'c'
+
+      # `fdl.VARARGS` represents the start of variadic positional args (*args)
+      fn_config[fdl.VARARGS:] = ['x', 'y']
+      assert fn_config[:] == [1, 2, 3, 'x', 'y']
+
+      # Delete
+      del fn_config[0]
+      del fn_config[fdl.VARARGS:]
+      assert fn_config[:] == [fdl.NO_VALUE, 2, 3]
+
+  NOTE: Directly calling `list` methods like `append` and `extend` is not
+  supported, and will not mutate the config. Like with Python lists, slice
+  operations on Configs effectively create a copy of the underlying sequence.
+
+  NOTE: If using `slice` as key for modifying the config, and the `slice` spans
+  over positional-only or positional-or-keyword arguments, the provided value
+  must have the same length as that of the slice range.
+
+  fn_config[2:4] = ['a', 'b'] # OK
+  fn_config[2:4] = ['m']      # Not OK. Will raise an error!
+
   A ``Config`` instance may be transformed into instances and function outputs
   by passing it to the ``build`` function. The ``build`` function invokes each
   function or class in the configuration tree (appropriately propagating the

@@ -195,6 +195,9 @@ class Partial(Generic[T], config.Buildable[T]):
       partial_class = build(partial_config)
       instance = partial_class()
       assert instance.arg == 'arg'  # The instance config is still 'arg'.
+
+  ``Partial`` also supports configuring function/class with positional
+  arguments. Please see docstring of ``Config`` class for details.
   """
 
   # NOTE(b/201159339): We currently need to repeat this annotation for pytype.

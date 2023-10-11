@@ -167,6 +167,33 @@ passing in the configured parameters. For example::
 In other words ``fdl.build(fdl.Config(MomentumOptimizer, learning_rate=0.1))``
 is effectively equivalent to ``MomentumOptimizer(learning_rate=0.1)``.
 
+Positional arguments
+^^^^^^^^^^^^^^^^^^^^^
+
+:class:`~fiddle.Config` also supports function/class with positional arguments.
+Positional arguments can be easily accessed through the `[]` syntax.::
+
+    def test_function(a, b, /, c, *args):
+      return locals()
+
+    fn_config = Config(test_function, 1, 2, 3, 4, 5)
+
+    # Read
+    assert fn_config[0] == 1
+    assert fn_config[:] == [1, 2, 3, 4, 5]
+
+    # Modify
+    fn_config[0] = 'a'
+    fn_config.c = 'c'
+    # `fdl.VARARGS` represent the start of variadic positional args (*args)
+    fn_config[fdl.VARARGS:] == ['x', 'y']
+    assert fn_config[:] == [1, 2, 3, 'x', 'y']
+
+    # Delete
+    del fn_config[0]
+    del fn_config[fdl.VARARGS:]
+    assert fn_config[:] == [fdl.NO_VALUE, 2, 3]
+
 Nesting configuration
 ^^^^^^^^^^^^^^^^^^^^^
 
