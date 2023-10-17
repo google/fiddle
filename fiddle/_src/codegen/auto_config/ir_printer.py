@@ -118,7 +118,7 @@ def format_expr(expr: Any):
       return f"{base_expression}{param_expressions}"
     elif isinstance(value, code_ir.Name):
       return value.value
-    elif isinstance(value, type):
+    elif isinstance(value, type) and value is not typing.Any:
       return value.__name__
     elif value in typing_consts or type(value) in typing_consts:
       return str(value)
