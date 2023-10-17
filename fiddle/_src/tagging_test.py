@@ -22,6 +22,7 @@ from typing import Any
 from unittest import mock
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import cloudpickle
 import fiddle as fdl
 from fiddle import selectors
@@ -70,6 +71,14 @@ class SampleClass:
     return cls(1, 2)
 
 
+def variadic_positional_fn(a, b, /, c, *args):
+  return a, b, c, *args
+
+
+def positional_only_fn(a, b, /, c):
+  return a, b, c
+
+
 @dataclasses.dataclass
 class DataclassAnnotated:
   one: Annotated[int, Tag1]
@@ -93,7 +102,7 @@ def get_single_tag(tagged_value: tagging.TaggedValueCls) -> tagging.TagType:
   return next(iter(tagged_value.tags))
 
 
-class TaggingTest(absltest.TestCase):
+class TaggingTest(parameterized.TestCase):
 
   def test_tag_str(self):
     self.assertEqual(
@@ -449,7 +458,7 @@ class TaggingTest(absltest.TestCase):
     foo_cfg = tagging.materialize_tags(foo_cfg, tags={BlueTag})
     self.assertEqual(frozenset([RedTag]), fdl.get_tags(foo_cfg, "bar"))
 
-  def test_tagging(self):
+  def test_tagging_ops(self):
     cfg = fdl.Config(SampleClass)
     fdl.add_tag(cfg, "arg1", Tag1)
 
@@ -464,6 +473,52 @@ class TaggingTest(absltest.TestCase):
 
     with self.assertRaisesRegex(ValueError, ".*not set.*"):
       fdl.remove_tag(cfg, "arg1", Tag2)
+
+  @parameterized.parameters([(variadic_positional_fn,), (positional_only_fn,)])
+  def test_tagging_positional_arguments(self, fn):
+    cfg = fdl.Config(fn)
+    fdl.add_tag(cfg, 2, Tag1)
+
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 2))
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, "c"))
+    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 1))
+
+    fdl.add_tag(cfg, 2, Tag2)
+    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 2))
+
+    fdl.set_tags(cfg, 0, {Tag1, Tag2})
+    self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, 0))
+
+    fdl.remove_tag(cfg, 2, Tag2)
+    self.assertEqual(frozenset([Tag1]), fdl.get_tags(cfg, 2))
+
+    with self.assertRaisesRegex(ValueError, ".*not set.*"):
+      fdl.remove_tag(cfg, 2, Tag2)
+
+    fdl.clear_tags(cfg, 2)
+    self.assertEqual(frozenset([]), fdl.get_tags(cfg, 2))
+
+  def test_tagging_with_out_of_range_index(self):
+    cfg = fdl.Config(positional_only_fn, 0, 1, 2)
+
+    for fn in (fdl.add_tag, fdl.set_tags, fdl.remove_tag):
+      with self.assertRaisesRegex(IndexError, ".*is out of range"):
+        fn(cfg, 3, Tag1)
+
+    for fn in (fdl.get_tags, fdl.clear_tags):
+      with self.assertRaisesRegex(IndexError, ".*is out of range"):
+        fn(cfg, 3)
+
+  def test_tagging_with_negative_index(self):
+    cfg = fdl.Config(positional_only_fn, 0, 1, 2)
+
+    for fn in (fdl.add_tag, fdl.set_tags, fdl.remove_tag):
+      with self.assertRaisesRegex(IndexError, "Cannot use negative index"):
+        fn(cfg, -1, Tag1)
+
+    for fn in (fdl.get_tags, fdl.clear_tags):
+      with self.assertRaisesRegex(IndexError, "Cannot use negative index"):
+        fn(cfg, -1)
 
   def test_tag_annotations(self):
     cfg = fdl.Config(DataclassAnnotated)

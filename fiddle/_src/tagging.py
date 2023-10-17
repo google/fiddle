@@ -241,13 +241,48 @@ def materialize_tags(
   return daglish.MemoizedTraversal.run(transform, buildable)
 
 
+def _validate_param_index(buildable: config.Buildable, index: int) -> None:
+  """Validate param index for tagging APIs."""
+  if index < 0:
+    raise IndexError(
+        'Cannot use negative index to specify positional arguments for tagging.'
+    )
+  # If *args exists, any non-negative index is valid because setting tags for
+  # arguments that are not set is allowed.
+  if buildable.__signature_info__.var_positional_start is not None:
+    return
+  params = list(buildable.__signature_info__.parameters.values())
+  err_msg = f'Index {index} is out of range.'
+  if index >= len(params):
+    raise IndexError(err_msg)
+  param = params[index]
+  if param.kind not in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD):
+    raise IndexError(err_msg)
+
+
+def _validate_argument_name(
+    buildable: config.Buildable, argument: Union[str, int]
+) -> None:
+  """Validate argument name for tagging APIs."""
+  if isinstance(argument, str):
+    buildable.__signature_info__.validate_param_name(
+        argument, buildable.__fn_or_cls__
+    )
+  elif isinstance(argument, int):
+    _validate_param_index(buildable, argument)
+
+
 def add_tag(
-    buildable: config.Buildable, argument: str, tag: tag_type.TagType
+    buildable: config.Buildable,
+    argument: Union[str, int],
+    tag: tag_type.TagType,
 ) -> None:
   """Tags `name` with `tag` in `buildable`."""
-  buildable.__signature_info__.validate_param_name(
-      argument, buildable.__fn_or_cls__
-  )
+  _validate_argument_name(buildable, argument)
+  if isinstance(argument, int):
+    argument = buildable.__signature_info__.index_to_key(
+        argument, buildable.__arguments__
+    )
   buildable.__argument_tags__[argument].add(tag)
   buildable.__argument_history__.add_updated_tags(
       argument, buildable.__argument_tags__[argument]
@@ -256,10 +291,11 @@ def add_tag(
 
 def set_tags(
     buildable: config.Buildable,
-    argument: str,
+    argument: Union[str, int],
     tags: Collection[tag_type.TagType],
 ) -> None:
   """Sets tags for a parameter in `buildable`, overriding existing tags."""
+  # Skip the validation here as this API depends on other tagging APIs.
   clear_tags(buildable, argument)
   for tag in tags:
     add_tag(buildable, argument, tag)
@@ -269,12 +305,17 @@ def set_tags(
 
 
 def remove_tag(
-    buildable: config.Buildable, argument: str, tag: tag_type.TagType
+    buildable: config.Buildable,
+    argument: Union[str, int],
+    tag: tag_type.TagType,
 ) -> None:
   """Removes a given tag from a named argument of a Buildable."""
-  buildable.__signature_info__.validate_param_name(
-      argument, buildable.__fn_or_cls__
-  )
+  _validate_argument_name(buildable, argument)
+  if isinstance(argument, int):
+    argument = buildable.__signature_info__.index_to_key(
+        argument, buildable.__arguments__
+    )
+
   field_tag_set = buildable.__argument_tags__[argument]
   if tag not in field_tag_set:
     raise ValueError(
@@ -286,11 +327,13 @@ def remove_tag(
   )
 
 
-def clear_tags(buildable: config.Buildable, argument: str) -> None:
+def clear_tags(buildable: config.Buildable, argument: Union[str, int]) -> None:
   """Removes all tags from a named argument of a Buildable."""
-  buildable.__signature_info__.validate_param_name(
-      argument, buildable.__fn_or_cls__
-  )
+  _validate_argument_name(buildable, argument)
+  if isinstance(argument, int):
+    argument = buildable.__signature_info__.index_to_key(
+        argument, buildable.__arguments__
+    )
   buildable.__argument_tags__[argument].clear()
   buildable.__argument_history__.add_updated_tags(
       argument, buildable.__argument_tags__[argument]
@@ -298,6 +341,12 @@ def clear_tags(buildable: config.Buildable, argument: str) -> None:
 
 
 def get_tags(
-    buildable: config.Buildable, argument: str
+    buildable: config.Buildable,
+    argument: Union[str, int],
 ) -> FrozenSet[tag_type.TagType]:
+  _validate_argument_name(buildable, argument)
+  if isinstance(argument, int):
+    argument = buildable.__signature_info__.index_to_key(
+        argument, buildable.__arguments__
+    )
   return frozenset(buildable.__argument_tags__[argument])
