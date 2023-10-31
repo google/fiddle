@@ -120,15 +120,6 @@ class LazyImportsInspectTest(absltest.TestCase, unittest.TestCase):
 
 class BuildLazyImportsTest(absltest.TestCase, unittest.TestCase):
 
-  def test_args(self):
-    # TODO(b/291129675): Support args for lazy imported classes/functions.
-    with self.assertRaisesRegex(
-        NotImplementedError, 'Positional arguments are not supported yet'
-    ):
-      with lazy_imports.lazy_imports(kw_only=False):
-        from fiddle._src.experimental import lazy_imports_test_example  # pylint: disable=g-import-not-at-top
-      _ = config_lib.Config(lazy_imports_test_example.MyDataClass, 1, 2)
-
   def test_import_as(self):
     with lazy_imports.lazy_imports(kw_only=True):
       from fiddle._src.experimental import lazy_imports_test_example as example  # pylint: disable=g-import-not-at-top
@@ -192,6 +183,27 @@ class BuildLazyImportsTest(absltest.TestCase, unittest.TestCase):
     # until call time when working with fdl.Partial.
     self.assertIsInstance(obj.func, lazy_imports.ProxyObject)  # pytype: disable=attribute-error
     self.assertEqual(obj(x=5), 128)
+
+  def test_positional_args(self):
+    with lazy_imports.lazy_imports(kw_only=False):
+      from fiddle._src.experimental import lazy_imports_test_example  # pylint: disable=g-import-not-at-top
+    cfg = config_lib.Config(lazy_imports_test_example.MyDataClass, 1, 2)
+    obj = building.build(cfg)
+    self.assertEqual(obj.sum(), 3)
+
+  def test_partial_w_positional_args(self):
+    with lazy_imports.lazy_imports(kw_only=False):
+      from fiddle._src.experimental import lazy_imports_test_example  # pylint: disable=g-import-not-at-top
+    cfg = partial.Partial(lazy_imports_test_example.my_function, 5)
+    obj = building.build(cfg)
+    self.assertIsInstance(obj.func, lazy_imports.ProxyObject)  # pytype: disable=attribute-error
+    self.assertEqual(obj(2), 130)
+
+  def test_kw_only_check(self):
+    with lazy_imports.lazy_imports(kw_only=True):
+      from fiddle._src.experimental import lazy_imports_test_example  # pylint: disable=g-import-not-at-top
+    with self.assertRaisesRegex(TypeError, 'too many positional arguments'):
+      _ = config_lib.Config(lazy_imports_test_example.MyDataClass, 1, 2)
 
 
 class SerializationTest(absltest.TestCase, unittest.TestCase):

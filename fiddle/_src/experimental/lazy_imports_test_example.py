@@ -18,8 +18,8 @@
 import dataclasses
 
 
-def my_function(x):
-  return 123 + x
+def my_function(x, y=0):
+  return 123 + x + y
 
 
 @dataclasses.dataclass(frozen=True)

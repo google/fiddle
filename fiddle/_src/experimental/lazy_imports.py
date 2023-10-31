@@ -21,11 +21,12 @@ import dataclasses
 import functools
 import importlib
 import inspect
+import logging
 from typing import Any, Iterator, Optional
 
 
 @contextlib.contextmanager
-def lazy_imports(kw_only=False) -> Iterator[None]:
+def lazy_imports(kw_only=True) -> Iterator[None]:
   """Context manager which replaces import statements with lazy imports.
 
   A ProxyObject is returned for the import statement as dummy module. The
@@ -79,17 +80,42 @@ def lazy_imports(kw_only=False) -> Iterator[None]:
   out = my_fn(x=1, ...)  # module_2 is loaded here during call time.
   ```
 
+  NOTE: When using positional arguments for lazy-imported functions/classes,
+  be aware that the config will likely be different from normal-imported
+  functions/classes. As Fiddle does not have signature information for
+  lazy-imported modules, values for positional arguments, like value 'v' in the
+  example below, will be saved as positional-only arguments, and using the index
+  0 as the key in `__arguments__`, even if it actually corresponds to a
+  positional-or-keyword argument.
+
+  # In foo.py
+  def bar(x):
+    return x
+
+  # In file_1.py
+  with fdl.lazy_import():
+    import foo
+  cfg_1 = fdl.Config(foo.bar, 'v')
+  assert cfg_1.__arguments__ == {0: 'v'}
+
+  # In file_2.py
+  import foo
+  cfg_2 = fdl.Config(foo.bar, 'v')
+  assert cfg_2.__arguments__ == {'x': 'v'}
+
 
   Args:
     kw_only: Whether to only allow keyword args usage for lazy imported modules.
+      Defaults to True.
 
   Yields:
     None
   """
   if not kw_only:
-    raise NotImplementedError(
-        'Positional arguments are not supported yet, please set `kw_only` as '
-        'True for `lazy_imports`.'
+    logging.warning(
+        'When using positional arguments for lazy-imported functions/classes,'
+        ' be aware that the config will likely be different from'
+        'normal-imported functions/classes.'
     )
 
   # Need to mock `__import__` (instead of `sys.meta_path`, as we do not want
@@ -214,7 +240,7 @@ class ProxyObject:
     return ret
 
   def __hash__(self):
-    return hash((self.qualname, self.parent))
+    return hash((self.qualname, self.parent, self.kw_only))
 
   def __eq__(self, other):
     if not isinstance(other, ProxyObject):
