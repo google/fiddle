@@ -123,6 +123,10 @@ class AutoConfigTransformerTest(parameterized.TestCase, test_util.TestCase):
               '(a, _attr_save_temp_0) = v\n'
               "__auto_config_attr_save_handler__(b, 'c', _attr_save_temp_0)"
           ),
+          (
+              'a, _attr_save_temp_0 = v\n'
+              "__auto_config_attr_save_handler__(b, 'c', _attr_save_temp_0)"
+          ),
       ),
       (
           'a = b = c',
@@ -132,6 +136,14 @@ class AutoConfigTransformerTest(parameterized.TestCase, test_util.TestCase):
           'a, b.c = x.y.z = foo.bar',
           (
               '(a, _attr_save_temp_0) = _attr_save_temp_1 = '
+              "__auto_config_attr_load_handler__(foo, 'bar')\n"
+              "__auto_config_attr_save_handler__(b, 'c', _attr_save_temp_0)\n"
+              '__auto_config_attr_save_handler__('
+              "__auto_config_attr_load_handler__(x, 'y'), "
+              "'z', _attr_save_temp_1)"
+          ),
+          (
+              'a, _attr_save_temp_0 = _attr_save_temp_1 = '
               "__auto_config_attr_load_handler__(foo, 'bar')\n"
               "__auto_config_attr_save_handler__(b, 'c', _attr_save_temp_0)\n"
               '__auto_config_attr_save_handler__('
@@ -167,16 +179,24 @@ class AutoConfigTransformerTest(parameterized.TestCase, test_util.TestCase):
           # TODO(b/288479702): Add validation for ast.Starred pattern.
           'a, *a.b = foo.bar',
           "(a, *a.b) = __auto_config_attr_load_handler__(foo, 'bar')",
+          "a, *a.b = __auto_config_attr_load_handler__(foo, 'bar')",
       ),
   )
-  def test_attribute_save(self, source, expected):
+  def test_attribute_save(self, source, expected, py11_expected=None):
     version = sys.version_info
     # ast.unparse is available only after Python 3.9
     if version.major >= 3 and version.minor >= 9:
       transfomer = auto_config._AutoConfigNodeTransformer(source, 'dummy.py', 0)
       node = ast.parse(source)
       node = transfomer.visit(node)
-      self.assertEqual(ast.unparse(node), expected)
+      # `ast.unparse` has different behaviors since Python 3.11, for example,
+      # ast.unparse(ast.parse('a, b = c'))
+      # Before Python 3.11, it returns: '(a, b) = c'
+      # From Python 3.11, it returns: 'a, b = c'
+      if version.minor >= 11 and py11_expected is not None:
+        self.assertEqual(ast.unparse(node), py11_expected)
+      else:
+        self.assertEqual(ast.unparse(node), expected)
 
 
 class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
