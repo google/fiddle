@@ -221,3 +221,36 @@ the command line like this; if you'd like to set a complex value, please write a
 fiddler and invoke it with the previous Fiddlers syntax.
 
 </section>
+
+## Serializing and forwarding configurations
+
+The new flags API provides a convenient way to serialize and forward a config.
+This can be useful if you want to construct a Fiddle config in your XManager
+launch script and forward it as an argument to your executable. This can be
+accomplished by calling `.serialize()` on the absl flag. A basic example on how
+this can be used in conjunction with XManager is provided below:
+
+```py
+from absl import app
+from absl import flags
+from fiddle import absl_flags
+from xmanager import xm
+from xmanager import xm_local
+
+FLAGS = flags.FLAGS
+
+absl_flags.DEFINE_fiddle_config("config", help_string="Fiddle configuration.")
+
+def main(_):
+  with xm_local.create_experiment("Fiddle Flag Forwarding") as experiment:
+    [executable] = experiment.package([
+      xm.bazel_binary(
+        label=...,
+        executor_spec=xm_local.Local.Spec(),
+        args=[FLAGS['config'].serialize()]
+      ),
+    ])
+
+if __name__ == '__main__':
+  app.run(main)
+```

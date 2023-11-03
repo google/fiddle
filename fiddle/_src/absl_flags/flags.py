@@ -41,6 +41,46 @@ _F = TypeVar("_F")
 _BASE_CONFIG_DIRECTIVES = {"config", "config_file", "config_str"}
 
 
+class FiddleFlagSerializer(flags.ArgumentSerializer):
+  """ABSL serializer for a Fiddle config flag.
+
+  This class can be provided to `FiddleFlag` as a serializer
+  to serialize a fiddle config to a single command line argument.
+
+  Example usage:
+  ```
+  from absl import flags
+  from fiddle import absl_flags as fdl_flags
+
+  FLAGS = flags.FLAGS
+
+  flags.DEFINE_flag(
+    fdl_flags.FiddleFlag(
+        name="config",
+        default=None,
+        parser=flags.ArgumentParser(),
+        serializer=FiddleFlagSerializer(),
+        help_string="My fiddle flag",
+    ),
+    flag_values=FLAGS,
+  )
+
+  serialized_flag = FLAGS['config'].serialize()
+  ```
+
+  Users will more commonly use `fdl_flags.DEFINE_fiddle_config`
+  which provides this serializer by default.
+  """
+
+  def __init__(self, pyref_policy: serialization.PyrefPolicy):
+    self._pyref_policy = pyref_policy
+
+  def serialize(self, value: config.Buildable) -> str:
+    serializer = utils.ZlibJSONSerializer()
+    serialized = serializer.serialize(value, pyref_policy=self._pyref_policy)
+    return f"config_str:{serialized}"
+
+
 class FiddleFlag(flags.MultiFlag):
   """ABSL flag class for a Fiddle config flag.
 
@@ -171,6 +211,11 @@ class FiddleFlag(flags.MultiFlag):
           expression, pyref_policy=self._pyref_policy
       )
 
+  def _serialize(self, value) -> str:
+    # Skip MultiFlag serialization as we don't truly have a multi-flag.
+    # This will invoke Flag._serialize
+    return super(flags.MultiFlag, self)._serialize(value)
+
   @property
   def value(self):
     while self._remaining_directives:
@@ -181,7 +226,7 @@ class FiddleFlag(flags.MultiFlag):
       if not match:
         raise ValueError(
             f"All flag values to {self.name} must begin with 'config:', "
-            "'config_file:', 'set:', or 'fiddler:'."
+            "'config_file:', 'config_str:', 'set:', or 'fiddler:'."
         )
       command, expression = match.groups()
 
@@ -220,6 +265,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     default: Any = None,
     help_string: str,
     default_module: Optional[types.ModuleType] = None,
+    pyref_policy: Optional[serialization.PyrefPolicy] = None,
     flag_values: flags.FlagValues = flags.FLAGS,
 ) -> flags.FlagHolder[Any]:
   r"""Declare and define a fiddle command line flag object.
@@ -274,6 +320,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     default: default value of the flag.
     help_string: help string describing what the flag does.
     default_module: the python module where this flag is defined.
+    pyref_policy: a policy for importing references to Python objects.
     flag_values: the ``FlagValues`` instance with which the flag will be
       registered. This should almost never need to be overridden.
 
@@ -285,8 +332,9 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
           name=name,
           default_module=default_module,
           default=default,
+          pyref_policy=pyref_policy,
           parser=flags.ArgumentParser(),
-          serializer=None,
+          serializer=FiddleFlagSerializer(pyref_policy=pyref_policy),
           help_string=help_string,
       ),
       flag_values=flag_values,
