@@ -267,6 +267,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     default_module: Optional[types.ModuleType] = None,
     pyref_policy: Optional[serialization.PyrefPolicy] = None,
     flag_values: flags.FlagValues = flags.FLAGS,
+    required: bool = False,
 ) -> flags.FlagHolder[Any]:
   r"""Declare and define a fiddle command line flag object.
 
@@ -323,6 +324,8 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     pyref_policy: a policy for importing references to Python objects.
     flag_values: the ``FlagValues`` instance with which the flag will be
       registered. This should almost never need to be overridden.
+    required: bool, is this a required flag. This must be used as a keyword
+      argument.
 
   Returns:
     A handle to defined flag.
@@ -338,4 +341,5 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
           help_string=help_string,
       ),
       flag_values=flag_values,
+      required=required,
   )
