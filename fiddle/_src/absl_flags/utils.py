@@ -211,7 +211,7 @@ def parse_value(value: str, path: str) -> Any:
 def resolve_function_reference(
     function_name: str,
     mode: ImportDottedNameDebugContext,
-    module: types.ModuleType,
+    module: Optional[types.ModuleType],
     allow_imports: bool,
     failure_msg_prefix: str,
 ):
