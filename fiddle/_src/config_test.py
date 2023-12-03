@@ -18,6 +18,7 @@
 import copy
 import dataclasses
 import pickle
+import sys
 import threading
 from typing import Any, Dict, Generic, TypeVar
 from absl.testing import absltest
@@ -679,8 +680,9 @@ class ConfigTest(parameterized.TestCase):
     self.assertEqual(cfg1, cfg2)
 
   def test_generic_classes(self):
-    cfg = fdl.Config(GenericClass, 1)
-    self.assertEqual(fdl.build(cfg), GenericClass(1))
+    if sys.version_info >= (3, 9):
+      cfg = fdl.Config(GenericClass, 1)
+      self.assertEqual(fdl.build(cfg), GenericClass(1))
 
     self.assertEqual(fdl.Config(GenericClass).x, 1)
     self.assertEqual(fdl.Config(GenericClass[int]).x, 1)
