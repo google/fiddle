@@ -678,7 +678,10 @@ class ConfigTest(parameterized.TestCase):
     cfg2 = fdl.Config(basic_fn, 1, 2, None, kwarg2=None)
     self.assertEqual(cfg1, cfg2)
 
-  def test_default_value_for_generic_classes(self):
+  def test_generic_classes(self):
+    cfg = fdl.Config(GenericClass, 1)
+    self.assertEqual(fdl.build(cfg), GenericClass(1))
+
     self.assertEqual(fdl.Config(GenericClass).x, 1)
     self.assertEqual(fdl.Config(GenericClass[int]).x, 1)
 
