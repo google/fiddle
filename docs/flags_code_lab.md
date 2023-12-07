@@ -81,10 +81,10 @@ When our example program is executed, the following steps occur:
 
     ```sh
     python3 -m fiddle._src.absl_flags.sample_test_binary \
-    --sample_config config:base_experiment \ --sample_config
-    fiddler:'set_dtypes(dtype="float64")' \ --sample_config
-    set:decoder.mlp.use_bias=True \ --sample_config
-    set:decoder.mlp.dtype='"float16"'
+      --sample_config config:base_experiment \
+      --sample_config fiddler:'set_dtypes(dtype="float64")' \
+      --sample_config set:decoder.mlp.use_bias=True \
+      --sample_config set:decoder.mlp.dtype='"float16"'
     ```
 
 2.  **Flag Parsing**: The custom Fiddle flag parser parses Fiddle-related flags
