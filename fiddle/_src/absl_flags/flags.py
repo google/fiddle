@@ -314,7 +314,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
   command line flags applied in the order they were passed in.
 
   To load a Fiddle config from a serialized file:
-  python3 -m path.to.my.binary --my_config=file://path/to/my_file
+  python3 -m path.to.my.binary --my_config=config_file:path/to/file
 
   Args:
     name: name of the command line flag.
