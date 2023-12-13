@@ -19,7 +19,7 @@ import copy
 import dataclasses
 import pickle
 import threading
-from typing import Any, Dict, Generic, TypeVar
+from typing import Any, Dict, Generic, Protocol, TypeVar
 from absl.testing import absltest
 from absl.testing import parameterized
 import fiddle as fdl
@@ -122,9 +122,15 @@ class GenericClass(Generic[_T]):
   x: _T = 1
 
 
+class ProtocolSubclass(Protocol):
+
+  def __init__(self, arg):
+    self.arg = arg
+
+
 class ConfigTest(parameterized.TestCase):
 
-  def test_config_for_classes(self):
+  def test_config_for_dataclasses(self):
     class_config = fdl.Config(SampleClass, 1, kwarg2='kwarg2')
     pytype_extensions.assert_type(class_config, fdl.Config[SampleClass])
     self.assertEqual(class_config.arg1, 1)
@@ -159,6 +165,15 @@ class ConfigTest(parameterized.TestCase):
         'kwarg1': 'kwarg1',
         'kwarg2': 'kwarg2'
     })
+
+  def test_config_for_protocol_subclasses(self):
+    class_config = fdl.Config(ProtocolSubclass, 42)
+    pytype_extensions.assert_type(class_config, fdl.Config[ProtocolSubclass])
+    self.assertEqual(class_config.arg, 42)
+
+    instance = fdl.build(class_config)
+    pytype_extensions.assert_type(instance, ProtocolSubclass)
+    self.assertEqual(instance.arg, 42)
 
   def test_config_for_functions_with_var_args(self):
     fn_config = fdl.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')

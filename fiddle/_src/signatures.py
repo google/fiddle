@@ -17,7 +17,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Callable, Dict, Generic, List, Mapping, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Type, Union
 import weakref
 import typing_extensions
 
@@ -62,8 +62,6 @@ def _get_signature_uncached(fn_or_cls) -> inspect.Signature:
   # support.
   origin = typing_extensions.get_origin(fn_or_cls)
   fn_or_cls = origin if origin is not None else fn_or_cls
-  if isinstance(fn_or_cls, type) and issubclass(fn_or_cls, Generic):
-    fn_or_cls = fn_or_cls.__init__
 
   try:
     return inspect.signature(fn_or_cls)
