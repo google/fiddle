@@ -502,7 +502,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     class CustomArgFactory(fdl.ArgFactory):
       pass
 
-    config_types = auto_config.ConfigTypes(
+    config_types = auto_config.ConfigTypes(  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
         config_cls=CustomConfig,
         partial_cls=CustomPartial,
         arg_factory_cls=CustomArgFactory,
@@ -733,7 +733,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     cfg = instance.my_fn.as_buildable('a')
     self.assertEqual(fdl.get_callable(cfg), basic_fn)
     self.assertEqual(cfg.arg, 'a')
-    self.assertEqual(cfg.kwarg, fdl.Config(super(MyClass, instance).method))
+    self.assertEqual(cfg.kwarg, fdl.Config(super(MyClass, instance).method))  # pytype: disable=invalid-annotation  # use-fiddle-overlay
 
   def test_custom_policy(self):
 
@@ -830,7 +830,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
       return obj(1)
 
     cfg = make_sample.as_buildable(obj)
-    self.assertEqual(cfg, fdl.Config(obj, arg1=1))
+    self.assertEqual(cfg, fdl.Config(obj, arg1=1))  # pytype: disable=invalid-annotation  # use-fiddle-overlay
 
   def test_control_flow_if(self):
 

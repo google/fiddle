@@ -119,7 +119,7 @@ class PathFirstNamerTest(absltest.TestCase):
     self.assertLen(name_set, num_values)
 
   def test_names_as_documented_example_1(self):
-    config = fdl.Config(Foo, bar={"qux": fdl.Config(Qux)})
+    config = fdl.Config(Foo, bar={"qux": fdl.Config(Qux)})  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
     namer = new_path_first_namer()
     names = {
         daglish.path_str(path): namer.name_for(value, [path])
@@ -210,7 +210,7 @@ class TypeFirstNamerTest(absltest.TestCase):
     self.assertLen(name_set, num_values)
 
   def test_names_as_documented_example_1(self):
-    config = fdl.Config(Foo, bar={"qux": fdl.Config(Qux)})
+    config = fdl.Config(Foo, bar={"qux": fdl.Config(Qux)})  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
     namer = new_type_first_namer()
     names = {
         daglish.path_str(path): namer.name_for(value, [path])

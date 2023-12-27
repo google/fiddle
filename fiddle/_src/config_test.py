@@ -144,7 +144,9 @@ class ConfigTest(parameterized.TestCase):
 
   def test_config_for_functions(self):
     fn_config = fdl.Config(basic_fn, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(fn_config, fdl.Config[Dict[str, Any]])
+    pytype_extensions.assert_type(
+        fn_config, fdl.Config[Dict[str, Any]]
+    )  # use-fiddle-overlay
     self.assertEqual(fn_config.arg1, 1)
     self.assertEqual(fn_config.kwarg2, 'kwarg2')
     fn_config.arg1 = 'arg1'
@@ -153,7 +155,7 @@ class ConfigTest(parameterized.TestCase):
     fn_config.kwarg1 = 'kwarg1'
 
     result = fdl.build(fn_config)
-    pytype_extensions.assert_type(result, Dict[str, Any])
+    pytype_extensions.assert_type(result, Dict[str, Any])  # use-fiddle-overlay
     self.assertEqual(result, {
         'arg1': 'arg1',
         'arg2': 'arg2',
@@ -529,8 +531,8 @@ class ConfigTest(parameterized.TestCase):
     fn_config_copy.arg2 = 'fn_arg2_copy'
     self.assertEqual(fn_config.arg2, 'fn_arg2')
     # But modifying a shared value is seen by both.
-    fn_config_copy.arg1.arg2 = 'mutated'
-    self.assertEqual(fn_config.arg1.arg2, 'mutated')
+    fn_config_copy.arg1.arg2 = 'mutated'  # pytype: disable=not-writable  # use-fiddle-overlay
+    self.assertEqual(fn_config.arg1.arg2, 'mutated')  # pytype: disable=attribute-error  # use-fiddle-overlay
 
   def test_buildable_subclass(self):
 
@@ -584,8 +586,8 @@ class ConfigTest(parameterized.TestCase):
     fn_config_copy.arg2 = 'fn_arg2_copy'
     self.assertEqual(fn_config.arg2, 'fn_arg2')
     # With a deep copy, the value is no longer shared.
-    fn_config_copy.arg1.arg2 = 'mutated'
-    self.assertEqual(fn_config.arg1.arg2, 'arg2')
+    fn_config_copy.arg1.arg2 = 'mutated'  # pytype: disable=not-writable  # use-fiddle-overlay
+    self.assertEqual(fn_config.arg1.arg2, 'arg2')  # pytype: disable=attribute-error  # use-fiddle-overlay
 
   def test_deep_copy_preserves_instance_sharing(self):
     class_config = fdl.Config(SampleClass, 'arg1', 'arg2')
@@ -624,9 +626,9 @@ class ConfigTest(parameterized.TestCase):
     cfg1 = make_nested_config()
     cfg2 = make_nested_config()
     self.assertEqual(cfg1, cfg2)
-    cfg2.arg2.arg1.kwarg1 = 'another value'
+    cfg2.arg2.arg1.kwarg1 = 'another value'  # pytype: disable=attribute-error  # use-fiddle-overlay
     self.assertNotEqual(cfg1, cfg2)
-    cfg1.arg2.arg1.kwarg1 = 'another value'
+    cfg1.arg2.arg1.kwarg1 = 'another value'  # pytype: disable=attribute-error  # use-fiddle-overlay
     self.assertEqual(cfg1, cfg2)
 
   def test_equality_fn_or_cls_mismatch(self):
@@ -657,8 +659,8 @@ class ConfigTest(parameterized.TestCase):
     self.assertFalse(cfg_subclass.__eq__(cfg))
 
   def test_equality_classmethods(self):
-    cfg_a = fdl.Config(SampleClass.a_classmethod)
-    cfg_b = fdl.Config(SampleClass.a_classmethod)
+    cfg_a = fdl.Config(SampleClass.a_classmethod)  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+    cfg_b = fdl.Config(SampleClass.a_classmethod)  # pytype: disable=invalid-annotation  # use-fiddle-overlay
     self.assertEqual(cfg_a, cfg_b)
 
   def test_equality_positional_args_default_value(self):
@@ -1020,7 +1022,7 @@ class ConfigTest(parameterized.TestCase):
     cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2)
     fdl.add_tag(cfg1, 'arg1', Tag1)
     with self.assertRaises(ValueError):
-      fdl.Partial(cfg1)
+      fdl.Partial(cfg1)  # pytype: disable=invalid-annotation  # use-fiddle-overlay
 
   def test_copy_constructor_with_updates_errors(self):
     cfg1 = fdl.Config(fn_with_var_kwargs, 1, 2, c=[])

@@ -27,7 +27,7 @@ from fiddle._src.codegen.auto_config import test_fixtures
 class SplitArgFactoriesTest(absltest.TestCase):
 
   def test_lower_arg_factories(self):
-    config = fdl.Partial(
+    config = fdl.Partial(  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
         test_fixtures.Attention,
         kernel_init=fdl.ArgFactory(
             test_fixtures.initializer, name='const', dtype='float32'
@@ -39,7 +39,7 @@ class SplitArgFactoriesTest(absltest.TestCase):
     self.assertIn('kernel_init=ArgFactoryExpr[fdl.Partial', code)
 
   def test_lower_nested_arg_factories(self):
-    config = fdl.Partial(
+    config = fdl.Partial(  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
         test_fixtures.EncoderLayer,
         attention=fdl.ArgFactory(
             test_fixtures.Attention,

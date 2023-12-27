@@ -398,10 +398,10 @@ class HistoryPerLeafParamTests(absltest.TestCase):
     cfg = fdl.Config(fn_x_y,
                      [fdl.Config(fn_x_y, 1, '1'),
                       fdl.Config(SampleClass, 2)])
-    cfg.x[0].x = 3
-    cfg.x[1].a = 2  # Reset to same value.
-    cfg.x[0].y = 'abc'
-    cfg.x[0].x = 4
+    cfg.x[0].x = 3  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    cfg.x[1].a = 2  # Reset to same value.  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    cfg.x[0].y = 'abc'  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    cfg.x[0].x = 4  # pytype: disable=unsupported-operands  # use-fiddle-overlay
     output = printing.history_per_leaf_parameter(cfg)
     self.assertTrue(printing._has_nested_builder(cfg.x))
     expected = textwrap.dedent(rf"""

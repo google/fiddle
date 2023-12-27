@@ -576,7 +576,7 @@ class MemoizedTraversalTest(absltest.TestCase):
 
   def test_cycle_detection_in_fdl_build(self):
     cfg = fdl.Config(Foo, bar=fdl.Config(Foo))
-    cfg.bar.bar = cfg
+    cfg.bar.bar = cfg  # pytype: disable=not-writable  # use-fiddle-overlay
     with self.assertRaisesRegex(
         ValueError,
         "Fiddle detected a cycle while traversing a value: "

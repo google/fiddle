@@ -48,14 +48,14 @@ class TransformTest(absltest.TestCase):
     so there's no need for unintern_tuples_of_literals as each tuple will have a
     different ID.
     """
-    foo_cfg = fdl.Config(Foo, a_tuple=(1, 2, 3), another_tuple=(1, 2, 3))
+    foo_cfg = fdl.Config(Foo, a_tuple=(1, 2, 3), another_tuple=(1, 2, 3))  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
     self.assertIs(
         foo_cfg.a_tuple, foo_cfg.another_tuple,
         "This likely means Python is no longer interning tuples. We can remove "
         "unintern_tuples_of_literals in that case.")
 
   def test_unintern_tuple_of_literals(self):
-    foo_cfg = fdl.Config(Foo, a_tuple=(1, 2, 3), another_tuple=(1, 2, 3))
+    foo_cfg = fdl.Config(Foo, a_tuple=(1, 2, 3), another_tuple=(1, 2, 3))  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
     uninterned_foo_cfg = transform.unintern_tuples_of_literals(foo_cfg)
 
     self.assertNotEqual(
@@ -65,7 +65,7 @@ class TransformTest(absltest.TestCase):
         "uninterning.")
 
   def test_unintern_tuple_of_literals_in_list(self):
-    foo_cfg = fdl.Config(Foo, a_tuple=(1, 2, 3), another_tuple=(1, 2, 3))
+    foo_cfg = fdl.Config(Foo, a_tuple=(1, 2, 3), another_tuple=(1, 2, 3))  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
 
     uninterned_foo_cfg = transform.unintern_tuples_of_literals(foo_cfg)
 
@@ -77,7 +77,7 @@ class TransformTest(absltest.TestCase):
 
   def test_unintern_tuple_of_non_literals(self):
     not_tuple_of_literals = ([1, 2], 3, 4)
-    foo_cfg = fdl.Config(
+    foo_cfg = fdl.Config(  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
         Foo, a_tuple=not_tuple_of_literals, another_tuple=not_tuple_of_literals)
 
     uninterned_foo_cfg = transform.unintern_tuples_of_literals(foo_cfg)
@@ -95,8 +95,8 @@ class TransformTest(absltest.TestCase):
             fdl.Partial(Foo)))
 
   def test_replace_unconfigured_partials_with_callables_replace_nested(self):
-    cfg = fdl.Config(Foo, a_callable=fdl.Partial(Foo))
-    expected_cfg = fdl.Config(Foo, a_callable=Foo)
+    cfg = fdl.Config(Foo, a_callable=fdl.Partial(Foo))  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
+    expected_cfg = fdl.Config(Foo, a_callable=Foo)  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
     self.assertEqual(
         expected_cfg,
         transform.replace_unconfigured_partials_with_callables(cfg))

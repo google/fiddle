@@ -111,7 +111,9 @@ class PartialTest(parameterized.TestCase):
 
   def test_partial_for_functions(self):
     fn_partial = fdl.Partial(basic_fn, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(fn_partial, fdl.Partial[Dict[str, Any]])
+    pytype_extensions.assert_type(
+        fn_partial, fdl.Partial[Dict[str, Any]]
+    )  # use-fiddle-overlay
     self.assertEqual(fn_partial.arg1, 1)
     self.assertEqual(fn_partial.kwarg2, 'kwarg2')
     fn_partial.arg1 = 'arg1'
@@ -120,9 +122,11 @@ class PartialTest(parameterized.TestCase):
     fn_partial.kwarg1 = 'kwarg1'
 
     partial = fdl.build(fn_partial)
-    pytype_extensions.assert_type(partial, Callable[..., Dict[str, Any]])
+    pytype_extensions.assert_type(
+        partial, Callable[..., Dict[str, Any]]
+    )  # use-fiddle-overlay
     value = partial()
-    pytype_extensions.assert_type(value, Dict[str, Any])
+    pytype_extensions.assert_type(value, Dict[str, Any])  # use-fiddle-overlay
     self.assertEqual(
         value,
         {

@@ -177,7 +177,7 @@ class TaggingTest(parameterized.TestCase):
 
   def test_tagged_value_error_message(self):
     cfg = fdl.Config(Foo)
-    cfg.bar = tagging.TaggedValue(tags={tst.ParameterDType})
+    cfg.bar = tagging.TaggedValue(tags={tst.ParameterDType})  # pytype: disable=annotation-type-mismatch  # use-fiddle-overlay
     with self.assertRaisesRegex(
         TypeError,
         (
@@ -547,7 +547,7 @@ class TaggingTest(parameterized.TestCase):
 
     with self.subTest("tagged_field_with_value"):
       cfg = fdl.Config(DataclassAnnotated)
-      cfg.one = fdl.TaggedValue([Tag2], 3)
+      cfg.one = fdl.TaggedValue([Tag2], 3)  # pytype: disable=annotation-type-mismatch  # use-fiddle-overlay
       self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg, "one"))
       cfg2 = flatten_unflatten(cfg)
       self.assertEqual(frozenset([Tag1, Tag2]), fdl.get_tags(cfg2, "one"))
