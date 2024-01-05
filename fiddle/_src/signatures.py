@@ -189,7 +189,10 @@ class SignatureInfo:
         docstring for the definition of canonical storage format.
     """
     signature = get_signature(fn_or_cls)
-    arguments = signature.bind_partial(*args, **kwargs).arguments
+    try:
+      arguments = signature.bind_partial(*args, **kwargs).arguments
+    except TypeError as e:
+      raise TypeError(f'Cannot bind arguments to {fn_or_cls}: {e}') from e
     for index, name in enumerate(list(arguments.keys())):
       param = signature.parameters[name]
       # Use the index as key for positional only arguments

@@ -254,6 +254,16 @@ class SignatureInfoTest(parameterized.TestCase):
         arguments, {0: 'a', 1: 'b', 'c': 'c', 3: 'd', 'kwarg1': 1, 'kwarg2': 2}
     )
 
+  def test_signature_binding_invalid_argument_error(self):
+    with self.assertRaisesRegex(
+        TypeError,
+        'Cannot bind.*ChildClassWithNonLocalType.*unexpected keyword argument'
+        " 'nonexistent'",
+    ):
+      signatures.SignatureInfo.signature_binding(
+          ChildClassWithNonLocalType, nonexistent=1234
+      )
+
   def test_var_positional_start(self):
     self.assertEqual(self.signature_positional.var_positional_start, 3)
     self.assertEqual(self.signature_args_and_kwargs.var_positional_start, 0)
