@@ -129,10 +129,12 @@ class FiddleFlag(flags.Flag):
     # Due to the lazy evaluation of `value`, this list is needed to keep
     # track of the remaining `directives`.
     self._remaining_directives = []
+    if "parser" not in kwargs:
+      kwargs["parser"] = flags.ArgumentParser()  # Not used.
+    if "serializer" not in kwargs:
+      kwargs["serializer"] = FiddleFlagSerializer(pyref_policy=pyref_policy)
     super().__init__(
         *args,
-        parser=flags.ArgumentParser(),  # Not used.
-        serializer=FiddleFlagSerializer(pyref_policy=pyref_policy),
         **kwargs,
     )
 
