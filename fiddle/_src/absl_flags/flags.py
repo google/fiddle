@@ -81,7 +81,7 @@ class FiddleFlagSerializer(flags.ArgumentSerializer):
     return f"config_str:{serialized}"
 
 
-class FiddleFlag(flags.Flag):
+class FiddleFlag(flags.MultiFlag):
   """ABSL flag class for a Fiddle config flag.
 
   This class is used to parse command line flags to construct a Fiddle `Config`
@@ -126,7 +126,8 @@ class FiddleFlag(flags.Flag):
     self.allow_imports = allow_imports
     self.default_module = default_module
     self._pyref_policy = pyref_policy
-    self._has_base_config = False
+    self.first_command = None
+    self._initial_config_expression = None
     # A `directive` is a str of the form e.g. 'config:...'.
     # Due to the lazy evaluation of `value`, this list is needed to keep
     # track of the remaining `directives`.
@@ -179,12 +180,6 @@ class FiddleFlag(flags.Flag):
     self._remaining_directives.extend(new_parsed)
     self.present += len(new_parsed)
 
-  def _parse(self, arguments):
-    if isinstance(arguments, str):
-      return [arguments]
-
-    return arguments
-
   def unparse(self) -> None:
     self.value = self.default
     self.using_default_value = True
@@ -194,6 +189,15 @@ class FiddleFlag(flags.Flag):
     self.present = 0
 
   def _parse_config(self, command: str, expression: str) -> None:
+    if self._initial_config_expression:
+      raise ValueError(
+          "Only one base configuration is permitted. Received"
+          f"{command}:{expression} after "
+          f"{self.first_command}:{self._initial_config_expression} was"
+          " already provided."
+      )
+    else:
+      self._initial_config_expression = expression
     if command == "config":
       self.value = self._initial_config(expression)
     elif command == "config_file":
@@ -206,6 +210,11 @@ class FiddleFlag(flags.Flag):
       self.value = serializer.deserialize(
           expression, pyref_policy=self._pyref_policy
       )
+
+  def _serialize(self, value) -> str:
+    # Skip MultiFlag serialization as we don't truly have a multi-flag.
+    # This will invoke Flag._serialize
+    return super(flags.MultiFlag, self)._serialize(value)
 
   @property
   def value(self):
@@ -221,33 +230,28 @@ class FiddleFlag(flags.Flag):
         )
       command, expression = match.groups()
 
-      if command in _BASE_CONFIG_DIRECTIVES:
-        if self._has_base_config:
+      if self.first_command is None:
+        if command not in _BASE_CONFIG_DIRECTIVES:
           raise ValueError(
-              "Only one base configuration is permitted. Received"
-              f" {command}:{expression} after the base configuration was"
-              " already provided."
+              "First flag command must specify the input config via either "
+              "config or config_file or config_str commands. "
+              f"Received command: {command} instead."
           )
+        self.first_command = command
+
+      if (
+          command == "config"
+          or command == "config_file"
+          or command == "config_str"
+      ):
         self._parse_config(command, expression)
-      elif self._value is None:
-        # self._value is not None if we have already processed the first
-        # expression, or a default was supplied.
-        raise ValueError(
-            "First flag command must specify the input config via either "
-            "config or config_file or config_str commands. "
-            f"Received command: {command} instead."
-        )
+
       elif command == "set":
         utils.set_value(self._value, expression)
       elif command == "fiddler":
         self._value = self._apply_fiddler(self._value, expression)
       else:
         raise AssertionError("Internal error; should not be reached.")
-
-      # After the first flag is parsed, we cannot process further commands in
-      # _BASE_CONFIG_DIRECTIVES.
-      self._has_base_config = True
-
     return self._value
 
   @value.setter
