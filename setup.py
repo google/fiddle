@@ -65,6 +65,7 @@ setup(
             'fiddle[flags]',
             'flax',
             'graphviz',
+            'lingvo',
             'pytest',
             'pytype',
         ] + [
