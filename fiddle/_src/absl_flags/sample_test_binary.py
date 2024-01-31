@@ -35,6 +35,10 @@ def base_experiment() -> fdl.Config:
   return fake_encoder_decoder.fixture.as_buildable()
 
 
+def base_experiment_with_bias() -> fdl.Config:
+  return fake_encoder_decoder.fixture_with_bias.as_buildable()
+
+
 def set_dtypes(config, dtype: str):
   def traverse(value, state):
     if state.current_path and state.current_path[-1] == daglish.Attr("dtype"):
