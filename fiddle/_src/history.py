@@ -38,9 +38,8 @@ import enum
 import inspect
 import itertools
 import os
-import re
 import threading
-from typing import Any, Callable, FrozenSet, Iterator, Optional, Set, Union
+from typing import Any, Callable, FrozenSet, Iterator, Optional, Set, Tuple, Union
 
 from fiddle._src import tag_type
 
@@ -78,7 +77,7 @@ class Location:
 # A function that returns a location.
 LocationProvider = Callable[[], Location]
 
-_exclude_locations: Set[str] = set(
+_exclude_locations: Tuple[str, ...] = tuple(
     map(
         os.path.normpath,
         [
@@ -94,19 +93,10 @@ _exclude_locations: Set[str] = set(
 )
 
 
-def _compile_exclude_regex():
-  return re.compile(r"({})$".format("|".join(
-      re.escape(location) for location in _exclude_locations)))
-
-
-_exclude_regex = _compile_exclude_regex()
-
-
 def add_exclude_location(location: str):
   """Adds a filename pattern to exclude from history stacktraces."""
-  global _exclude_regex
-  _exclude_locations.add(location)
-  _exclude_regex = _compile_exclude_regex()
+  global _exclude_locations
+  _exclude_locations += (location,)
 
 
 def _stacktrace_location_provider() -> Location:
@@ -119,7 +109,7 @@ def _stacktrace_location_provider() -> Location:
   while frame:
     line_number = frame.f_lineno
     filename = frame.f_code.co_filename
-    if not _exclude_regex.search(filename):
+    if not filename.endswith(_exclude_locations):
       function_name = frame.f_code.co_name
       return Location(
           filename=filename,
