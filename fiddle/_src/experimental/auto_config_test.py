@@ -21,7 +21,7 @@ import dataclasses
 import functools
 import inspect
 import sys
-from typing import Any
+from typing import Any, TypeVar
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -31,6 +31,7 @@ from fiddle._src.experimental import auto_config
 from fiddle._src.experimental import auto_config_policy
 from fiddle._src.experimental import autobuilders as ab
 from fiddle._src.testing import test_util
+import pytype_extensions
 
 
 def basic_fn(arg, kwarg='test'):
@@ -87,7 +88,10 @@ def globals_test_fn():
   return pass_through(5)
 
 
-def pass_through(arg):
+T = TypeVar('T')
+
+
+def pass_through(arg: T) -> T:
   return arg
 
 
@@ -346,12 +350,20 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         test_class_config('positional'),
     )
 
+  def test_type_inference(self):
+    @auto_config.auto_config
+    def test_fn_config(arg: int) -> int:
+      return pass_through(arg)
+
+    output = test_fn_config(42)
+    pytype_extensions.assert_type(output, int)
+
   def test_calling_auto_config(self):
     expected_config = fdl.Config(
         basic_fn, 1, kwarg=fdl.Config(FrozenSampleClass, 1, 2)
     )
 
-    @auto_config.auto_config(experimental_always_inline=True)
+    @auto_config.auto_config
     def test_class_config():
       return FrozenSampleClass(1, arg2=2)
 
@@ -363,6 +375,19 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(
         {'arg': 1, 'kwarg': FrozenSampleClass(1, arg2=2)}, test_fn_config()
     )
+
+  def test_calling_auto_config_type_inference(self):
+    @auto_config.auto_config
+    def test_class_config() -> FrozenSampleClass:
+      return FrozenSampleClass(1, arg2=2)
+
+    @auto_config.auto_config
+    def test_fn_config():
+      output = pass_through(test_class_config())
+      pytype_extensions.assert_type(output, FrozenSampleClass)
+      return output
+
+    del test_fn_config  # Unused
 
   def test_nested_calls(self):
     expected_config = fdl.Config(
@@ -460,7 +485,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
 
   def test_auto_configuring_non_function(self):
     with self.assertRaisesRegex(ValueError, 'only compatible with functions'):
-      auto_config.auto_config(3)
+      auto_config.auto_config(3)  # pytype: disable=wrong-arg-types
 
   def test_return_structure(self):
     expected_config = {
@@ -779,6 +804,11 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(cfg.arg2.arg1, fdl.Config(pass_through, 5))
     self.assertEqual(cfg.arg2.arg2, 5)
 
+  def test_exemption_type_inference(self):
+    exempted_func = auto_config.exempt(pass_through)
+    value = exempted_func(42)
+    pytype_extensions.assert_type(value, int)
+
   def test_lambda_supported_in_decorator(self):
     @auto_config.auto_config(experimental_exemption_policy=lambda x: False)
     def make_sample():
@@ -1044,7 +1074,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         FrozenSampleClass.autoconfig_method(self=x), {'arg': x, 'kwarg': 'test'}
     )
     self.assertDagEqual(
-        FrozenSampleClass.autoconfig_method.as_buildable(self=x),
+        FrozenSampleClass.autoconfig_method.as_buildable(self=x),  # pytype: disable=duplicate-keyword-argument
         fdl.Config(basic_fn, x),
     )
 
