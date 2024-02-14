@@ -30,7 +30,7 @@ import inspect
 import linecache
 import textwrap
 import types
-from typing import Any, Callable, Optional, Type, cast
+from typing import Any, Callable, Optional, Type, TypeVar, cast
 
 from fiddle._src import arg_factory
 from fiddle._src import building
@@ -56,14 +56,17 @@ _BUILTINS = frozenset([
 ])
 
 
+_GenericCallable = TypeVar('_GenericCallable', bound=Callable[..., Any])
+
+
 @dataclasses.dataclass(frozen=True)
 class AutoConfig:
   """A function wrapper for auto_config'd functions.
 
   In order to support auto_config'ing @classmethod's, we need to customize the
   descriptor protocol for the auto_config'd function. This simple wrapper type
-  is designed to look like a simple `functool.wraps` wrapper, but implements
-  custom behavior for bound methods.
+  is designed to look like a `functool.wraps` wrapper, but implements custom
+  behavior for bound methods.
   """
   func: Callable[..., Any]
   buildable_func: Callable[..., config.Buildable]
@@ -553,7 +556,7 @@ def _make_partial(partial_cls, buildable_or_callable, *args, **kwargs):
     return partial_cls(buildable_or_callable, *args, **kwargs)
 
 
-def exempt(fn_or_cls: Callable[..., Any]) -> Callable[..., Any]:
+def exempt(fn_or_cls: _GenericCallable) -> _GenericCallable:
   """Wrap a callable so that it's exempted from auto_config.
 
   This can be used either as a decorator to exempt a function, or used inside

@@ -21,7 +21,7 @@ import dataclasses
 import functools
 import inspect
 import sys
-from typing import Any
+from typing import Any, TypeVar
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -31,6 +31,7 @@ from fiddle._src.experimental import auto_config
 from fiddle._src.experimental import auto_config_policy
 from fiddle._src.experimental import autobuilders as ab
 from fiddle._src.testing import test_util
+import pytype_extensions
 
 
 def basic_fn(arg, kwarg='test'):
@@ -87,7 +88,10 @@ def globals_test_fn():
   return pass_through(5)
 
 
-def pass_through(arg):
+T = TypeVar('T')
+
+
+def pass_through(arg: T) -> T:
   return arg
 
 
@@ -778,6 +782,11 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(cfg.arg1, 5)
     self.assertEqual(cfg.arg2.arg1, fdl.Config(pass_through, 5))
     self.assertEqual(cfg.arg2.arg2, 5)
+
+  def test_exemption_type_inference(self):
+    exempted_func = auto_config.exempt(pass_through)
+    value = exempted_func(42)
+    pytype_extensions.assert_type(value, int)
 
   def test_lambda_supported_in_decorator(self):
     @auto_config.auto_config(experimental_exemption_policy=lambda x: False)
