@@ -55,7 +55,7 @@ def materialize_defaults(value: Any) -> None:
       for arg in node.__signature_info__.parameters.values():
         if arg.default is not arg.empty and arg.name not in node.__arguments__:
           setattr(node, arg.name, arg.default)
-    if state.is_traversable(node):
-      state.flattened_map_children(node)
+    for _ in state.yield_map_child_values(node, ignore_leaves=True):
+      pass  # Run lazy iterator.
 
   daglish.MemoizedTraversal.run(traverse, value)

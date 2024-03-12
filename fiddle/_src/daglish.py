@@ -143,6 +143,8 @@ class NamedTupleType:
 # This has the same type as Path, but different semantic meaning.
 PathElements = Tuple[PathElement, ...]
 PathElementsFn = Callable[[Any], PathElements]
+_ValueAndPath = Tuple[Any, PathElement]
+OptimizedFlattenFn = Callable[[Any], Iterable[_ValueAndPath]]
 FlattenFn = Callable[[Any], Tuple[Tuple[Any, ...], Any]]
 UnflattenFn = Callable[[Iterable[Any], Any], Any]
 
@@ -155,6 +157,7 @@ class NodeTraverser:
   flatten: FlattenFn
   unflatten: UnflattenFn
   path_elements: PathElementsFn
+  flatten_with_paths: OptimizedFlattenFn | None = None
 
 
 class NodeTraverserRegistry:
@@ -185,6 +188,7 @@ class NodeTraverserRegistry:
       flatten_fn: FlattenFn,
       unflatten_fn: UnflattenFn,
       path_elements_fn: PathElementsFn,
+      flatten_with_paths_fn: OptimizedFlattenFn | None = None,
   ) -> None:
     """Registers a node traverser for `node_type`.
 
@@ -202,6 +206,9 @@ class NodeTraverserRegistry:
         flattened values returned by `flatten_fn`. This should accept an
         instance of `node_type`, and return a sequence of `PathElement`s aligned
         with the values returned by `flatten_fn`.
+      flatten_with_paths_fn: A version of `flatten_fn` that returns an iterable
+        of `(value, path)` pairs, where `value` is a child value and `path` is a
+        `Path` to the value.
     """
     if not isinstance(node_type, type):
       raise TypeError(f"`node_type` ({node_type}) must be a type.")
@@ -212,6 +219,7 @@ class NodeTraverserRegistry:
         flatten=flatten_fn,
         unflatten=unflatten_fn,
         path_elements=path_elements_fn,
+        flatten_with_paths=flatten_with_paths_fn,
     )
 
   def find_node_traverser(
@@ -282,7 +290,9 @@ register_node_traverser(
     tuple,
     flatten_fn=lambda x: (x, None),
     unflatten_fn=lambda x, _: tuple(x),
-    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))))
+    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))),
+    flatten_with_paths_fn=lambda xs: ((x, Index(i)) for i, x in enumerate(xs)),
+)
 
 register_node_traverser(
     NamedTupleType,
@@ -294,7 +304,9 @@ register_node_traverser(
     list,
     flatten_fn=lambda x: (tuple(x), None),
     unflatten_fn=lambda x, _: list(x),
-    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))))
+    path_elements_fn=lambda x: tuple(Index(i) for i in range(len(x))),
+    flatten_with_paths_fn=lambda xs: ((x, Index(i)) for i, x in enumerate(xs)),
+)
 
 
 def is_prefix(prefix_path: Path, containing_path: Path):
@@ -607,8 +619,56 @@ class State:
     """
     node_traverser = self.traversal.find_node_traverser(type(value))
     if node_traverser is None:
-      raise ValueError("Please handle non-traversable values yourself.")
+      raise ValueError(
+          f"No node traverser found for {value}, please register traverser"
+          " or pre-process the non-traversable values first."
+      )
     return self._flattened_map_children(value, node_traverser)
+
+  def yield_map_child_values(
+      self, value: Any, ignore_leaves: bool = False
+  ) -> Iterable[Any]:
+    """Maps over children for traversable values, but doesn't unflatten results.
+
+    This method only returns result values, so use it in place of
+    `state.flattened_map_children(value).values` when the result is consumed
+    once. If you are calling this for an "effectful" computation (including ones
+    that just gather results in `nonlocal` variables) then consider the
+    following pattern,
+
+    for _ in state.yield_map_child_values(node, ignore_leaves=True):
+      pass  # Run lazy iterator.
+
+    Args:
+      value: Value to map over.
+      ignore_leaves: If True, then this function will return an empty iterable
+        if `value` is not traversable. Otherwise, it will raise a ValueError.
+
+    Yields:
+      Sub-traversal results, the same type as returned by your _traverse
+      function.
+
+    Raises:
+      ValueError: If `value` is not traversable and `ignore_leaves` is `False`.
+      Please test beforehand by calling `state.is_traversable()`.
+    """
+    node_traverser = self.traversal.find_node_traverser(type(value))
+    if node_traverser is None:
+      if ignore_leaves:
+        return
+      else:
+        raise ValueError(
+            f"No node traverser found for {value}, please register traverser"
+            " or pre-process the non-traversable values first."
+        )
+    if node_traverser.flatten_with_paths is not None:
+      for value, path in node_traverser.flatten_with_paths(value):
+        yield self.call(value, path)
+    else:
+      sub_values, unused_meta = node_traverser.flatten(value)
+      path_elements = node_traverser.path_elements(value)
+      for sub_value, path_element in zip(sub_values, path_elements):
+        yield self.call(sub_value, path_element)
 
   def call(self, value, *additional_path: PathElement):
     """Low-level function to execute a sub-traversal.
@@ -755,8 +815,8 @@ def collect_paths_by_id(
   def traverse(value, state: State):
     if not memoizable_only or is_memoizable(value):
       paths_by_id.setdefault(id(value), []).append(state.current_path)
-    if state.is_traversable(value):
-      state.flattened_map_children(value)
+    for _ in state.yield_map_child_values(value, ignore_leaves=True):
+      pass  # Run lazy iterator.
 
   traversal = BasicTraversal(traverse, structure, registry=registry)
   traverse(structure, traversal.initial_state())
@@ -794,9 +854,8 @@ def iterate(
 
   def _traverse(node, state: State):
     yield node, state.current_path
-    if state.is_traversable(node):
-      for sub_result in state.flattened_map_children(node).values:
-        yield from sub_result
+    for sub_result in state.yield_map_child_values(node, ignore_leaves=True):
+      yield from sub_result
 
   if memoized:
     traversal = MemoizedTraversal(

@@ -120,7 +120,7 @@ def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
       for sub_path in substate.get_all_paths():
         if not _goes_through_node(sub_path):
           return False
-      return all(substate.flattened_map_children(value).values)
+      return all(substate.yield_map_child_values(value))
 
     # Creates a sub-traversal using a different function. We eventually might
     # make this part of the daglish API.
@@ -199,8 +199,8 @@ def depth_over(config: Any, depth: int) -> List[config_lib.Buildable]:
       all_paths = state.get_all_paths(allow_caching=True)
       node_to_depth[id(node)] = min(_path_len(path) for path in all_paths)
       id_to_node[id(node)] = node
-    if state.is_traversable(node):
-      state.flattened_map_children(node)
+    for _ in state.yield_map_child_values(node, ignore_leaves=True):
+      pass  # Run lazy iterator.
 
   daglish.MemoizedTraversal.run(traverse, config)
 

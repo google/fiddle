@@ -72,8 +72,8 @@ def _get_shared_buildables(
     if isinstance(value, config_lib.Buildable):
       to_count[id(value)] += 1
       children_by_id[id(value)] = value
-    if state.is_traversable(value):
-      state.flattened_map_children(value)
+    for _ in state.yield_map_child_values(value, ignore_leaves=True):
+      pass  # Run lazy iterator.
 
   daglish.BasicTraversal.run(traverse, buildable)
   return [
@@ -194,10 +194,10 @@ def _configure_shared_objects(
     variable_name_prefix: Prefix for any variables introduced.
   """
 
-  def traverse(child, state):
+  def traverse(child, state: daglish.State):
     """Generates code for a shared instance."""
-    if state.is_traversable(child):
-      state.flattened_map_children(child)
+    for _ in state.yield_map_child_values(child, ignore_leaves=True):
+      pass  # Run lazy iterator.
     if isinstance(child, config_lib.Buildable):
       # Name this better..
       name = shared_manager.namespace.get_new_name(

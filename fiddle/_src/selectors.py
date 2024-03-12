@@ -81,7 +81,7 @@ def _memoized_walk_leaves_first(value, state=None):
   state = state or daglish.MemoizedTraversal.begin(_memoized_walk_leaves_first,
                                                    value)
   if state.is_traversable(value):
-    for sub_result in state.flattened_map_children(value).values:
+    for sub_result in state.yield_map_child_values(value):
       yield from sub_result
   yield value
 
