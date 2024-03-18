@@ -45,9 +45,9 @@ class _UnsetValue:
 
 def _has_nested_builder(value: Any, state=None) -> bool:
   state = state or daglish.MemoizedTraversal.begin(_has_nested_builder, value)
-  return (isinstance(value, config.Buildable) or
-          (state.is_traversable(value) and
-           any(state.flattened_map_children(value).values)))
+  return isinstance(value, config.Buildable) or (
+      state.is_traversable(value) and any(state.yield_map_child_values(value))
+  )
 
 
 def _path_str(path: daglish.Path) -> str:
@@ -205,7 +205,7 @@ def as_str_flattened(cfg: config.Buildable,
     else:
       # value must be a Buildable or a traversable containing a Buidable.
       assert state.is_traversable(value)
-      for sub_result in state.flattened_map_children(value).values:
+      for sub_result in state.yield_map_child_values(value):
         yield from sub_result
 
   # Used in format_line below.  The use of getattr and the dummy type default
@@ -288,7 +288,7 @@ def _make_per_leaf_histories_recursive(
         yield f'{_path_str(path)} = <[unset]>'
 
     elif state.is_traversable(value):
-      for sub_result in state.flattened_map_children(value).values:
+      for sub_result in state.yield_map_child_values(value):
         yield from sub_result
     else:
       yield f'{_path_str(state.current_path)} = {value}'
@@ -359,7 +359,7 @@ def as_dict_flattened(cfg: config.Buildable) -> Dict[str, Any]:
     else:
       # value must be a Buildable or a traversable containing a Buildable.
       assert state.is_traversable(value)
-      for sub_result in state.flattened_map_children(value).values:
+      for sub_result in state.yield_map_child_values(value):
         yield from sub_result
 
   args_dict = {}

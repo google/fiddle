@@ -20,7 +20,7 @@ import dataclasses
 import enum
 import json
 import random
-from typing import Any, List, NamedTuple, Optional, cast
+from typing import Any, List, NamedTuple, Optional, Tuple, cast
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -76,6 +76,16 @@ class TraversalLoggingMapFunction:
     return state.map_children(value)
 
 
+@dataclasses.dataclass
+class NonRecursingLoggingFunction:
+  values_and_paths: List[Tuple[Any, Any]] = dataclasses.field(
+      default_factory=list
+  )
+
+  def __call__(self, value, state: daglish.State):
+    self.values_and_paths.append((value, state.current_path))
+
+
 def switch_buildables_to_args(value, state: Optional[daglish.State] = None):
   """Replaces buildables with their arguments dictionary.
 
@@ -95,6 +105,28 @@ def switch_buildables_to_args(value, state: Optional[daglish.State] = None):
     return str(value)
   else:
     return value
+
+
+@dataclasses.dataclass
+class MyRange:
+  start: int
+  end: int
+
+
+def myrange_flatten_with_paths_fn(myrange: MyRange):
+  return (
+      ({"value": i}, daglish.Index(i))
+      for i in range(myrange.start, myrange.end)
+  )
+
+
+daglish.register_node_traverser(
+    MyRange,
+    flatten_fn=NotImplemented,  # pytype: disable=wrong-arg-types
+    unflatten_fn=NotImplemented,  # pytype: disable=wrong-arg-types
+    path_elements_fn=NotImplemented,  # pytype: disable=wrong-arg-types
+    flatten_with_paths_fn=myrange_flatten_with_paths_fn,
+)
 
 
 class PathTest(parameterized.TestCase):
@@ -437,6 +469,73 @@ class BasicStructuredMappingTest(parameterized.TestCase):
                      history.ChangeKind.NEW_VALUE)
 
 
+_eager_map_fns = [
+    lambda state, obj: state.map_children(obj),
+    lambda state, obj: list(state.yield_map_child_values(obj)),
+    lambda state, obj: state.flattened_map_children(obj),
+]
+
+
+class StateApiTest(parameterized.TestCase):
+
+  @parameterized.parameters(_eager_map_fns)
+  def test_map_dict(self, map_fn):
+    obj = {"a": 1, "b": 2}
+    log_calls = NonRecursingLoggingFunction()
+    traversal = daglish.BasicTraversal(log_calls, obj)
+    state = traversal.initial_state()
+    map_fn(state, obj)
+    self.assertEqual(
+        log_calls.values_and_paths,
+        [(1, (daglish.Key(key="a"),)), (2, (daglish.Key(key="b"),))],
+    )
+
+  @parameterized.parameters(_eager_map_fns)
+  def test_map_tuple(self, map_fn):
+    obj = ((), (1, 2), 3)
+    log_calls = NonRecursingLoggingFunction()
+    traversal = daglish.BasicTraversal(log_calls, obj)
+    state = traversal.initial_state()
+    map_fn(state, obj)
+    self.assertEqual(
+        log_calls.values_and_paths,
+        [
+            ((), (daglish.Index(index=0),)),
+            ((1, 2), (daglish.Index(index=1),)),
+            (3, (daglish.Index(index=2),)),
+        ],
+    )
+
+  @parameterized.parameters(_eager_map_fns)
+  def test_map_memoized(self, map_fn):
+    shared = {"foo": 123}
+    obj = [shared, shared, shared]
+    log_calls = NonRecursingLoggingFunction()
+    traversal = daglish.MemoizedTraversal(log_calls, obj)
+    state = traversal.initial_state()
+    map_fn(state, obj)
+    self.assertEqual(
+        log_calls.values_and_paths, [({"foo": 123}, (daglish.Index(index=0),))]
+    )
+
+  def test_fast_map_calls_flatten_with_paths(self):
+    obj = MyRange(3, 7)
+    log_calls = NonRecursingLoggingFunction()
+    traversal = daglish.MemoizedTraversal(log_calls, obj)
+    state = traversal.initial_state()
+    for _ in state.yield_map_child_values(obj):
+      pass  # Run lazy iterator.
+    self.assertEqual(
+        log_calls.values_and_paths,
+        [
+            ({"value": 3}, (daglish.Index(index=3),)),
+            ({"value": 4}, (daglish.Index(index=4),)),
+            ({"value": 5}, (daglish.Index(index=5),)),
+            ({"value": 6}, (daglish.Index(index=6),)),
+        ],
+    )
+
+
 class ArgsSwitchingFuzzTest(parameterized.TestCase):
 
   def test_fuzz(self):
@@ -595,7 +694,7 @@ class MemoizedTraversalTest(absltest.TestCase):
                 daglish.path_str(path)
                 for path in state.get_all_paths(allow_caching=True)
             ),
-            "sub_values": state.flattened_map_children(value).values,
+            "sub_values": list(state.yield_map_child_values(value)),
         }
       else:
         return "leaf value"

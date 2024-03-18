@@ -63,7 +63,8 @@ def grep(
   def traverse(value, state: daglish.State):
     path_str = daglish.path_str(state.current_path)
     if state.is_traversable(value):
-      state.flattened_map_children(value)
+      for _ in state.yield_map_child_values(value):
+        pass  # Run lazy iterator.
       if isinstance(value, config_lib.Buildable):
         fn_or_cls = config_lib.get_callable(value)
         value_str = f"<{type(value).__name__}({fn_or_cls.__name__})>"

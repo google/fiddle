@@ -50,8 +50,7 @@ def more_complex_than(level: int) -> Callable[[Any], bool]:
     elif not state.is_traversable(value):
       return 1
     else:
-      sub_values = state.flattened_map_children(value)
-      return 1 + sum(sub_values.values)
+      return 1 + sum(state.yield_map_child_values(value))
 
   return lambda x: daglish.MemoizedTraversal.run(traverse, x) > level
 

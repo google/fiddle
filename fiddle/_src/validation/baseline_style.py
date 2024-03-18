@@ -142,8 +142,8 @@ def check_baseline_style(
           location: history.Location = history_entry.location
           sample_paths_by_file.setdefault(location.filename, path_str)
 
-    if state.is_traversable(value):
-      state.flattened_map_children(value)
+    for _ in state.yield_map_child_values(value, ignore_leaves=True):
+      pass  # Run lazy iterator.
 
   daglish.MemoizedTraversal.run(traverse, config)
 

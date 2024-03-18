@@ -833,10 +833,10 @@ def _trim_diff(structure_with_changed_values: Any, old_value_ids: Set[int]):
     """Returns true if any child has changed."""
     parents_changed = id(value) in changed_parent_ids
     if state.is_traversable(value):
-      subtraversal = state.flattened_map_children(value)
-      any_changed = any(subtraversal.values)
+      child_results = list(state.yield_map_child_values(value))
+      any_changed = any(child_results)
       if isinstance(value, dict) and id(value) in old_value_ids:
-        _trim_dict(value, subtraversal.values)
+        _trim_dict(value, child_results)
       return any_changed or parents_changed
     elif isinstance(value, _ChangedValue):
       state.call(value.old_value, daglish.Attr('old_value'))
@@ -866,7 +866,8 @@ def _find_mutable_values_with_changed_parents(structure_with_changed_values):
 
   def visit(value, state: daglish.State):
     if state.is_traversable(value):
-      state.flattened_map_children(value)
+      for _ in state.yield_map_child_values(value):
+        pass  # Run lazy iterator.
     elif isinstance(value, _ChangedValue):
       assert value.old_value is not value.new_value
       if daglish.is_memoizable(value.old_value):

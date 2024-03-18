@@ -45,11 +45,11 @@ class _BuiltArgFactory:
 def _contains_arg_factory(value: Any) -> bool:
   """Returns true if ``value`` contains any ``_BuiltArgFactory`` instances."""
 
-  def visit(node, state):
+  def visit(node, state: daglish.State):
     if isinstance(node, _BuiltArgFactory):
       return True
     elif state.is_traversable(node):
-      return any(state.flattened_map_children(node).values)
+      return any(state.yield_map_child_values(node))
     else:
       return False
 
