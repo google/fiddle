@@ -41,6 +41,10 @@ class CodegenPass(metaclass=abc.ABCMeta):
 
   PASS_INPUT_KWARGS = []
 
+  @property
+  def can_print_debug(self):
+    return True
+
   def print_debug(self, value: Any) -> None:
     print(
         f"\n\nAfter {self.__class__.__name__} ({self.__class__.__doc__})",
@@ -85,7 +89,7 @@ class Codegen:
           if key in codegen_pass.PASS_INPUT_KWARGS
       }
       value = codegen_pass(value, **pass_kwargs)
-      if self.debug_print:
+      if self.debug_print and codegen_pass.can_print_debug:
         codegen_pass.print_debug(value)
     return value
 
@@ -169,6 +173,10 @@ class MakeSymbolicReferences(MutationCodegenPass):
 @dataclasses.dataclass(frozen=True)
 class IrToCst(CodegenPass):
   """Converts a codegen IR task to a LibCST module."""
+
+  @property
+  def can_print_debug(self):
+    return False
 
   def __call__(self, value: Any) -> Any:
     return ir_to_cst.code_for_task(value)

@@ -20,6 +20,7 @@ import random
 import re
 import sys
 import types
+from unittest import mock
 import uuid
 
 from absl import flags
@@ -119,6 +120,10 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
           "testcase_name": "with_history",
           "kwargs": {"include_history": True},
       },
+      {
+          "testcase_name": "debug_print",
+          "kwargs": {"debug_print": True},
+      },
   ])
   def test_fuzz(self, kwargs):
     # TODO(b/272826193): Test on more RNG seeds.
@@ -134,9 +139,14 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
       if has_buildables:
         with self.subTest(f"rng_{i}"):
           sub_fixtures = create_random_sub_fixture(config, random.Random(i))
-          code = experimental_top_level_api.auto_config_codegen(
-              config, sub_fixtures=sub_fixtures, **kwargs
-          )
+          with mock.patch.object(
+              experimental_top_level_api,
+              "print",
+              mock.create_autospec(print),
+          ):
+            code = experimental_top_level_api.auto_config_codegen(
+                config, sub_fixtures=sub_fixtures, **kwargs
+            )
           module = self._load_code_as_module(code)
           generated_config = module.config_fixture.as_buildable()
           self.assertDagEqual(config, generated_config)

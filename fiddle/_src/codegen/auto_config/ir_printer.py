@@ -90,8 +90,9 @@ def format_expr(expr: Any):
       sub_value = state.map_children(value).expression
       return f"ArgFactoryExpr[{sub_value}]"
     elif isinstance(value, code_ir.WithTagsCall):
-      sub_value = state.map_children(value).expression
-      return f"WithTagsCall[{sub_value}]"
+      tags_str = ", ".join(value.tag_symbol_expressions)
+      sub_value = state.map_children(value.item_to_tag)
+      return f"WithTagsCall[{tags_str}]({sub_value})"
     elif isinstance(value, code_ir.SymbolOrFixtureCall):
       symbol_expression = state.call(
           value.symbol_expression, daglish.Attr("symbol_expression")
