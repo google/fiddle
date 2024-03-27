@@ -877,7 +877,8 @@ def ordered_arguments(
       `include_defaults=True`.
 
   Returns:
-    A dictionary mapping argument names to values or `fdl.NO_VALUE`.
+    A dictionary mapping argument keys to values or `fdl.NO_VALUE`. Argument
+    keys are either positional indices or names.
   """
   if not include_equal_to_default and include_defaults:
     raise ValueError(
