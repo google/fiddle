@@ -104,6 +104,11 @@ class Attr(PathElement):
       return super().__lt__(other)
 
 
+def attr_or_index(key: Union[str, int]) -> PathElement:
+  """Returns an Attr for a string key or an Index for an int key."""
+  return Index(key) if isinstance(key, int) else Attr(key)
+
+
 class BuildableAttr(Attr):
   """An attribute of a Buildable."""
 

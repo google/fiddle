@@ -28,7 +28,6 @@ import copy
 from fiddle import daglish
 from fiddle._src import casting
 from fiddle._src import config as config_lib
-from fiddle._src import mutate_buildable
 from fiddle._src import partial
 from fiddle._src.codegen.auto_config import code_ir
 
@@ -46,11 +45,17 @@ def lower_arg_factories(task: code_ir.CodegenTask) -> None:
     if isinstance(value, partial.Partial):
       arguments = config_lib.ordered_arguments(value)
       arguments = {
-          name: state.call(_convert_arg(arg), daglish.Attr(name))
+          name: state.call(_convert_arg(arg), daglish.attr_or_index(name))
           for name, arg in arguments.items()
       }
       value = copy.copy(value)
-      mutate_buildable.assign(value, **arguments)
+      for key, arg_value in arguments.items():
+        if isinstance(key, str):
+          setattr(value, key, arg_value)
+        elif isinstance(key, int):
+          value[key] = arg_value
+        else:
+          raise TypeError(f'Unknown key type: {key}')
       return value
     else:
       return state.map_children(value)

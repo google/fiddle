@@ -25,6 +25,7 @@ from fiddle._src.codegen.auto_config import ir_to_cst
 from fiddle._src.codegen.auto_config import make_symbolic_references
 from fiddle._src.codegen.auto_config import shared_to_variables
 from fiddle._src.codegen.auto_config import test_fixtures
+import jax.sharding
 import libcst as cst
 
 
@@ -61,6 +62,28 @@ class IrToCstTest(absltest.TestCase):
     self.assertEqual(
         _code_for_expr(ir_to_cst.code_for_expr(call)), "self.foo(bar=self.bar)"
     )
+
+  def test_code_for_positional_arg_call(self):
+    self_var = code_ir.VariableReference(
+        code_ir.Name("self", is_generated=True)
+    )
+    attr = code_ir.AttributeExpression(self_var, "foo")
+    call = code_ir.SymbolOrFixtureCall(
+        attr, [123.4], {"bar": code_ir.AttributeExpression(self_var, "bar")}
+    )
+    self.assertEqual(
+        _code_for_expr(ir_to_cst.code_for_expr(call)),
+        "self.foo(123.4, bar=self.bar)",
+    )
+
+  def test_code_for_expr_jax_partition_spec(self):
+    """This is a very weird overridden tuple."""
+    value = jax.sharding.PartitionSpec("data")
+    with self.assertRaisesRegex(
+        TypeError,
+        r"Failed to map.*PartitionSpec.*subclasses list or tuple.*",
+    ):
+      ir_to_cst.code_for_expr(value)
 
   def test_basic_ir(self):
     task = test_fixtures.simple_ir()
