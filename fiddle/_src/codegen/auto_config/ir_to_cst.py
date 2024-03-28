@@ -19,7 +19,7 @@ Note: We do not generally do a lot of formatting, instead relying on existing
 source code formatters (pyformat, yapf, etc.).
 """
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
@@ -41,16 +41,20 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
   def traverse(value, state: daglish.State) -> cst.CSTNode:
 
     def _prepare_args_helper(
-        names: List[str],
+        names: List[Union[str, int]],
         values: List[Any],
         attr: daglish.Attr,
         *,
         history: Optional[code_ir.HistoryComments] = None,
     ) -> List[cst.Arg]:
       """Prepare code_ir.Arg node based on names and values."""
-      args = []
+      cst_args = {}
+      cst_kwargs = []
       for arg_name, arg_value in zip(names, values):
-        assert isinstance(arg_name, str)
+        if not isinstance(arg_name, (int, str)):
+          raise TypeError(
+              f"Unsupported arg name type: {type(arg_name)} (value: {arg_name})"
+          )
         arg_value = state.call(arg_value, attr, daglish.Key(arg_name))
         kwargs = {}
         if history and arg_name in history.per_field:
@@ -64,18 +68,30 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
                   last_line=cst.SimpleWhitespace(" " * 6),
               )
           )
-        args.append(
-            cst.Arg(
-                arg_value,
-                keyword=cst.Name(arg_name),
-                equal=cst.AssignEqual(
-                    whitespace_before=cst.SimpleWhitespace(""),
-                    whitespace_after=cst.SimpleWhitespace(""),
-                ),
-                **kwargs,
-            )
+        if isinstance(arg_name, str):
+          cst_kwargs.append(
+              cst.Arg(
+                  arg_value,
+                  keyword=cst.Name(arg_name),
+                  equal=cst.AssignEqual(
+                      whitespace_before=cst.SimpleWhitespace(""),
+                      whitespace_after=cst.SimpleWhitespace(""),
+                  ),
+                  **kwargs,
+              )
+          )
+        elif isinstance(arg_name, int):
+          if arg_name in cst_args:
+            raise ValueError(f"Duplicate positional arg: {arg_name}")
+          cst_args[arg_name] = cst.Arg(arg_value, **kwargs)
+
+      positional_arg_keys = set(cst_args.keys())
+      if positional_arg_keys != set(range(len(positional_arg_keys))):
+        raise ValueError(
+            "Positional args supplied were not contiguous! "
+            f"Got {positional_arg_keys}"
         )
-      return args
+      return [value for _, value in sorted(cst_args.items())] + cst_kwargs
 
     if isinstance(value, config_lib.Buildable):
       raise ValueError(
@@ -83,12 +99,23 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
           "passes before CST generation."
       )
     elif isinstance(value, (list, tuple)):
+      original = value
       value = state.map_children(value)
       if isinstance(value, list):
         cst_cls = cst.List
       else:
         cst_cls = cst.Tuple
-      return cst_cls([cst.Element(elt) for elt in value])
+      elements = []
+      for sub_value in value:
+        if not isinstance(sub_value, cst.CSTNode):
+          raise TypeError(
+              f"Failed to map children of {original!r}, this might be because "
+              f"{type(original)} subclasses list or tuple. If this is the case,"
+              " please replace these objects in your input config, likely "
+              "with fdl.Config nodes."
+          )
+        elements.append(cst.Element(sub_value))
+      return cst_cls(elements)
     elif isinstance(value, dict):
       elements = []
       for key, sub_value in value.items():

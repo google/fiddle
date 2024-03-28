@@ -25,6 +25,10 @@ from fiddle._src import partial
 from fiddle._src import tagging
 
 
+def args_only_fn(*args):
+  return args
+
+
 def kwargs_fn(**kwargs):
   return kwargs
 
@@ -122,11 +126,15 @@ def generate_nested_value(
 
   def generate_buildable():
     buildable_type = rng.choice([config.Config, partial.Partial])
-    arguments = generate_dict(key_generator=generate_string)
-    buildable = buildable_type(kwargs_fn, **arguments)
-    if generate_bool() and arguments:
-      argument = rng.choice(list(arguments))
-      tagging.set_tags(buildable, argument, {SampleTag})
+    if generate_bool():
+      arguments = generate_list()
+      return buildable_type(args_only_fn, *arguments)
+    else:
+      arguments = generate_dict(key_generator=generate_string)
+      buildable = buildable_type(kwargs_fn, **arguments)
+      if generate_bool() and arguments:
+        argument = rng.choice(list(arguments))
+        tagging.set_tags(buildable, argument, {SampleTag})
     return buildable
 
   def generate_alias():

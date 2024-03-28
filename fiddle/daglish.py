@@ -18,6 +18,7 @@
 # pylint: disable=unused-import
 from fiddle._src.daglish import add_path_element
 from fiddle._src.daglish import Attr
+from fiddle._src.daglish import attr_or_index
 from fiddle._src.daglish import BasicTraversal
 from fiddle._src.daglish import BuildableAttr
 from fiddle._src.daglish import BuildableFnOrCls
