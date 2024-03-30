@@ -73,6 +73,12 @@ class IrPrinterTest(absltest.TestCase):
     attr = code_ir.AttributeExpression(self_var, "foo")
     self.assertEqual(ir_printer.format_expr(attr), "self.foo")
 
+  def test_format_with_tags(self):
+    with_tags = code_ir.WithTagsCall(["module.Tag"], item_to_tag=123.4)
+    self.assertEqual(
+        ir_printer.format_expr(with_tags), "WithTagsCall[module.Tag](123.4)"
+    )
+
   def test_format_calls(self):
     call = code_ir.SymbolOrFixtureCall(
         symbol_expression=code_ir.Name("foo"),

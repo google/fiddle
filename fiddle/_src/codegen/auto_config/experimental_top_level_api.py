@@ -170,6 +170,10 @@ class MakeSymbolicReferences(MutationCodegenPass):
 class IrToCst(CodegenPass):
   """Converts a codegen IR task to a LibCST module."""
 
+  def print_debug(self, value: Any) -> None:
+    # This pass doesn't print debug information.
+    pass
+
   def __call__(self, value: Any) -> Any:
     return ir_to_cst.code_for_task(value)
 
