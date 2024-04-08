@@ -104,6 +104,21 @@ def get_full_module_name(node: AnyImport) -> str:
 def register_import_alias(name: str, import_stmt: str) -> None:
   """Registers an import alias.
 
+  This function can be used to customize codegen, by changing references to a
+  source module to a public module. For example, let's say you have a public API
+  `foo/bar.py` which has a `from foo._src.bar import Baz` statement. When your
+  Python code references `foo.bar.Baz`, the `inspect` module will see
+  `foo._src.bar.Baz`, and so codegen will emit this name/import. To replace the
+  private (in this example, _src) import with the public API, please use
+
+  ```
+  register_import_alias("foo._src.bar", "from foo import bar")
+  ```
+
+  This will make codegen to emit `from foo import bar` at the top, and use
+  `bar.Baz` in generated fixtures. (You can also change the second argument to
+  "import foo.bar" if you want it to use `foo.bar.Baz` in fixtures.)
+
   Typically this is called by extensions in `fiddle.extensions`.
 
   Args:

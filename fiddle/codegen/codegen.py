@@ -16,6 +16,9 @@
 """Library for generating code from a Config or Partial object."""
 
 # pylint: disable=unused-import
+from fiddle._src.codegen.auto_config.experimental_top_level_api import auto_config_codegen
+from fiddle._src.codegen.auto_config.experimental_top_level_api import code_generator as auto_config_code_generator
+from fiddle._src.codegen.import_manager import register_import_alias
 from fiddle._src.codegen.legacy_codegen import assignment_path
 from fiddle._src.codegen.legacy_codegen import codegen_dot_syntax
 from fiddle._src.codegen.legacy_codegen import mini_ast
