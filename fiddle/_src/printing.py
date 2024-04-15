@@ -317,11 +317,13 @@ def _make_per_leaf_history_text(path: daglish.Path,
     value = _format_value(entry.new_value, raw_value_repr=raw_value_repr)
     return f'  - previously: {value} @ {entry.location}'
 
-  # TODO(b/240713080): Add support for printing tags changes.
   value_history = [
-      entry for entry in param_history
+      entry
+      for entry in param_history
       if entry.kind == history.ChangeKind.NEW_VALUE
+      or entry.kind == history.ChangeKind.UPDATE_TAGS
   ]
+
   if len(value_history) > 1:
     value_updates = [
         make_previous_text(entry) for entry in reversed(value_history[:-1])

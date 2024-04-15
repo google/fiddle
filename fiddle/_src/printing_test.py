@@ -472,6 +472,17 @@ class HistoryPerLeafParamTests(absltest.TestCase):
         \[1\].x = 10 @ {name}""".strip('\n'))
     self.assertRegex(output, expected)
 
+  def test_history_includes_updated_tags(self):
+    cfg = fdl.Config(fn_x_y, x=1, y=SampleTag.new(default='abc'))
+    fdl.add_tag(cfg, 'y', SampleTag2)
+    output = printing.history_per_leaf_parameter(cfg)
+    expected = textwrap.dedent(r"""
+        x = 1 @ .*/printing_test.py:\d+:test_history_includes_updated_tags
+        y = frozenset\(\{.*SampleTag2.*\}\) @ .*:\d+:add_tag
+        .*previously: 'abc' @ .*test_history_includes_updated_tags
+        .*previously: frozenset\(\{.*SampleTag\}\)""".strip('\n'))
+    self.assertRegex(output, expected)
+
 
 class AsFlattenedDictTests(absltest.TestCase):
 
