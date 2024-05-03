@@ -47,10 +47,10 @@ def unintern_tuples_of_literals(buildable: AnyBuildable) -> AnyBuildable:
   def transform(value, state: Optional[daglish.State] = None):
     state = state or daglish.MemoizedTraversal.begin(
         transform, value, memoize_internables=False)
-    # We want tuples only and not things like NamedTuples which are not
-    # interned by Python.
-    if type(tuple) is tuple and daglish.is_internable(value):  # pylint: disable=unidiomatic-typecheck
-      value = tuple(list(value))
+    # If `value` is a tuple, then `map_children` will iterate over its elements,
+    # creating a new list object, and will then "unflatten" a new tuple from
+    # that list object.  Since this unflattened tuple is constructed from a
+    # list object, it will not be the same tuple object as the original `value`.
     return state.map_children(value)
 
   return transform(buildable)
