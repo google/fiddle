@@ -601,6 +601,12 @@ def exempt(fn_or_cls: _GenericCallable) -> _GenericCallable:
   )
 
 
+def inlined_partial(
+    auto_config_fn: AutoConfig, *args, **kwargs
+) -> functools.partial:
+  return functools.partial(auto_config_fn, *args, **kwargs)
+
+
 @dataclasses.dataclass(frozen=True)
 class ConfigTypes:
   config_cls: Type[config.Config] = config.Config
@@ -759,6 +765,19 @@ def auto_config(
               for name, arg in kwargs.items()
           },
       )
+    elif fn_or_cls is inlined_partial:
+      auto_config_fn, partial_args = args[0], args[1:]
+      if not isinstance(auto_config_fn, AutoConfig):
+        raise ValueError(
+            'inlined_partial should only be applied to auto_config functions.'
+        )
+      cfg = auto_config_fn.as_buildable(*partial_args, **kwargs)
+      if not isinstance(cfg, config.Config):
+        raise ValueError(
+            'inlined_partial should only be applied to auto_config functions'
+            ' that create a single top-level Config.'
+        )
+      return cast_lib.cast(partial_cls, cfg)
 
     if fn_or_cls is exempt:
       return fn_or_cls(*args, **kwargs)
