@@ -380,7 +380,7 @@ def is_memoizable(value: Any) -> bool:
   """
   return (
       not isinstance(value, _IMMUTABLE_NONCONTAINER_TYPES) and
-      value != ()  # pylint: disable=g-explicit-bool-comparison
+      (not isinstance(value, tuple) or value)
   )  # pyformat: disable
 
 

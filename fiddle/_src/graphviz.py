@@ -270,6 +270,7 @@ class _GraphvizRenderer:
     visited_ids = set()
 
     def visit(path, value):
+      print('Banana', path, value)
       del path  # Unused.
       if not daglish.is_memoizable(value):
         return value
