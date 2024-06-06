@@ -30,6 +30,7 @@ from fiddle._src.experimental.auto_config import AutoConfig
 from fiddle._src.experimental.auto_config import ConfigTypes
 from fiddle._src.experimental.auto_config import exempt
 from fiddle._src.experimental.auto_config import inline
+from fiddle._src.experimental.auto_config import inlined_partial
 from fiddle._src.experimental.auto_config import is_auto_config
 from fiddle._src.experimental.auto_config import UnsupportedLanguageConstructError
 from fiddle._src.experimental.with_tags import with_tags

@@ -601,6 +601,59 @@ def exempt(fn_or_cls: _GenericCallable) -> _GenericCallable:
   )
 
 
+def inlined_partial(
+    auto_config_fn: AutoConfig, *args, **kwargs
+) -> functools.partial:
+  """Creates a `fdl.Partial` from an auto_config function.
+
+  When `inlined_partial` is called inside another auto_config function, the
+  config returned by `auto_config_fn.as_buildable(*args, **kwargs)` is cast into
+  a `fdl.Partial`, meaning the resulting "internals" of the config structure
+  remain accessible/modifiable during configuration.
+
+  When called outside of an auto_config context, this has the same behavior
+  as `functools.partial`.
+
+  For example:
+
+      @auto_config.auto_config
+      def make_object(arg1):
+        return SomeObject(arg1=arg1, arg2=2)
+
+      @auto_config.auto_config
+      def use_inlined_partial():
+        return auto_config.inlined_partial(make_object, arg1=1)
+
+      assert use_inlined_partial.as_buildable() == fdl.Partial(
+          SomeObject, arg1=1, arg2=2)
+
+  In comparison (retaining `make_object` from above):
+
+      @auto_config.auto_config
+      def use_functools_partial():
+        return functools.partial(make_object, arg1=1)
+
+      assert use_functools_partial.as_buildable() == fdl.Partial(
+          make_object, arg1=1)
+
+  Support for this is special cased as part of `auto_config`. Note that
+  `auto_config_fn.as_buildable()` must return a single `fdl.Config` object;
+  return values of containers or other `fdl.Partial`s are not supported.
+
+  Args:
+      auto_config_fn: The auto_config function to create a corresponding partial
+        from.
+      *args: Positional arguments to forward to `auto_config_fn`.
+      **kwargs: Keyword arguments to forward to `auto_config_fn`.
+
+  Returns:
+    Inside an auto_config function, returns a `fdl.Partial` obtained from
+    casting the return value of `auto_config_fn.as_buildable()`. Outside an
+    auto_config function, returns a standard `functools.partial` instance.
+  """
+  return functools.partial(auto_config_fn, *args, **kwargs)
+
+
 @dataclasses.dataclass(frozen=True)
 class ConfigTypes:
   config_cls: Type[config.Config] = config.Config
@@ -759,6 +812,20 @@ def auto_config(
               for name, arg in kwargs.items()
           },
       )
+    elif fn_or_cls is inlined_partial:
+      auto_config_fn, partial_args = args[0], args[1:]
+      if not isinstance(auto_config_fn, AutoConfig):
+        raise ValueError(
+            'inlined_partial should only be applied to auto_config functions,'
+            f' received: {auto_config_fn}'
+        )
+      cfg = auto_config_fn.as_buildable(*partial_args, **kwargs)
+      if not isinstance(cfg, config.Config):
+        raise ValueError(
+            'inlined_partial should only be applied to auto_config functions'
+            f' that create a single top-level Config, received: {cfg}'
+        )
+      return cast_lib.cast(partial_cls, cfg)
 
     if fn_or_cls is exempt:
       return fn_or_cls(*args, **kwargs)

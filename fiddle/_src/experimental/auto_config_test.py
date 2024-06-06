@@ -318,6 +318,54 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
     self.assertEqual(expected_config, test_fn_config_1.as_buildable())
     self.assertEqual(expected_config, test_fn_config_2.as_buildable())
 
+  def test_inlined_partial(self):
+    expected_config = fdl.Partial(FrozenSampleClass, arg1=1, arg2=2)
+
+    @auto_config.auto_config
+    def make_frozen_sample_class(arg1):
+      return FrozenSampleClass(arg1, 2)
+
+    @auto_config.auto_config
+    def test_config():
+      return auto_config.inlined_partial(make_frozen_sample_class, arg1=1)
+
+    with self.subTest('as_buildable'):
+      self.assertEqual(expected_config, test_config.as_buildable())
+
+    with self.subTest('python_path'):
+      python_path_output = test_config()
+      self.assertIsInstance(python_path_output, functools.partial)
+      self.assertEqual(python_path_output.func, make_frozen_sample_class)
+      self.assertEqual(python_path_output.keywords, {'arg1': 1})
+
+  def test_inlined_partial_non_auto_config_fn_error(self):
+
+    @auto_config.auto_config
+    def test_config_with_non_auto_config_fn():
+      return auto_config.inlined_partial(pass_through, arg=1)  # pytype: disable=wrong-arg-types
+
+    with self.assertRaisesRegex(
+        ValueError,
+        'inlined_partial should only be applied to auto_config functions',
+    ):
+      test_config_with_non_auto_config_fn.as_buildable()
+
+  def test_inlined_partial_non_single_config_error(self):
+    @auto_config.auto_config
+    def make_frozen_sample_class_list(arg1):
+      return [FrozenSampleClass(arg1, 2)]
+
+    @auto_config.auto_config
+    def test_config():
+      return auto_config.inlined_partial(make_frozen_sample_class_list, arg1=1)
+
+    with self.assertRaisesRegex(
+        ValueError,
+        'inlined_partial should only be applied to auto_config functions that'
+        ' create a single top-level Config, received',
+    ):
+      test_config.as_buildable()
+
   def test_create_config_with_args(self):
     expected_config = fdl.Config(
         FrozenSampleClass, 'positional', arg2='default'
