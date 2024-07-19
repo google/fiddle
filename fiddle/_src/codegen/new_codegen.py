@@ -85,6 +85,7 @@ def code_generator(
     max_expression_complexity: Optional[int] = None,
     include_history: bool = False,
     debug_print: bool = False,
+    hide_fdl_config_calls: bool = False,
 ) -> experimental_top_level_api.Codegen:
   """Returns a low-level Codegen instance; see experimental_top_level_api."""
   config = experimental_top_level_api.code_generator.as_buildable(
@@ -105,9 +106,12 @@ def code_generator(
   idx = _get_pass_idx(config, experimental_top_level_api.ImportSymbols)
   fdl.update_callable(config.passes[idx], ImportSymbols)
 
-  # Replace MakeSymbolicReferences
-  idx = _get_pass_idx(config, experimental_top_level_api.MakeSymbolicReferences)
-  fdl.update_callable(config.passes[idx], MakeSymbolicReferences)
+  if not hide_fdl_config_calls:
+    # Replace MakeSymbolicReferences
+    idx = _get_pass_idx(
+        config, experimental_top_level_api.MakeSymbolicReferences
+    )
+    fdl.update_callable(config.passes[idx], MakeSymbolicReferences)
 
   # Insert type annotations before MakeSymbolicReferences. These type
   # annotations currently make more sense for non-auto_config cases.
@@ -124,6 +128,7 @@ def new_codegen(
     max_expression_complexity: Optional[int] = None,
     include_history: bool = False,
     debug_print: bool = False,
+    hide_fdl_config_calls: bool = False,
 ) -> str:
   """Generates code for an auto_config fixture.
 
@@ -141,6 +146,8 @@ def new_codegen(
       as trailing comments in the field of Buildable's.
     debug_print: Whether to use the IR printer to print intermediate
       representations as various passes run to generate code.
+    hide_fdl_config_calls: Whether to hide fdl.Config() calls. Hiding these
+      calls is useful for reducing the verbosity of the generated code.
 
   Returns:
     Python module code.
@@ -150,5 +157,6 @@ def new_codegen(
       max_expression_complexity=max_expression_complexity,
       include_history=include_history,
       debug_print=debug_print,
+      hide_fdl_config_calls=hide_fdl_config_calls,
   )
   return codegen_obj(config, sub_fixtures=sub_fixtures).code

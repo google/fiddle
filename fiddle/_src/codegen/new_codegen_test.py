@@ -102,6 +102,28 @@ class NewCodegenTest(absltest.TestCase):
     """
     self.assertEqual(code.split(), expected.split())
 
+  def test_code_output_hide_fdl_config_call(self):
+    config = fake_encoder_decoder.fixture.as_buildable().encoder
+    code = new_codegen.new_codegen(
+        config=config,
+        max_expression_complexity=4,
+        hide_fdl_config_calls=True,
+    )
+    expected = """
+    import fiddle as fdl
+    from fiddle._src.testing.example import fake_encoder_decoder
+
+    def config_fixture() -> fdl.Config[fake_encoder_decoder.FakeEncoder]:
+        mlp = fake_encoder_decoder.Mlp(dtype='float32', use_bias=False,
+          sharding_axes=['embed', 'num_heads', 'head_dim'])
+        return fake_encoder_decoder.FakeEncoder(embedders={'tokens':
+          fake_encoder_decoder.TokenEmbedder(dtype='float32'),
+          'position': None},
+          attention=fake_encoder_decoder.Attention(dtype='float32',
+          kernel_init='uniform()', bias_init='zeros()'), mlp=mlp)
+    """
+    self.assertEqual(code.split(), expected.split())
+
 
 if __name__ == "__main__":
   absltest.main()
