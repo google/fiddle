@@ -63,6 +63,7 @@ def import_dotted_name(name: str, mode: ImportDottedNameDebugContext) -> Any:
       the indicated name.
   """
   name_pieces = name.split('.')
+  print('name_pieces: ', name_pieces)
   if len(name_pieces) < 2:
     raise ValueError(
         f'{mode.error_prefix(name)}: Expected a dotted name including the '
@@ -72,10 +73,17 @@ def import_dotted_name(name: str, mode: ImportDottedNameDebugContext) -> Any:
   # We don't know where the module ends and the name begins; so we need to
   # try different split points.  Longer module names take precedence.
   for i in range(len(name_pieces) - 1, 0, -1):
+    print('i: ', i)
+    module_name = '.'.join(name_pieces[:i])
+    print('  module to import: ', module_name)
     try:
       value = importlib.import_module('.'.join(name_pieces[:i]))
       for j, name_piece in enumerate(name_pieces[i:]):
         try:
+          available_names = ', '.join(
+              repr(n) for n in dir(value) if not n.startswith('_')
+          )
+          print('available_names: ', available_names)
           value = getattr(value, name_piece)  # Can raise AttributeError.
         except AttributeError:
           available_names = ', '.join(
@@ -89,6 +97,7 @@ def import_dotted_name(name: str, mode: ImportDottedNameDebugContext) -> Any:
           ) from None
       return value
     except ModuleNotFoundError:
+      print('  failed to import module: ', '.'.join(name_pieces[:i]))
       if i == 1:  # Final iteration through the loop.
         raise
 

@@ -135,8 +135,10 @@ class FiddleFlag(flags.MultiFlag):
     super().__init__(*args, **kwargs)
 
   def _initial_config(self, expression: str):
+    print('expression: ', expression)
     call_expr = utils.CallExpression.parse(expression)
     base_name = call_expr.func_name
+    print('base_name: ', base_name)
     base_fn = utils.resolve_function_reference(
         base_name,
         utils.ImportDottedNameDebugContext.BASE_CONFIG,
