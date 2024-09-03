@@ -31,6 +31,7 @@ import importlib
 import inspect
 import itertools
 import json
+import operator
 import re
 import sys
 import types
@@ -576,7 +577,12 @@ class Serialization:
     else:
       symbol = value.__qualname__
     # Check to make sure we can import the symbol.
-    if value is not import_symbol(self._pyref_policy, module_name, symbol):
+    imported_value = import_symbol(self._pyref_policy, module_name, symbol)
+    # Class methods compare equal but do not preserve identity when imported.
+    matches = (
+        operator.eq if isinstance(value, types.MethodType) else operator.is_
+    )
+    if not matches(value, imported_value):
       msg = (
           f"Couldn't create a pyref for {value!r}; the same value was not"
           f' obtained by importing {symbol!r} from {module_name!r}. Error'
@@ -636,7 +642,9 @@ class Serialization:
         if all_paths is None:
           return value  # If we don't need to add paths, just return the value.
         output = self._leaf(value)
-      elif isinstance(value, (type, types.FunctionType, enum.Enum)):
+      elif isinstance(
+          value, (type, types.FunctionType, types.MethodType, enum.Enum)
+      ):
         output = self._pyref(value, current_path)
       elif isinstance(value, lazy_imports.ProxyObject):
         output = _serialize_lazy_imports(value)
