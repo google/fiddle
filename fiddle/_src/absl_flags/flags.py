@@ -72,7 +72,7 @@ class FiddleFlagSerializer(flags.ArgumentSerializer):
   which provides this serializer by default.
   """
 
-  def __init__(self, pyref_policy: serialization.PyrefPolicy):
+  def __init__(self, pyref_policy: Optional[serialization.PyrefPolicy] = None):
     self._pyref_policy = pyref_policy
 
   def serialize(self, value: config.Buildable) -> str:
