@@ -191,7 +191,7 @@ class FiddleFlag(flags.MultiFlag):
   def _parse_config(self, command: str, expression: str) -> None:
     if self._initial_config_expression:
       raise ValueError(
-          "Only one base configuration is permitted. Received"
+          "Only one base configuration is permitted. Received "
           f"{command}:{expression} after "
           f"{self.first_command}:{self._initial_config_expression} was"
           " already provided."
