@@ -175,7 +175,7 @@ class SignatureInfo:
 
   @staticmethod
   def signature_binding(
-      fn_or_cls, *args, **kwargs
+      fn_or_cls, /, *args, **kwargs
   ) -> Dict[Union[int, str], Any]:
     """Bind arguments and return an args dict in canonical storage format.
 

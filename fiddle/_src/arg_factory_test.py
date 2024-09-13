@@ -152,7 +152,6 @@ class ArgFactoryPartialTest(parameterized.TestCase):
     self.assertIsNot(a.children, b.children)  # child list is not shared
     self.assertIsNot(a.children[0], b.children[0])  # child not shared
 
-  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_param_named_self(self):
     # Note: this test succeeds because _InvokeArgFactoryWrapper.__call__
     # declares `self` as a positional-only parameter.  Otherwise, __call__

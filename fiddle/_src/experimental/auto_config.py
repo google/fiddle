@@ -96,10 +96,10 @@ class AutoConfig:
       else:
         object.__setattr__(self, name, value)
 
-  def __call__(self, *args, **kwargs) -> Any:
+  def __call__(self, /, *args, **kwargs) -> Any:
     return self.func(*args, **kwargs)
 
-  def as_buildable(self, *args, **kwargs) -> config.Buildable:
+  def as_buildable(self, /, *args, **kwargs) -> config.Buildable:
     return self.buildable_func(*args, **kwargs)
 
   def __get__(self, obj, objtype=None):
@@ -775,7 +775,7 @@ def auto_config(
   if experimental_exemption_policy is None:
     experimental_exemption_policy = auto_config_policy.latest
 
-  def auto_config_call_handler(fn_or_cls, *args, **kwargs):
+  def auto_config_call_handler(fn_or_cls, /, *args, **kwargs):
     """Handles calls in auto_config'ed functions.
 
     This intercepts calls in an auto-configed function, and determines whether

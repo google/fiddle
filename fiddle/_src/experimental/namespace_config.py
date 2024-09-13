@@ -28,7 +28,7 @@ def _kwargs_to_namespace(**kwargs: Any) -> types.SimpleNamespace:
 class NamespaceConfig(config.Config):
   """A Config that builds a `types.SimpleNamespace` accepting all arg names."""
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, /, *args, **kwargs):
     super().__init__(_kwargs_to_namespace, *args, **kwargs)
 
   @classmethod

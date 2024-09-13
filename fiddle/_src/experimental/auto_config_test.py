@@ -1094,7 +1094,6 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
         FrozenSampleClass.autoconfig_method, auto_config.AutoConfig
     )
 
-  @absltest.skip('Enable this after dropping pyhon 3.7 support')
   def test_can_pass_self_as_keyword(self):
     x = FrozenSampleClass(1, 2)
     self.assertEqual(

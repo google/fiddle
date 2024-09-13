@@ -119,7 +119,7 @@ def update_callable(
   buildable.__argument_history__.add_new_value('__fn_or_cls__', new_callable)
 
 
-def assign(buildable: config_lib.Buildable, **kwargs):
+def assign(buildable: config_lib.Buildable, /, **kwargs):
   """Assigns multiple arguments to ``buildable``.
 
   Although this function does not enable a caller to do something they can't

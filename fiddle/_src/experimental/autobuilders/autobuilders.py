@@ -217,10 +217,13 @@ class Registry:
 
     return inner
 
-  def auto_skeleton(self,
-                    fn_or_cls: FnOrCls[Any],
-                    attributes_require_skeletons: bool = False,
-                    **kwargs) -> None:
+  def auto_skeleton(
+      self,
+      fn_or_cls: FnOrCls[Any],
+      /,
+      attributes_require_skeletons: bool = False,
+      **kwargs,
+  ) -> None:
     """Registers a skeleton based on arg types.
 
     Sometimes functions are written to take a more generic class, for example

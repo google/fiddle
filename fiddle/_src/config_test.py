@@ -1046,6 +1046,15 @@ class ConfigTest(parameterized.TestCase):
       cfg.child.x = 5  # now it's ok to configure child.
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
 
+  def test_unbound_method(self):
+    sample = fdl.Config(SampleClass, 0, 1)
+    cfg = fdl.Config(SampleClass.a_method, sample)
+    self.assertEqual(fdl.build(cfg), 4)
+
+  def test_fn_or_cls_argument_name(self):
+    cfg = fdl.Config(dict, fn_or_cls=123)
+    self.assertEqual(fdl.build(cfg), dict(fn_or_cls=123))
+
 
 class OrderedArgumentsTest(parameterized.TestCase):
 

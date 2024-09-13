@@ -234,6 +234,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
   def __init__(
       self,
       fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]],
+      /,
       *args,
       **kwargs,
   ):
@@ -304,7 +305,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     _register_buildable_defaults_aware_traversers(cls)
 
   @abc.abstractmethod
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds output for this instance; see subclasses for details."""
     raise NotImplementedError()
 
@@ -767,7 +768,7 @@ class Config(Generic[T], Buildable[T]):
   __fn_or_cls__: TypeOrCallableProducingT[T]
   __signature_info__: signatures.SignatureInfo
 
-  def __build__(self, *args, **kwargs):
+  def __build__(self, /, *args, **kwargs):
     """Builds this ``Config`` for the given ``args`` and ``kwargs``.
 
     This method is called during `build` to get the output for this `Config`.
@@ -824,7 +825,7 @@ class TaggedValueCls(Generic[T], Config[T]):
   def tags(self):
     return self.__argument_tags__['value']
 
-  def __build__(self, *args: Any, **kwargs: Any) -> T:
+  def __build__(self, /, *args: Any, **kwargs: Any) -> T:
     if self.__fn_or_cls__ is not tagged_value_fn:
       raise RuntimeError(
           'Unexpected __fn_or_cls__ in TaggedValueCls; found:'
