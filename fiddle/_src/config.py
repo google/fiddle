@@ -551,12 +551,19 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     all_names = valid_param_names.union(set_argument_names)
     return all_names
 
-  def __repr__(self):
+  # Buildable are mutable so do not make this `@functools.cached_property`
+  def _fn_or_cls_name_repr(self) -> str:
+    """Display name of the config object."""
     if hasattr(self.__fn_or_cls__, '__qualname__'):
-      formatted_fn_or_cls = self.__fn_or_cls__.__qualname__
+      return self.__fn_or_cls__.__qualname__
     else:
-      formatted_fn_or_cls = str(self.__fn_or_cls__)
-    formatted_params = []
+      return str(self.__fn_or_cls__)
+
+  def _params_name_tags_and_value(
+      self,
+  ) -> Iterable[tuple[str, Set[tag_type.TagType], Any]]:
+    """Returns the dict mapping each param name to its tags and value."""
+
     # Show parameters from signature first (in signature order) followed by
     # **varkwarg parameters (in the order they were set).
     param_names = list(self.__signature_info__.parameters) + [
@@ -566,8 +573,15 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     ]
 
     for name in param_names:
-      tags = self.__argument_tags__.get(name, ())
+      tags = self.__argument_tags__.get(name, set())
       value = self.__arguments__.get(name, NO_VALUE)
+      yield name, tags, value
+
+  def __repr__(self):
+    formatted_fn_or_cls = self._fn_or_cls_name_repr()
+
+    formatted_params = []
+    for name, tags, value in self._params_name_tags_and_value():
       if tags or (value is not NO_VALUE):
         param_str = str(name)
         if tags:

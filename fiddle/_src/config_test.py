@@ -806,6 +806,18 @@ class ConfigTest(parameterized.TestCase):
     expected_repr = "<Config[SampleClass(arg1=1, arg2=2, kwarg1='kwarg1')]>"
     self.assertEqual(repr(class_config), expected_repr)
 
+    self.assertEqual(class_config._fn_or_cls_name_repr(), 'SampleClass')
+    name_tags_and_value = list(class_config._params_name_tags_and_value())
+    self.assertEqual(
+        name_tags_and_value,
+        [
+            ('arg1', set(), 1),
+            ('arg2', set(), 2),
+            ('kwarg1', set(), 'kwarg1'),
+            ('kwarg2', set(), fdl.NO_VALUE),
+        ],
+    )
+
   def test_repr_nested_indentation(self):
     config = fdl.Config(basic_fn, 1,
                         fdl.Config(basic_fn, 'x' * 50, fdl.Config(basic_fn, 1)))
