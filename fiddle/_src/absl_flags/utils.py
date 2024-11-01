@@ -46,12 +46,19 @@ class ImportDottedNameDebugContext(enum.Enum):
     return f'Could not load fiddler {name!r}'
 
 
-def import_dotted_name(name: str, mode: ImportDottedNameDebugContext) -> Any:
+def _import_dotted_name(
+    name: str,
+    mode: ImportDottedNameDebugContext,
+    module: Optional[types.ModuleType],
+) -> Any:
   """Returns the Python object with the given dotted name.
 
   Args:
     name: The dotted name of a Python object, including the module name.
-    mode: Whether we're looking for a base config function or a fiddler.
+    mode: Whether we're looking for a base config function or a fiddler, used
+      only for constructing error messages.
+    module: A common namespace to use as the basis for resolving the import, if
+      None, we will attempt to use absolute imports.
 
   Returns:
     The named value.
@@ -63,6 +70,9 @@ def import_dotted_name(name: str, mode: ImportDottedNameDebugContext) -> Any:
       the indicated name.
   """
   name_pieces = name.split('.')
+  if module is not None:
+    name_pieces = [module.__name__] + name_pieces
+
   if len(name_pieces) < 2:
     raise ValueError(
         f'{mode.error_prefix(name)}: Expected a dotted name including the '
@@ -223,7 +233,8 @@ def resolve_function_reference(
     module: A common namespace to use as the basis for finding configs and
       fiddlers. May be `None`; if `None`, only fully qualified Fiddler imports
       will be used (or alternatively a base configuration can be specified using
-      the `--fdl_config_file` flag.)
+      the `--fdl_config_file` flag.). Dotted imports are resolved relative to
+      `module` if not None, by preference, or else absolutely.
     allow_imports: If true, then fully qualified dotted names may be used to
       specify configs or fiddlers that should be automatically imported.
     failure_msg_prefix: Prefix string to prefix log messages in case of
@@ -235,10 +246,25 @@ def resolve_function_reference(
   if hasattr(module, function_name):
     return getattr(module, function_name)
   elif allow_imports:
+    # Try a relative import first.
+    if module is not None:
+      try:
+        return _import_dotted_name(
+            function_name,
+            mode=mode,
+            module=module,
+        )
+      except (ModuleNotFoundError, ValueError, AttributeError):
+        # Intentionally ignore the exception here. We will reraise after trying
+        # again without relative import.
+        pass
+
+    # Try absolute import for the provided function name / symbol.
     try:
-      return import_dotted_name(
+      return _import_dotted_name(
           function_name,
           mode=mode,
+          module=None,
       )
     except ModuleNotFoundError as e:
       raise ValueError(f'{failure_msg_prefix} {function_name!r}: {e}') from e

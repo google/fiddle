@@ -222,6 +222,23 @@ fiddler and invoke it with the previous Fiddlers syntax.
 
 </section>
 
+## Name Resolution
+
+Fiddle will attempt to resolve dotted names relative to `default_module`, if
+provided. If no module is provided, Fiddle will attempt to resolve the name as
+an absolute path.
+
+Concretely, given the flag definition
+
+```py
+absl_flags.DEFINE_fiddle_config(
+  "config", help_string="Fiddle configuration.", default_module=m
+)
+```
+
+resolving `--config=config:n.base` will first try to resolve or import
+`m.n.base` but will fall back to `n.base`.
+
 ## Serializing and forwarding configurations
 
 The new flags API provides a convenient way to serialize and forward a config.
