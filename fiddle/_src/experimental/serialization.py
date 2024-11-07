@@ -223,7 +223,7 @@ class PyrefPolicy(metaclass=abc.ABCMeta):
 
     Args:
       value: An imported value.
-    """
+    """  # pytype: disable=bad-return-type
 
 
 class PyrefPolicyError(Exception):

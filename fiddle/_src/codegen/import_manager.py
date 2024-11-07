@@ -175,7 +175,7 @@ class ImportManager:
     for node in self.imports_by_full_name.values():
       if get_namespace_name(node) == namespace_name:
         return get_full_module_name(node).split(".")[0] == base_module_name
-    return None
+    return None  # pytype: disable=bad-return-type
 
   def add_by_name(self, full_module_name: str) -> str:
     """Adds an import given a module name.
