@@ -83,6 +83,7 @@ def convert_py_val_to_cst(
   * `tuple`: returns an `cst.Tuple`.
   * `set`: returns an `cst.Set` or a `cst.Call` for `set()`.
   * `dict`: Returns an `cst.Dict`.
+  * `slice`: Returns a `cst.Call` for `slice(start, stop, step)`.
   * Fiddle buildable types (`fdl.Config`, `fdl.Partial`, `fdl.TaggedValue`):
     Returns a `cst.Call` that constructs the value.
   * Modules: Returns a `cst.Name` or `cst.Attribute` containing the full
@@ -308,6 +309,19 @@ def _convert_set(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
     return cst.Set([cst.Element(conversion_fn(v)) for v in value])
   else:
     return cst.Call(func=cst.Name('set'))
+
+
+@register_py_val_to_cst_converter(slice)
+def _convert_slice(value: slice, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
+  """Converts a slice to CST."""
+  return cst.Call(
+      func=cst.Name('slice'),
+      args=[
+          cst.Arg(conversion_fn(value.start)),
+          cst.Arg(conversion_fn(value.stop)),
+          cst.Arg(conversion_fn(value.step)),
+      ],
+  )
 
 
 @register_py_val_to_cst_converter(daglish_legacy.is_namedtuple_instance)

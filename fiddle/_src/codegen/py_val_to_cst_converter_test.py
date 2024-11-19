@@ -87,6 +87,7 @@ class PyValToCstConverterTest(parameterized.TestCase):
       ({6}, '{6}'),
       (dict(a=8), "{'a': 8}"),
       ({}, '{}'),
+      (slice(1, 2, 3), 'slice(1, 2, 3)'),
       # Nested containers:
       ([1, (2, {3}), {4: 5, 6: [7]}], '[1, (2, {3}), {4: 5, 6: [7]}]'),
       # Fiddle types:

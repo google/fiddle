@@ -176,6 +176,15 @@ register_node_traverser(
     unflatten_fn=lambda values, metadata: config_lib.NO_VALUE,
     path_elements_fn=lambda _: ())
 
+register_node_traverser(
+    slice,
+    flatten_fn=lambda x: ((x.start, x.stop, x.step), None),
+    unflatten_fn=lambda x, _: slice(*x),
+    path_elements_fn=lambda x: tuple(
+        daglish.Attr(k) for k in ['start', 'stop', 'step']
+    ),
+)
+
 
 def _is_leaf_type(value_type):
   """Returns whether `value_type` is a JSON-representable primitive type."""
