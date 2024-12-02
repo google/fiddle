@@ -156,9 +156,9 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     self._temp_var_count = 0
 
   def _location_for(self, node: ast.AST):
-    line_number = self._line_number + node.lineno - 1
-    line = self._lines[node.lineno - 1]
-    return (self._filename, line_number, node.col_offset, line)
+    line_number = self._line_number + node.lineno - 1  # pytype: disable=attribute-error
+    line = self._lines[node.lineno - 1]  # pytype: disable=attribute-error
+    return (self._filename, line_number, node.col_offset, line)  # pytype: disable=attribute-error
 
   def _handle_control_flow(self, node: ast.AST, activatable: bool = False):
     if self._allow_control_flow and activatable:
@@ -234,7 +234,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       return ast.Expr(
           ast.Call(
               func=ast.Name(id=_ATTR_SAVE_HANDLER_ID, ctx=ast.Load()),
-              args=[obj, ast.Str(s=attr), value],
+              args=[obj, ast.Str(s=attr), value],  # pytype: disable=missing-parameter
               keywords=[],
           )
       )
