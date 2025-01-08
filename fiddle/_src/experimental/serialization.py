@@ -35,7 +35,7 @@ import operator
 import re
 import sys
 import types
-from typing import Any, Dict, Iterable, List, Optional, Type
+from typing import Any, Dict, Iterable, List, Optional, Type, Union
 
 from fiddle import daglish
 from fiddle._src import config as config_lib
@@ -844,7 +844,7 @@ def dump_json(
 
 
 def load_json(
-    serialized_value: str,
+    serialized_value: Union[str, bytes, bytearray],
     pyref_policy: Optional[PyrefPolicy] = None,
 ) -> Any:
   """Returns a Python object deserialized from `serialized_value`.
