@@ -46,6 +46,10 @@ class ImportDottedNameDebugContext(enum.Enum):
     return f'Could not load fiddler {name!r}'
 
 
+def _is_dotted_name(name: str) -> bool:
+  return len(name.split('.')) >= 2
+
+
 def _import_dotted_name(
     name: str,
     mode: ImportDottedNameDebugContext,
@@ -69,15 +73,16 @@ def _import_dotted_name(
     AttributeError: If the imported module does not contain a value with
       the indicated name.
   """
-  name_pieces = name.split('.')
-  if module is not None:
-    name_pieces = [module.__name__] + name_pieces
 
-  if len(name_pieces) < 2:
+  if not _is_dotted_name(name):
     raise ValueError(
         f'{mode.error_prefix(name)}: Expected a dotted name including the '
         'module name.'
     )
+
+  name_pieces = name.split('.')
+  if module is not None:
+    name_pieces = [module.__name__] + name_pieces
 
   # We don't know where the module ends and the name begins; so we need to
   # try different split points.  Longer module names take precedence.
@@ -245,7 +250,7 @@ def resolve_function_reference(
   """
   if hasattr(module, function_name):
     return getattr(module, function_name)
-  elif allow_imports:
+  elif allow_imports and _is_dotted_name(function_name):
     # Try a relative import first.
     if module is not None:
       try:
@@ -271,8 +276,8 @@ def resolve_function_reference(
   else:
     available_names = module_reflection.find_base_config_like_things(module)
     raise ValueError(
-        f'{failure_msg_prefix} {function_name!r}; '
-        f'available names: {", ".join(available_names)}.'
+        f'{failure_msg_prefix} {function_name!r}: Could not resolve reference '
+        f'to named function, available names: {", ".join(available_names)}.'
     )
 
 

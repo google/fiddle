@@ -62,7 +62,7 @@ class ResolveFunctionReferenceTest(absltest.TestCase):
 
   def test_raises_without_resolvable_name(self):
     with self.assertRaisesRegex(
-        ValueError, "Could not init a buildable from 'config_bar'"
+        ValueError, "'config_bar': Could not resolve reference"
     ):
       utils.resolve_function_reference(
           function_name='config_bar',
