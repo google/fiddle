@@ -98,7 +98,7 @@ def _import_dotted_name(
           )
           module_name = '.'.join(name_pieces[: i + j])
           failing_name = name_pieces[i + j]
-          raise ValueError(
+          raise AttributeError(
               f'{mode.error_prefix(name)}: module {module_name!r} has no '
               f'attribute {failing_name!r}; available names: {available_names}'
           ) from None
