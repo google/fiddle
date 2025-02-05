@@ -15,6 +15,7 @@
 
 """The public API for the absl_flags Fiddle extension."""
 
+from fiddle._src.absl_flags import utils
 from fiddle._src.absl_flags.flags import apply_fiddlers_to
 from fiddle._src.absl_flags.flags import apply_overrides_to
 from fiddle._src.absl_flags.flags import create_buildable_from_flags
