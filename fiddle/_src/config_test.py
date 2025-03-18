@@ -17,6 +17,7 @@
 
 import copy
 import dataclasses
+import functools
 import pickle
 import sys
 import threading
@@ -109,6 +110,13 @@ class DataclassChild:
 @dataclasses.dataclass
 class DataclassParent:
   child: DataclassChild = dataclasses.field(default_factory=DataclassChild)
+
+
+@dataclasses.dataclass
+class DataclassParentPartialDefaultFactoryChild:
+  child: DataclassChild = dataclasses.field(
+      default_factory=functools.partial(DataclassChild, x=1)
+  )
 
 
 def raise_error():
@@ -1042,21 +1050,40 @@ class ConfigTest(parameterized.TestCase):
     with self.assertRaises(ValueError):
       fdl.Partial(cfg1, 5, a='a', b='b')
 
-  def test_dataclass_default_factory(self):
-
+  def test_dataclass_default_factory_can_read_default(self):
     cfg = fdl.Config(DataclassParent)
+    child_config = cfg.child
+    self.assertIsInstance(child_config, fdl.Config)
+    self.assertEqual(child_config.__fn_or_cls__, DataclassChild)
+    self.assertEqual(fdl.build(cfg), DataclassParent(child=DataclassChild(x=0)))
 
-    with self.subTest('read_default_is_error'):
-      expected_error = (
-          r"Can't get default value for dataclass field DataclassParent\.child "
-          r'since it uses a default_factory\.')
-      with self.assertRaisesRegex(ValueError, expected_error):
-        cfg.child.x = 5
+  def test_dataclass_partial_default_factory_can_read_default(self):
+    cfg = fdl.Config(DataclassParentPartialDefaultFactoryChild)
+    child_config = cfg.child
+    self.assertIsInstance(child_config, fdl.Config)
+    self.assertEqual(child_config.__fn_or_cls__, DataclassChild)
+    self.assertEqual(child_config.x, 1)
+    self.assertEqual(
+        fdl.build(cfg),
+        DataclassParentPartialDefaultFactoryChild(child=DataclassChild(x=1)),
+    )
 
-    with self.subTest('read_ok_after_override'):
-      cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
-      cfg.child.x = 5  # now it's ok to configure child.
-      self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
+  def test_dataclass_default_factory_overriding_child_config(self):
+    cfg = fdl.Config(DataclassParent)
+    cfg.child.x = 5
+    self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(x=5)))
+
+  def test_dataclass_partial_default_factory_overriding_child_config(self):
+    cfg = fdl.Config(DataclassParentPartialDefaultFactoryChild)
+    cfg.child.x = 5
+    self.assertEqual(
+        fdl.build(cfg),
+        DataclassParentPartialDefaultFactoryChild(DataclassChild(x=5)),
+    )
+
+  def test_dataclass_default_factory_not_used_when_child_config_given(self):
+    cfg = fdl.Config(DataclassParent, child=fdl.Config(DataclassChild, x=1))
+    self.assertEqual(cfg.child.x, 1)
 
   def test_unbound_method(self):
     sample = fdl.Config(SampleClass, 0, 1)
