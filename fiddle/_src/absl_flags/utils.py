@@ -17,13 +17,14 @@
 
 import ast
 import base64
+import copy
 import dataclasses
 import enum
 import importlib
 import re
 import types
 import typing
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple, TypeVar
 import zlib
 
 from fiddle._src import config
@@ -34,16 +35,19 @@ from fiddle._src.experimental import serialization
 
 
 class ImportDottedNameDebugContext(enum.Enum):
-  """Context of importing a sumbol, for error messages."""
+  """Context of importing a symbol, for error messages."""
 
   BASE_CONFIG = 1
   FIDDLER = 2
+  SWEEP = 3
 
   def error_prefix(self, name: str) -> str:
     if self == ImportDottedNameDebugContext.BASE_CONFIG:
       return f'Could not init a buildable from {name!r}'
-    assert self == ImportDottedNameDebugContext.FIDDLER
-    return f'Could not load fiddler {name!r}'
+    if self == ImportDottedNameDebugContext.FIDDLER:
+      return f'Could not load fiddler {name!r}'
+    assert self == ImportDottedNameDebugContext.SWEEP
+    return f'Could not load sweep {name!r}'
 
 
 def _is_dotted_name(name: str) -> bool:
@@ -282,14 +286,26 @@ def resolve_function_reference(
 
 
 def set_value(cfg: config.Buildable, assignment: str) -> None:
-  """Set an attribute's value.
+  """Parse an assignment string and use it to set an attribute's value.
 
   Args:
     cfg: A `fdl.Buildable` whose attribute is to be overridden.
     assignment: String representing attribute's override expression. Of the form
-      `attribute=value`.
+      `path.to['example'].attribute=value`.
   """
   path, value = assignment.split('=', maxsplit=1)
+  literal_value = parse_value(value=value, path=path)
+  set_value_at_path(cfg, path, literal_value)
+
+
+def set_value_at_path(cfg: config.Buildable, path: str, value: Any) -> None:
+  """Set an attribute's value.
+
+  Args:
+    cfg: A `fdl.Buildable` whose attribute is to be overridden.
+    path: A string path to the attribute to override.
+    value: The value to set the attribute to.
+  """
   *parents, last = parse_path(path)
 
   walk = typing.cast(Any, cfg)
@@ -299,16 +315,40 @@ def set_value(cfg: config.Buildable, assignment: str) -> None:
   except Exception as e:
     raise ValueError(f'Invalid path "{path}".') from e
 
-  literal_value = parse_value(value=value, path=path)
   try:
     if isinstance(last, daglish.Attr):
-      setattr(walk, last.name, literal_value)
+      setattr(walk, last.name, value)
     elif isinstance(last, daglish.Key):
-      walk[last.key] = literal_value
+      walk[last.key] = value
     else:
       raise ValueError(f'Unexpected path element {last}.')
   except Exception as e:
     raise ValueError(f'Could not set "{path}" to "{value}".') from e
+
+
+_Buildable = TypeVar('_Buildable', bound=config.Buildable)
+
+
+def with_overrides(
+    buildable: _Buildable, overrides: Mapping[str, Any]
+) -> _Buildable:
+  """Apply a dict of attribute overrides.
+
+  This returns a new Buildable and does not mutate the original. The main use
+  case is to apply overrides specified for a sweep.
+
+  Args:
+    buildable: The config to override.
+    overrides: A mapping from path strings to values, of the form:
+      {'foo.bar[0].baz': 42, 'foo.qux': 'hello'}
+
+  Returns:
+    A new config with the overrides applied.
+  """
+  buildable = copy.deepcopy(buildable)
+  for path, value in overrides.items():
+    set_value_at_path(buildable, path, value)
+  return buildable
 
 
 class ZlibJSONSerializer:
