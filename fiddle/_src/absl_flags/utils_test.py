@@ -13,7 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
+from typing import Any
+
 from absl.testing import absltest
+from fiddle._src import config
 from fiddle._src.absl_flags import submodule_for_flags_test
 from fiddle._src.absl_flags import utils
 
@@ -83,6 +87,30 @@ class ResolveFunctionReferenceTest(absltest.TestCase):
           allow_imports=False,
           failure_msg_prefix='',
       )
+
+
+class WithOverridesTest(absltest.TestCase):
+
+  def test_with_overrides(self):
+    @dataclasses.dataclass
+    class Foo:
+      x: Any
+      y: Any
+
+    subconfig = config.Config(Foo, x=1, y=2)
+    cfg = config.Config(
+        Foo,
+        x=subconfig,
+        y=subconfig,
+    )
+    updated_cfg = utils.with_overrides(cfg, {'x.y': 3})
+    # This should affect both places, since we are mutating a single shared
+    # object:
+    self.assertEqual(updated_cfg.x.y, 3)
+    self.assertEqual(updated_cfg.y.y, 3)
+    # The original config should be unchanged however:
+    self.assertEqual(cfg.x.y, 2)
+    self.assertEqual(cfg.y.y, 2)
 
 
 if __name__ == '__main__':
