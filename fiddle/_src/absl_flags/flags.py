@@ -226,7 +226,8 @@ class FiddleFlag(flags.MultiFlag):
       if not match:
         raise ValueError(
             f"All flag values to {self.name} must begin with 'config:', "
-            "'config_file:', 'config_str:', 'set:', or 'fiddler:'."
+            "'config_file:', 'config_str:', 'set:', or 'fiddler:'. "
+            f"Received: '{item}'"
         )
       command, expression = match.groups()
 
