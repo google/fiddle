@@ -629,20 +629,23 @@ class _DiffFromAlignmentBuilder:
       self.record_tag_diffs(old_path, old_value, new_value)
 
     for name in old_value.__arguments__:
-      old_child = getattr(old_value, name)
-      old_child_path = old_path + (daglish.Attr(name),)
+      path_elt = daglish.attr_or_index(name)
+      old_child_path = old_path + (path_elt,)
+      old_child = path_elt.follow(old_value)
       if name in new_value.__arguments__:
-        new_child = getattr(new_value, name)
+        new_child = path_elt.follow(new_value)
         if not self.aligned_or_equal(old_child, new_child):
-          self.changes.append(
-              ModifyValue(old_child_path, getattr(diff_value, name)))
+          diff_child = path_elt.follow(diff_value)
+          self.changes.append(ModifyValue(old_child_path, diff_child))
       else:
         self.changes.append(DeleteValue(old_child_path))
 
     for name in new_value.__arguments__:
       if name not in old_value.__arguments__:
-        old_child_path = old_path + (daglish.Attr(name),)
-        self.changes.append(SetValue(old_child_path, getattr(diff_value, name)))
+        path_elt = daglish.attr_or_index(name)
+        old_child_path = old_path + (path_elt,)
+        diff_child = path_elt.follow(diff_value)
+        self.changes.append(SetValue(old_child_path, diff_child))
 
   def record_tag_diffs(self, old_path: daglish.Path,
                        old_value: config_lib.Buildable,

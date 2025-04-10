@@ -459,6 +459,12 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
                         diffing.ModifyValue(parse_path('.y.x'), 22))
     self.check_diff(old, new, expected_changes)
 
+  def test_modify_buildable_positional_argument(self):
+    old = fdl.Config(slice, 0, 1)
+    new = fdl.Config(slice, 0, 2)
+    expected_changes = (diffing.ModifyValue(parse_path('[1]'), 2),)
+    self.check_diff(old, new, expected_changes)
+
   def test_modify_sequence_element(self):
     old = fdl.Config(SimpleClass, [1, 2, [3]])
     new = copy.deepcopy(old)
@@ -486,6 +492,12 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
                         diffing.SetValue(parse_path('.y.a'), 22))
     self.check_diff(old, new, expected_changes)
 
+  def test_set_buildable_positional_argument(self):
+    old = fdl.Config(slice, 0)  # Only specify stop.
+    new = fdl.Config(slice, 0, 1)  # Specify start and stop.
+    expected_changes = (diffing.SetValue(parse_path('[1]'), 1),)
+    self.check_diff(old, new, expected_changes)
+
   def test_set_dict_item(self):
     old = fdl.Config(SimpleClass, {'a': 2, 'b': 4, 'c': {'d': 7}})
     new = copy.deepcopy(old)
@@ -505,6 +517,12 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
     expected_changes = (diffing.DeleteValue(parse_path('.x')),
                         diffing.DeleteValue(parse_path('.y.x')),
                         diffing.DeleteValue(parse_path('.z')))
+    self.check_diff(old, new, expected_changes)
+
+  def test_delete_buildable_positional_argument_by_callable_change(self):
+    old = fdl.Config(slice, 0, 1)  # Specify start and stop.
+    new = fdl.Config(slice, 0)  # Only specify stop.
+    expected_changes = (diffing.DeleteValue(parse_path('[1]')),)
     self.check_diff(old, new, expected_changes)
 
   def test_delete_dict_item(self):
