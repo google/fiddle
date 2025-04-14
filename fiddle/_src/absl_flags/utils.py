@@ -274,7 +274,12 @@ def resolve_function_reference(
     except ModuleNotFoundError as e:
       raise ValueError(f'{failure_msg_prefix} {function_name!r}: {e}') from e
   else:
-    available_names = module_reflection.find_base_config_like_things(module)
+    if mode == ImportDottedNameDebugContext.BASE_CONFIG:
+      available_names = module_reflection.find_base_config_like_things(module)
+    elif mode == ImportDottedNameDebugContext.FIDDLER:
+      available_names = module_reflection.find_fiddler_like_things(module)
+    else:
+      raise ValueError(f'Unknown mode: {mode}')
     raise ValueError(
         f'{failure_msg_prefix} {function_name!r}: Could not resolve reference '
         f'to named function, available names: {", ".join(available_names)}.'
