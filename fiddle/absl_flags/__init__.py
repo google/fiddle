@@ -15,6 +15,8 @@
 
 """The public API for the absl_flags Fiddle extension."""
 
+# pylint: disable=g-importing-member
+
 from fiddle._src.absl_flags.flags import apply_fiddlers_to
 from fiddle._src.absl_flags.flags import apply_overrides_to
 from fiddle._src.absl_flags.flags import create_buildable_from_flags
@@ -23,3 +25,7 @@ from fiddle._src.absl_flags.flags import fdl_flags_supplied
 from fiddle._src.absl_flags.flags import FiddleFlag
 from fiddle._src.absl_flags.flags import FiddleFlagSerializer
 from fiddle._src.absl_flags.flags import flags_parser
+from fiddle._src.absl_flags.sweep_flag import DEFINE_fiddle_sweep
+from fiddle._src.absl_flags.sweep_flag import SweepItem
+from fiddle._src.absl_flags.utils import set_value_at_path
+from fiddle._src.absl_flags.utils import with_overrides
