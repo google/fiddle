@@ -78,9 +78,8 @@ class ModelWrapper:
 
 
 @auto_config.auto_config
-def fixture():
+def fixture(kernel_init: str = "uniform()"):
   dtype = "float32"
-  kernel_init = "uniform()"
   bias_init = "zeros()"
   shared_token_embedder = TokenEmbedder(dtype)
   return FakeEncoderDecoder(
