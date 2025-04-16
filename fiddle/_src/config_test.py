@@ -1046,16 +1046,14 @@ class ConfigTest(parameterized.TestCase):
 
     cfg = fdl.Config(DataclassParent)
 
-    with self.subTest('read_default_is_error'):
-      expected_error = (
-          r"Can't get default value for dataclass field DataclassParent\.child "
-          r'since it uses a default_factory\.')
-      with self.assertRaisesRegex(ValueError, expected_error):
-        cfg.child.x = 5
+    with self.subTest('can_read_default'):
+      child_config = cfg.child
+      self.assertIsInstance(child_config, fdl.Config)
+      self.assertEqual(child_config.__fn_or_cls__, DataclassChild)
+      self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(1)))
 
     with self.subTest('read_ok_after_override'):
-      cfg.child = fdl.Config(DataclassChild)  # override default w/ a value
-      cfg.child.x = 5  # now it's ok to configure child.
+      cfg.child.x = 5
       self.assertEqual(fdl.build(cfg), DataclassParent(DataclassChild(5)))
 
   def test_unbound_method(self):

@@ -23,7 +23,7 @@ import copy
 import dataclasses
 import functools
 import types
-from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
 
 from fiddle._src import daglish
 from fiddle._src import history
@@ -341,14 +341,25 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     if value is not _UNSET_SENTINEL:
       return value
-    if dataclasses.is_dataclass(
-        self.__fn_or_cls__
-    ) and _field_uses_default_factory(self.__fn_or_cls__, name):
-      raise ValueError(
-          "Can't get default value for dataclass field "
-          + f'{self.__fn_or_cls__.__qualname__}.{name} '
-          + 'since it uses a default_factory.'
-      )
+    if dataclasses.is_dataclass(self.__fn_or_cls__) and (
+        default_factory := _field_default_factory(self.__fn_or_cls__, name)):
+      if _is_resolvable(default_factory):
+        self.__arguments__[name] = Config(default_factory)
+        return self.__arguments__[name]
+      elif (isinstance(default_factory, functools.partial)
+            and _is_resolvable(default_factory.func)):
+        from fiddle._src import partial  # pylint: disable=g-import-not-at-top  # Avoid cyclic load dependency
+        self.__arguments__[name] = partial.Partial(
+            default_factory.func,
+            *default_factory.args,
+            **default_factory.keywords)
+        return self.__arguments__[name]
+      else:
+        return ValueError(
+            "Can't expose a sub-config to build default value of dataclass "
+            f'field {self.__fn_or_cls__.__qualname__}.{name} since it uses an '
+            'anonymous default_factory.'
+        )
     if param is not None and param.default is not param.empty:
       return param.default
     msg = f"No parameter '{name}' has been set on {self!r}."
@@ -848,12 +859,24 @@ class TaggedValueCls(Generic[T], Config[T]):
     return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
 
 
-def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
-  """Returns true if <dataclass_type>.<field_name> uses a default_factory."""
+def _field_default_factory(
+    dataclass_type: Type[Any], field_name: str) -> Callable[[], Any] | None:
+  """Returns the default_factory of <dataclass_type>.<field_name> if present."""
   for field in dataclasses.fields(dataclass_type):
-    if field.name == field_name:
-      return field.default_factory != dataclasses.MISSING
-  return False
+    if (field.name == field_name and
+        field.default_factory != dataclasses.MISSING):
+      return cast(Callable[[], Any], field.default_factory)
+  return None
+
+
+def _is_resolvable(value: Any) -> bool:
+  # TO DO: check we can roundtrip, ideally in a way that guarantees
+  # compatibility with serialization code.
+  return (
+      hasattr(value, '__module__') and
+      hasattr(value, '__qualname__') and
+      # Rules out anonymous objects like <lambda>,  foo.<locals>.bar etc:
+      '<' not in value.__qualname__)
 
 
 BuildableT = TypeVar('BuildableT', bound=Buildable)
