@@ -220,7 +220,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     if isinstance(node.ctx, ast.Load):
       return ast.Call(
           func=ast.Name(id=_ATTR_LOAD_HANDLER_ID, ctx=ast.Load()),
-          args=[self.visit(node.value), ast.Str(s=node.attr)],
+          args=[self.visit(node.value), ast.Constant(value=node.attr)],
           keywords=[],
       )
     return self.generic_visit(node)
@@ -234,7 +234,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       return ast.Expr(
           ast.Call(
               func=ast.Name(id=_ATTR_SAVE_HANDLER_ID, ctx=ast.Load()),
-              args=[obj, ast.Str(s=attr), value],  # pytype: disable=missing-parameter
+              args=[obj, ast.Constant(value=attr), value],  # pytype: disable=missing-parameter
               keywords=[],
           )
       )
