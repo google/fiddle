@@ -440,7 +440,7 @@ def _wrap_ast_for_fn_with_closure_vars(
 
   wrapper_module = ast.Module(
       body=[
-          ast.FunctionDef(
+          ast.FunctionDef(  # pytype: disable=missing-parameter
               name=_CLOSURE_WRAPPER_ID,
               args=_EMPTY_ARGUMENTS,
               body=[
