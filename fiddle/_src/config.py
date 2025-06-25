@@ -111,6 +111,8 @@ def _register_buildable_defaults_aware_traversers(cls: Type[Buildable]):
 def _compare_buildable(x: Buildable, y: Buildable, check_dag: bool = False):
   """Compare if two Buildables are equal, including DAG structure."""
   assert isinstance(x, Buildable)
+  if x is y:
+    return True  # Fast path to avoid navigating the tree.
   if type(x) is not type(y):
     return False
   if x.__fn_or_cls__ != y.__fn_or_cls__:
