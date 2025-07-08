@@ -132,6 +132,8 @@ class FiddleFlag(flags.MultiFlag):
     # Due to the lazy evaluation of `value`, this list is needed to keep
     # track of the remaining `directives`.
     self._remaining_directives = []
+    # Save all arguments if needed for forwarding.
+    self._all_arguments = []
     super().__init__(*args, **kwargs)
 
   def _initial_config(self, expression: str):
@@ -176,6 +178,7 @@ class FiddleFlag(flags.MultiFlag):
     return new_cfg if new_cfg is not None else cfg
 
   def parse(self, arguments):
+    self._all_arguments.append(arguments)
     new_parsed = self._parse(arguments)
     self._remaining_directives.extend(new_parsed)
     self.present += len(new_parsed)
@@ -258,6 +261,10 @@ class FiddleFlag(flags.MultiFlag):
   @value.setter
   def value(self, value):
     self._value = value
+
+  @property
+  def all_arguments(self):
+    return self._all_arguments
 
 
 def DEFINE_fiddle_config(  # pylint: disable=invalid-name
