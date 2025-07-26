@@ -749,7 +749,7 @@ def auto_config(
     experimental_always_inline: If true, this function (when called in an
       ``auto_config`` context) will always be ``inline``'d in-place. See the
       documentation on ``inline`` for an example. The default (if unspecified)
-      is currently ``False``, but this may change in the future.
+      is currently ``True``.
     experimental_exemption_policy: An optional policy to control which function
       calls within the body of ``fn`` should be turned into ``fdl.Config``'s and
       which ones should simply be executed normally during the ``as_buildable``
@@ -1029,7 +1029,8 @@ def auto_unconfig(
   Args:
     fn: The function to convert.
     experimental_always_inline: Whether the output of ``fn`` should always be
-      inlined into the caller's config.
+      inlined into the caller's config. The default (if unspecified) is
+      ``True``.
 
   Returns:
     An ``AutoConfig`` that corresponds to ``fn``.
