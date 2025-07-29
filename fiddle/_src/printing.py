@@ -338,13 +338,17 @@ def _make_per_leaf_history_text(path: daglish.Path,
   return f'{_path_str(path)} = {current}{past}'
 
 
-def as_dict_flattened(cfg: config.Buildable) -> Dict[str, Any]:
+def as_dict_flattened(
+    cfg: config.Buildable, output_fn_or_cls_name: bool = False
+) -> Dict[str, Any]:
   """Returns a flattened dict of cfg's paths (dot syntax) and values.
 
   Default values and tags won't be included in the flattened dict.
 
   Args:
     cfg: A buildable to generate a flattened dict representation for.
+    output_fn_or_cls_name: If true, output the function or class name for
+      buildables.
 
   Returns: A flattened Dict representation of `cfg`.
   """
@@ -352,9 +356,22 @@ def as_dict_flattened(cfg: config.Buildable) -> Dict[str, Any]:
   def dict_generate(value, state=None) -> Iterator[_LeafSetting]:
     state = state or daglish.BasicTraversal.begin(dict_generate, value)
 
-    # Rearrange parameters in signature order.
     if isinstance(value, config.Buildable):
+      # Rearrange parameters in signature order.
       value = _rearrange_buildable_args(value, insert_unset_sentinels=False)
+      # Add the function or class name if it exists.
+      if (
+          output_fn_or_cls_name
+          and hasattr(value, '__fn_or_cls__')
+          and hasattr(value.__fn_or_cls__, '__name__')
+      ):
+        current_path_with_fn_or_cls_name = state.current_path + (
+            daglish.Attr('__fn_or_cls__'),
+            daglish.Attr('__name__'),
+        )
+        yield _LeafSetting(
+            current_path_with_fn_or_cls_name, None, value.__fn_or_cls__.__name__
+        )
 
     if not _has_nested_builder(value):
       yield _LeafSetting(state.current_path, None, value)
