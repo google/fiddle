@@ -493,6 +493,13 @@ class AsFlattenedDictTests(absltest.TestCase):
     expected = {'x': 1, 'y': 'abc'}
     self.assertEqual(output, expected)
 
+  def test_simple_flattened_dict_fn_name(self):
+    cfg = fdl.Config(fn_x_y, 1, 'abc')
+    output = printing.as_dict_flattened(cfg, output_fn_or_cls_name=True)
+
+    expected = {'__fn_or_cls__.__name__': 'fn_x_y', 'x': 1, 'y': 'abc'}
+    self.assertEqual(output, expected)
+
   def test_skip_unset_argument(self):
     cfg = fdl.Config(fn_x_y, 3.14)
     output = printing.as_dict_flattened(cfg)
@@ -507,11 +514,35 @@ class AsFlattenedDictTests(absltest.TestCase):
     expected = {'x': 'x', 'y.x': 'nest_x', 'y.y': 123}
     self.assertEqual(output, expected)
 
+  def test_nested_fn_name(self):
+    cfg = fdl.Config(fn_x_y, 'x', fdl.Config(fn_x_y, 'nest_x', 123))
+    output = printing.as_dict_flattened(cfg, output_fn_or_cls_name=True)
+
+    expected = {
+        '__fn_or_cls__.__name__': 'fn_x_y',
+        'x': 'x',
+        'y.__fn_or_cls__.__name__': 'fn_x_y',
+        'y.x': 'nest_x',
+        'y.y': 123,
+    }
+    self.assertEqual(output, expected)
+
   def test_class(self):
     cfg = fdl.Config(SampleClass, 'a_param', b=123)
     output = printing.as_dict_flattened(cfg)
 
     expected = {'a': 'a_param', 'b': 123}
+    self.assertEqual(output, expected)
+
+  def test_class_cls_name(self):
+    cfg = fdl.Config(SampleClass, 'a_param', b=123)
+    output = printing.as_dict_flattened(cfg, output_fn_or_cls_name=True)
+
+    expected = {
+        '__fn_or_cls__.__name__': 'SampleClass',
+        'a': 'a_param',
+        'b': 123,
+    }
     self.assertEqual(output, expected)
 
   def test_kwargs(self):
