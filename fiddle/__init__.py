@@ -18,6 +18,7 @@
 from fiddle._src.building import build
 from fiddle._src.casting import cast
 from fiddle._src.config import Buildable
+from fiddle._src.config import BuildableTraverserMetadata
 from fiddle._src.config import Config
 from fiddle._src.config import get_callable
 from fiddle._src.config import NO_VALUE
