@@ -57,10 +57,6 @@ ArgFactory Internals
 .. currentModule:: fiddle._src.config
 .. autoclass:: _BuiltArgFactory
 
-``TiedValue``
-~~~~~~~~~~~~~
-.. autoclass:: TiedValue
-
 Casting
 ~~~~~~~
 .. autofunction:: register_supported_cast
