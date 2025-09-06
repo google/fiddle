@@ -14,9 +14,3 @@
 # limitations under the License.
 
 """Init file for the `autobuilders` package."""
-
-from fiddle._src.experimental.autobuilders.autobuilders import auto_skeleton
-from fiddle._src.experimental.autobuilders.autobuilders import config
-from fiddle._src.experimental.autobuilders.autobuilders import Registry
-from fiddle._src.experimental.autobuilders.autobuilders import skeleton
-from fiddle._src.experimental.autobuilders.autobuilders import validator
