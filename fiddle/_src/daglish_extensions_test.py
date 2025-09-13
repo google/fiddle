@@ -94,6 +94,14 @@ class DaglishExtensionsTest(parameterized.TestCase):
               daglish.Key("bar"),
           ),
       },
+      {
+          "path": "[-1][0].foo",
+          "expected": (
+              daglish.Key(-1),
+              daglish.Key(0),
+              daglish.Attr("foo"),
+          ),
+      },
   )
   def test_parse_path(self, path, expected):
     actual = daglish_extensions.parse_path(path)
