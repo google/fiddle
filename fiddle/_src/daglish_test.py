@@ -30,6 +30,7 @@ from fiddle import history
 from fiddle._src.experimental import dataclasses as fdl_dc
 from fiddle._src.testing import nested_values
 from fiddle._src.testing import test_util
+import numpy as np
 
 
 @dataclasses.dataclass
@@ -659,6 +660,14 @@ class MemoizedTraversalTest(absltest.TestCase):
 
     result = daglish.MemoizedTraversal.run(traverse, list(range(10_000)))
     self.assertEqual(result, 50_005_000)
+
+  def test_is_memoizable(self):
+    # Numpy scalars are memoizabale
+    self.assertTrue(daglish.is_memoizable(np.array(0)))
+    # Empty tuples are not!
+    self.assertFalse(daglish.is_memoizable(()))
+    # And neither are strings.
+    self.assertFalse(daglish.is_memoizable("Hello"))
 
   def test_cycle_detection(self):
     def traverse(value, state: daglish.State):
