@@ -31,6 +31,7 @@ from fiddle._src import config
 from fiddle._src import daglish
 from fiddle._src import daglish_extensions
 from fiddle._src import module_reflection
+from fiddle._src.experimental import auto_config
 from fiddle._src.experimental import serialization
 
 
@@ -283,6 +284,38 @@ def resolve_function_reference(
         f'{failure_msg_prefix} {function_name!r}: Could not resolve reference '
         f'to named function, available names: {", ".join(available_names)}.'
     )
+
+
+def init_config_from_expression(
+    expression: str,
+    module: Optional[types.ModuleType] = None,
+    allow_imports: bool = True,
+) -> config.Buildable:
+  """Initializes a `fdl.Buildable` from a function call expression.
+
+  Args:
+    expression: A string containing a function call expression, e.g.,
+      "my_config_fn(arg1=1, arg2='hello')".
+    module: A common namespace to use as the basis for finding configs.
+    allow_imports: If true, then fully qualified dotted names may be used to
+      specify configs that should be automatically imported.
+
+  Returns:
+    A `fdl.Buildable` instance created by calling the resolved function.
+  """
+  call_expr = CallExpression.parse(expression)
+  base_name = call_expr.func_name
+  base_fn = resolve_function_reference(
+      base_name,
+      ImportDottedNameDebugContext.BASE_CONFIG,
+      module,
+      allow_imports,
+      'Could not init a buildable from',
+  )
+  if auto_config.is_auto_config(base_fn):
+    return base_fn.as_buildable(*call_expr.args, **call_expr.kwargs)
+  else:
+    return base_fn(*call_expr.args, **call_expr.kwargs)
 
 
 def set_value(cfg: config.Buildable, assignment: str) -> None:

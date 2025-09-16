@@ -14,14 +14,30 @@
 # limitations under the License.
 
 import dataclasses
+import sys
 from typing import Any
 
 from absl.testing import absltest
+import fiddle as fdl
 from fiddle._src import config
 from fiddle._src.absl_flags import submodule_for_flags_test
 from fiddle._src.absl_flags import utils
+from fiddle._src.testing.example import fake_encoder_decoder
 
 _IRRELEVANT_MODE = utils.ImportDottedNameDebugContext.BASE_CONFIG
+
+
+def base_experiment() -> fdl.Config:
+  return fake_encoder_decoder.fixture.as_buildable()
+
+
+@dataclasses.dataclass
+class TestConfig:
+  a: int
+
+
+def another_base_config() -> fdl.Config:
+  return fdl.Config(TestConfig, a=2)
 
 
 class ResolveFunctionReferenceTest(absltest.TestCase):
@@ -111,6 +127,36 @@ class WithOverridesTest(absltest.TestCase):
     # The original config should be unchanged however:
     self.assertEqual(cfg.x.y, 2)
     self.assertEqual(cfg.y.y, 2)
+
+
+class InitConfigFromExpressionTest(absltest.TestCase):
+
+  def test_from_function_name(self):
+    cfg = utils.init_config_from_expression(
+        'base_experiment',
+        module=sys.modules[__name__],
+        allow_imports=False,
+    )
+
+    self.assertEqual(cfg, base_experiment())
+
+  def test_from_function_call(self):
+    cfg = utils.init_config_from_expression(
+        'another_base_config()',
+        module=sys.modules[__name__],
+        allow_imports=False,
+    )
+
+    self.assertEqual(cfg, another_base_config())
+
+  def test_from_fully_qualified_name(self):
+    cfg = utils.init_config_from_expression(
+        'fiddle._src.absl_flags.utils_test.base_experiment',
+        module=None,
+        allow_imports=True,
+    )
+
+    self.assertEqual(cfg, base_experiment())
 
 
 if __name__ == '__main__':

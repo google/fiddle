@@ -27,5 +27,6 @@ from fiddle._src.absl_flags.flags import FiddleFlagSerializer
 from fiddle._src.absl_flags.flags import flags_parser
 from fiddle._src.absl_flags.sweep_flag import DEFINE_fiddle_sweep
 from fiddle._src.absl_flags.sweep_flag import SweepItem
+from fiddle._src.absl_flags.utils import init_config_from_expression
 from fiddle._src.absl_flags.utils import set_value_at_path
 from fiddle._src.absl_flags.utils import with_overrides

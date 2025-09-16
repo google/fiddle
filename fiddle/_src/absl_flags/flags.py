@@ -24,7 +24,6 @@ from etils import epath
 from fiddle._src import config
 from fiddle._src.absl_flags import legacy_flags
 from fiddle._src.absl_flags import utils
-from fiddle._src.experimental import auto_config
 from fiddle._src.experimental import serialization
 
 # Legacy API aliases
@@ -138,21 +137,6 @@ class FiddleFlag(flags.MultiFlag):
     self._all_arguments = []
     super().__init__(*args, **kwargs)
 
-  def _initial_config(self, expression: str):
-    call_expr = utils.CallExpression.parse(expression)
-    base_name = call_expr.func_name
-    base_fn = utils.resolve_function_reference(
-        base_name,
-        utils.ImportDottedNameDebugContext.BASE_CONFIG,
-        self.default_module,
-        self.allow_imports,
-        "Could not init a buildable from",
-    )
-    if auto_config.is_auto_config(base_fn):
-      return base_fn.as_buildable(*call_expr.args, **call_expr.kwargs)
-    else:
-      return base_fn(*call_expr.args, **call_expr.kwargs)
-
   def _apply_fiddler(self, cfg: config.Buildable, expression: str):
     call_expr = utils.CallExpression.parse(expression)
     base_name = call_expr.func_name
@@ -206,7 +190,9 @@ class FiddleFlag(flags.MultiFlag):
     else:
       self._initial_config_expression = expression
     if command == "config":
-      self.value = self._initial_config(expression)
+      self.value = utils.init_config_from_expression(
+          expression, self.default_module, self.allow_imports
+      )
     elif command == "config_file":
       with epath.Path(expression).open() as f:
         self.value = serialization.load_json(
