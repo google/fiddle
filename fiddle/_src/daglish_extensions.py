@@ -122,7 +122,7 @@ _PATH_PART = re.compile(
         "|".join([
             r"\.(?P<attr_name>[\w_]+)",
             # future improvement: support escape sequences.
-            r"\[(?P<key>\d+|'[^']+'|\"[^\"]+\")\]",
+            r"\[(?P<key>-?\d+|'[^']+'|\"[^\"]+\")\]",
         ])
     )
 )
