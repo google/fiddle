@@ -178,6 +178,7 @@ class FiddleFlag(flags.MultiFlag):
     # Reset saved arguments.
     self._all_arguments = []
     self.present = 0
+    self._initial_config_expression = None
 
   def _parse_config(self, command: str, expression: str) -> None:
     if self._initial_config_expression:
