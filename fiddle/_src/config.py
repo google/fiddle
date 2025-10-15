@@ -353,7 +353,11 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
     if param is not None and param.default is not param.empty:
       return param.default
-    msg = f"No parameter '{name}' has been set on {self!r}."
+    msg = (
+        f"No parameter '{name}' has been set on {self!r} "
+        f"(Buildable='{self.__fn_or_cls__.__qualname__}', missing "
+        f"parameter='{name}')."
+    )
     # TODO(b/219988937): Implement an edit distance function and display valid
     # attributes that are close to `name`.
     if hasattr(self.__fn_or_cls__, name):
