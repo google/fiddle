@@ -843,8 +843,11 @@ class ConfigTest(parameterized.TestCase):
 
   def test_nonexistent_attribute_error(self):
     class_config = fdl.Config(SampleClass, 1)
-    expected_msg = (r"No parameter 'nonexistent_arg' has been set on "
-                    r'<Config\[SampleClass\(arg1=1\)\]>\.')
+    expected_msg = (
+        r"No parameter 'nonexistent_arg' has been set on "
+        r'<Config\[SampleClass\(arg1=1\)\]> \(Buildable='
+        r"'SampleClass', missing parameter='nonexistent_arg'\)."
+    )
     with self.assertRaisesRegex(AttributeError, expected_msg):
       getattr(class_config, 'nonexistent_arg')
 
