@@ -14,12 +14,12 @@
 # limitations under the License.
 
 """Tests for history."""
+
 import dataclasses
 import unittest
 import warnings
 from absl import logging
 from absl.testing import absltest
-
 from fiddle._src import building
 from fiddle._src import config
 
@@ -81,6 +81,12 @@ class NonBuildableLoggingTest(absltest.TestCase, unittest.TestCase):
       warnings.simplefilter('always')
       building.build(value)
       self.assertEmpty(log_output)
+
+  def test_build_poisoning(self):
+    foo = config.Config(Foo, 1, 2)
+    with self.assertRaises(ValueError):
+      building.build(foo)
+      building.build(foo)
 
 
 if __name__ == '__main__':

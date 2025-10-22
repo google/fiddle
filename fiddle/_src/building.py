@@ -25,6 +25,7 @@ from fiddle._src import config as config_lib
 from fiddle._src import daglish
 from fiddle._src import partial
 from fiddle._src import reraised_exception
+from fiddle._src.mutate_buildable import update_callable
 
 T = TypeVar('T')
 
@@ -44,7 +45,8 @@ def _in_build():
   """A context manager to ensure fdl.build is not called recursively."""
   if _state.in_build:
     raise ValueError(
-        'It is forbidden to call `fdl.build` inside another `fdl.build` call.')
+        'It is forbidden to call `fdl.build` inside another `fdl.build` call.'
+    )
   _state.in_build = True
   try:
     yield
@@ -191,5 +193,12 @@ def build(buildable):
         str(buildable),
         type(buildable),
     )
+
+  # Poison the buildable to prevent future builds.
+  def _poison(*args, **kwargs):  # pylint: disable=unused-argument
+    raise ValueError('Only call fld.build() once.')
+
+  if isinstance(buildable, config_lib.Buildable):
+    update_callable(buildable, _poison)
 
   return result
