@@ -11,7 +11,6 @@ Please send us feedback if you have any suggestions for improvements! Or if you
 built something cool and want to share it out, we'd love to link it up at the
 "Where to go from here" section.
 
-[TOC]
 
 ## General colab advice
 
