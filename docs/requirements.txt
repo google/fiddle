@@ -1,10 +1,10 @@
-sphinx >4, <5
+sphinx
 sphinx-autodoc-typehints
-sphinx-book-theme>=0.3.3
-sphinx-copybutton>=0.5.0
+sphinx-book-theme
+sphinx-copybutton
 sphinx-design
 sphinx-remove-toctrees
-jupyter-sphinx>=0.3.2
+jupyter-sphinx
 myst-nb
 
 # Install the Fiddle package itself.

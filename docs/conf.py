@@ -99,3 +99,7 @@ html_static_path = ['_static']
 
 # Enable auto-generation of anchors for headings in markdown files.
 myst_heading_anchors = 3
+
+# Allow non-consecutive header level increase:
+# https://stackoverflow.com/questions/73074870/myst-allowing-non-consecutive-header-level-increase
+suppress_warnings = ['myst.header']

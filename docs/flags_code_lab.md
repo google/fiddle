@@ -7,48 +7,33 @@ to Fiddle's absl_flags integration! This code lab will describe how it all
 works. Configuration of fiddle config objects via command line arguments is
 supported using 3 APIs:
 
-| API        | Purpose                                                        |
-| ---------- | -------------------------------------------------------------- |
-| New API,   | Defines custom configurations per binary using the API         |
-: single     : `DEFINE_fiddle_config()` which returns a config object after   :
-: config     : applying all the command line overrides in order.              :
-:            : The usage of this API is more intuitive than the legacy API,   :
-:            : and it provides the ability to define custom overrides per     :
-:            : binary as well as read serialized configs from a file or       :
-:            : strings on the command line. Additionally, the overrides are   :
-:            : applied in order, which is a more intuitive user experience    :
-:            : than the current order followed by the legacy API.             :
-| New API,   | Defines a 'sweep' of multiple custom configurations per binary |
-: multiple   : using the API `DEFINE_fiddle_sweep()`. This is similar to      :
-: configs    : `DEFINE_fiddle_config` but returns a sequence of multiple      :
-:            : configs each with some metadata. It allows specifying them     :
-:            : via a sequence of overrides to config attributes, and/or       :
-:            : overrides to arguments of the function that generates configs. :
-:            : This is intended mainly for use in launch binaries of ML       :
-:            : experiments which perform hyperparameter sweeps.               :
-| Legacy API | Invoked via `create_buildable_from_flags()` that returns a     |
-:            : config object. Command line overrides are NOT applied in       :
-:            : order; all fiddlers are applied first, followed by all tags,   :
-:            : followed by all overrides.                                     :
+*   **New API, single config**: Defines custom configurations per binary using
+    the API `DEFINE_fiddle_config()` which returns a config object after
+    applying all the command line overrides in order. The usage of this API is
+    more intuitive than the legacy API, and it provides the ability to define
+    custom overrides per binary as well as read serialized configs from a file
+    or strings on the command line. Additionally, the overrides are applied in
+    order, which is a more intuitive user experience than the current order
+    followed by the legacy API.
+*   **New API, multiple configs**: Defines a 'sweep' of multiple custom
+    configurations per binary using the API `DEFINE_fiddle_sweep()`. This is
+    similar to `DEFINE_fiddle_config` but returns a sequence of multiple configs
+    each with some metadata. It allows specifying them via a sequence of
+    overrides to config attributes, and/or overrides to arguments of the
+    function that generates configs. This is intended mainly for use in launch
+    binaries of ML experiments which perform hyperparameter sweeps.
+*   **Legacy API**: Invoked via `create_buildable_from_flags()` that returns a
+    config object. Command line overrides are NOT applied in order; all fiddlers
+    are applied first, followed by all tags, followed by all overrides.
 
 > NOTE: New usages of the legacy flags API are discouraged and users should
 > migrate their legacy usage to the new API.
 
-See some working examples of the APIs below.
+See some working examples of the APIs below:
 
-<section class="tabs" markdown=1>
+-   [New API](http://github.com/google/fiddle/tree/main/fiddle/_src/absl_flags/sample_test_binary.py)
+-   [Legacy API](http://github.com/google/fiddle/tree/main/fiddle/absl_flags/example)
 
-### New API {.new-tab}
-
-[example](http://github.com/google/fiddle/tree/main/fiddle/_src/absl_flags/sample_test_binary.py)
-
-### Legacy API {.new-tab}
-
-[example](http://github.com/google/fiddle/tree/main/fiddle/absl_flags/example)
-
-</section>
-
-[TOC]
 
 ## How to structure your code
 
@@ -88,7 +73,7 @@ When our example program is executed, the following steps occur:
 
 <section class="tabs" markdown=1>
 
-### New API (single config) {.new-tab}
+### New API (single config)
 
 1.  **Launch**: We run our program on the command line:
 
@@ -109,7 +94,7 @@ When our example program is executed, the following steps occur:
     arbitrary functions on the built objects to carry out whatever task your
     application has been designed to do.
 
-### New API (multiple configs) {.new-tab}
+### New API (multiple configs)
 
 1.  **Launch**: We run our launcher program on the command line to launch
     multiple configs:
@@ -124,13 +109,11 @@ When our example program is executed, the following steps occur:
 
 2.  **Flag Parsing**: The custom Fiddle flag parser parses Fiddle-related flags
     from the command line, and applies any overrides specified in the sweeps to
-    create a sweep of one or more configs.
-    If multiple sweeps are specified, the cartesian product of the sweeps is
-    taken before applying them.
-    Any fiddler: or set: commands are then applied to all configs in the sweep,
-    in the order specified.
-    `_SAMPLE_FLAG.value` returns a sequence of SweepItem dataclasses, each of
-    which has a `.config` property of type `fdl.Buildable`, and an
+    create a sweep of one or more configs. If multiple sweeps are specified, the
+    cartesian product of the sweeps is taken before applying them. Any fiddler:
+    or set: commands are then applied to all configs in the sweep, in the order
+    specified. `_SAMPLE_FLAG.value` returns a sequence of SweepItem dataclasses,
+    each of which has a `.config` property of type `fdl.Buildable`, and an
     `overrides_applied` property which is the dict of overrides and can be
     useful to log as metadata attached to each experiment launched.
 
@@ -142,7 +125,7 @@ When our example program is executed, the following steps occur:
 4.  **Business logic in the main binary**: Is the same as in the single-config
     case.
 
-### Legacy API {.new-tab}
+### Legacy API
 
 1.  **Launch**: We run our program on the command line:
 
@@ -196,114 +179,88 @@ When our example program is executed, the following steps occur:
 
 ## Flag Syntax
 
-The Fiddle flag integration supports the following flag syntax:
-
--   **Base Config**: The base configuration function is specified with the flag:
+The Fiddle flag integration supports the following flag syntax.
 
 <section class="tabs" markdown=1>
 
-### New API {.new-tab}
+### New API
 
-that was set as the `name` argument for `DEFINE_fiddle_config` or
-`DEFINE_fiddle_sweep`, and the command `config`. For example, if the flag object
-was instantiated as
-`DEFINE_fiddle_config(name="my_flag", ...)`, then the base config is specified
-by using `--my_flag
-config:some_function_returning_fiddle_config_to_be_overridden()`.
-With `DEFINE_fiddle_config` one can also use the command `config_file` to read
-from a JSON serialized config written to a file, or the command `config_str` to
-read from a JSON serialized config in encoded string form (the additional
-encoding involves zlib compression followed by base64 encoding).
+-   **Base Config**: The base configuration function is specified with the
+    `config` command, following the flag name provided to `DEFINE_fiddle_config`
+    or `DEFINE_fiddle_sweep`. For example, if the flag object was instantiated
+    as `DEFINE_fiddle_config(name="my_flag", ...)`, then the base config is
+    specified by using `--my_flag
+    config:some_function_returning_fiddle_config_to_be_overridden()`. With
+    `DEFINE_fiddle_config` one can also use the command `config_file` to read
+    from a JSON serialized config written to a file, or the command `config_str`
+    to read from a JSON serialized config in encoded string form (the additional
+    encoding involves zlib compression followed by base64 encoding).
 
-### Legacy API {.new-tab}
+-   **Fiddlers**: Fiddlers are specified on the command line with the `fiddler`
+    command after the `name` argument for `DEFINE_fiddle_config` or
+    `DEFINE_fiddle_sweep`. For example, if the flag object was instantiated as
+    `DEFINE_fiddle_config(name="my_flag", ...)` then the fiddlers would be
+    invoked like `--my_flag fiddler:name_of_fiddler(value="new_value")`.
 
-`--fdl_config`. Example: `--fdl_config=base`. Alternatively, a JSON-serialized
-configuration can be read from a file via with the flag `--fdl_config_file`.
-Example: `--fdl_config_file='/some/path/config.json'`.
+-   **Specific Overrides**: Specific overrides allow you to specify specific
+    values to arbitrary fields on the command line. The syntax is the `set`
+    command after the `name` argument for `DEFINE_fiddle_config` or
+    `DEFINE_fiddle_sweep`. For example, if the flag object was instantiated as
+    `DEFINE_fiddle_config(name="my_flag", ...)`, then the specific overrides are
+    specified using `--my_flag set:some_attr.some_sub_attr=some_value`.
 
-</section>
+-   **Sweeps**: Sweeps allow you to specify multiple dicts of overrides to
+    apply, to generate a sweep of one or more configs. The syntax is the `sweep`
+    command after the `name` argument for `DEFINE_fiddle_sweep`. For example, if
+    the flag object was instantiated as `DEFINE_fiddle_sweep(name="my_flag",
+    ...)`, then one or more sweep functions can be specified using `--my_flag
+    sweep:name_of_sweep(arguments=123)` or just `--my_flag sweep:name_of_sweep`
+    if no arguments are required to the sweep function.
+
+    A `sweep:` command should specify a function call returning a list of
+    dictionaries, where each dictionary represents a single item in the sweep.
+    The entries in the dictionary are the overrides to apply, where keys can be
+    of the form:
+
+    *   `kwarg:foo` -- to specify or override a keyword argument to the base
+        config function specified by the `config:` command.
+    *   `arg:0` -- to specify or override a positional argument to the base
+        config function specified by the `config:` command.
+    *   `path.to.some.attr` -- to specify an override to an attribute in the
+        config returned by the base config function. These paths follow the same
+        format as is accepted by `set:` commands and can take quite general
+        forms like `foo.bar['baz'][0].boz`.
+
+    Multiple `sweep:` commands can be specified, which will result in taking the
+    cartesian product of the separate sweeps before applying them.
+
+### Legacy API
+
+-   **Base Config**: The base configuration function is specified with the
+    `--fdl_config` flag. Example: `--fdl_config=base`. Alternatively, a
+    JSON-serialized configuration can be read from a file with the flag
+    `--fdl_config_file`. Example: `--fdl_config_file='/some/path/config.json'`.
 
 -   **Fiddlers**: Fiddlers are specified on the command line with the
-
-<section class="tabs" markdown=1>
-
-### New API {.new-tab}
-
-command `fiddler` after the `name` argument for `DEFINE_fiddle_config` or
-`DEFINE_fiddle_sweep`. For example, if the flag object was instantiated as
-`DEFINE_fiddle_config(name="my_flag", ...)` then the fiddlers would be invoked
-like `--my_flag fiddler:name_of_fiddler(value="new_value")`.
-
-### Legacy API {.new-tab}
-
-`--fiddler=` flag. This flag can be specified multiple times. Example:
-`--fiddler=swap_weight_and_biases --fiddler=other_fiddler`.
-
-</section>
+    `--fiddler=` flag. This flag can be specified multiple times. Example:
+    `--fiddler=swap_weight_and_biases --fiddler=other_fiddler`.
 
 -   **Specific Overrides**: Specific overrides allow you to specify specific
     values to arbitrary fields on the command line. The syntax is
+    `--fdl.dotted.path.of.fields=3`, where everything after the `fdl.` prefix
+    corresponds to the name of a field in the Fiddle configuration object
+    corresponding to exactly the same Python code. For example, if (in Python)
+    we wanted to set the value of a nested field to 15, I might write:
+    `cfg.model.dense1.parameters = 15`. The corresponding syntax on the command
+    line would be: `--fdl.model.dense1.parameters=15`. Due to shell escaping, to
+    specify a string value, you often need to use two nested quotes, or escape
+    the outer quotes (depending on your shell). For example:
+    `--fdl.data.filename='"other.txt"'` (or equivalently:
+    `--fdl.data.filename=\"other.txt\"`). Only "literal" values may be specified
+    on the command line like this; if you'd like to set a complex value, please
+    write a fiddler and invoke it with the previous Fiddlers syntax.
 
-<section class="tabs" markdown=1>
-
-### New API {.new-tab}
-
-the command `set` after the `name` argument for `DEFINE_fiddle_config` or
-`DEFINE_fiddle_sweep`. For example, if the flag object was instantiated as
-`DEFINE_fiddle_config(name="my_flag", ...)`, then the specific overrides are
-specified using `--my_flag set:some_attr.some_sub_attr=some_value`.
-
-### Legacy API {.new-tab}
-
-`--fdl.dotted.path.of.fields=3`, where everything after the `fdl.` prefix
-corresponds to the name of a field in the Fiddle configuration object
-corresponding to exactly the same Python code. For example, if (in Python) we
-wanted to set the value of a nested field to 15, I might write:
-`cfg.model.dense1.parameters = 15`. The corresponding syntax on the command line
-would be: `--fdl.model.dense1.parameters=15`. Due to shell escaping, to specify
-a string value, you often need to use two nested quotes, or escape the outer
-quotes (depending on your shell). For example:
-`--fdl.data.filename='"other.txt"'` (or equivalently:
-`--fdl.data.filename=\"other.txt\"`). Only "literal" values may be specified on
-the command line like this; if you'd like to set a complex value, please write a
-fiddler and invoke it with the previous Fiddlers syntax.
-
-</section>
-
--   **Sweeps**: Allow you to specify multiple dicts of overrides to apply, to
-    generate a sweep of one or more configs. The syntax is
-
-<section class="tabs" markdown=1>
-
-### New API {.new-tab}
-
-the command `sweep` after the `name` argument for `DEFINE_fiddle_sweep`. For
-example, if the flag object was instantiated as
-`DEFINE_fiddle_sweep(name="my_flag", ...)`, then one or more sweep functions can
-be specified using `--my_flag sweep:name_of_sweep(arguments=123)` or just
-`--my_flag sweep:name_of_sweep` if no arguments are required to the sweep
-function.
-
-A sweep: command should specify a function call returning a list of
-dictionaries, where each dictionary represents a single item in the sweep.
-The entries in the dictionary are the overrides to apply, where keys can be of
-the form:
-
- * `kwarg:foo` -- to specify or override a keyword argument to the base config
-   function specified by the `config:` command.
- * `arg:0` -- to specify or override a positional argument to the base config
-   function specified by the `config:` command.
- * `path.to.some.attr` -- to specify an override to an attribute in the
-   config returned by the base config function. These paths follow the same
-   format as is accepted by `set:` commands and can take quite general forms
-   like `foo.bar['baz'][0].boz`.
-
-Multiple `sweep:` commands can be specified, which will result in taking the
-cartesian product of the separate sweeps before applying them.
-
-### Old API {.new-tab}
-
-This is not supported in the old API.
+-   **Sweeps**: This is not supported in the legacy API.
 
 </section>
 
