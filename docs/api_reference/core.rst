@@ -50,13 +50,3 @@ Advanced Functionality
 ~~~~~~~~~~~~~
 .. autoclass:: Buildable
     :members: __init__, __build__, __flatten__, __unflatten__, __path_elements__, __setattr__, __delattr__, __dir__, __repr__, __copy__, __deepcopy__, __eq__, __getstate__, __setstate__
-
-
-ArgFactory Internals
-~~~~~~~~~~~~~~~~~~~~
-.. currentModule:: fiddle._src.config
-.. autoclass:: _BuiltArgFactory
-
-Casting
-~~~~~~~
-.. autofunction:: register_supported_cast

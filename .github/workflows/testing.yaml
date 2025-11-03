@@ -10,8 +10,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        # tensorflow-text (and hence seqio) is not available for python 3.13
+        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v3
