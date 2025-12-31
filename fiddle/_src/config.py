@@ -23,7 +23,7 @@ import copy
 import dataclasses
 import functools
 import types
-from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Collection, Dict, FrozenSet, Generic, Iterable, Mapping, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, cast
 
 from fiddle._src import daglish
 from fiddle._src import history
@@ -343,14 +343,42 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
     if value is not _UNSET_SENTINEL:
       return value
-    if dataclasses.is_dataclass(
-        self.__fn_or_cls__
-    ) and _field_uses_default_factory(self.__fn_or_cls__, name):
-      raise ValueError(
-          "Can't get default value for dataclass field "
-          + f'{self.__fn_or_cls__.__qualname__}.{name} '
-          + 'since it uses a default_factory.'
-      )
+    if dataclasses.is_dataclass(self.__fn_or_cls__) and (
+        default_factory := _field_default_factory(self.__fn_or_cls__, name)
+    ):
+      if hasattr(default_factory, 'as_buildable'):
+        # The default_factory is a function wrapped by auto_config. In this case
+        # it would appear reasonable to populate a child config by setting:
+        # self.__arguments__[name] = default_factory.as_buildable()
+        # However paxml.tools.fiddle / praxis.pax_fiddle unfortunately implement
+        # some tricky magic of their own relating to auto_config and dataclass
+        # default_factories, which would appear to be broken (or at least
+        # interfered with) by any support for this here. It is likely a fairly
+        # rare use case anyway outside of paxml, so we are choosing not to
+        # support it here.
+        raise ValueError(
+            "We don't currently support exposing a sub-config to build the "
+            f"default value for an auto_config'd default_factory (field {name} "
+            f'of dataclass {self.__fn_or_cls__}.'
+        )
+      elif _is_resolvable(default_factory):
+        self.__arguments__[name] = Config(default_factory)
+      elif isinstance(default_factory, functools.partial) and _is_resolvable(
+          default_factory.func
+      ):
+        self.__arguments__[name] = Config(
+            default_factory.func,
+            *default_factory.args,
+            **default_factory.keywords,
+        )
+      else:
+        raise ValueError(
+            "Can't expose a sub-config to build default value for field "
+            f'{name} of dataclass {self.__fn_or_cls__} since it uses an '
+            'anonymous default_factory.'
+        )
+      return self.__arguments__[name]
+
     if param is not None and param.default is not param.empty:
       return param.default
     msg = (
@@ -854,12 +882,27 @@ class TaggedValueCls(Generic[T], Config[T]):
     return self.__fn_or_cls__(tags=self.tags, *args, **kwargs)
 
 
-def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
-  """Returns true if <dataclass_type>.<field_name> uses a default_factory."""
+def _field_default_factory(
+    dataclass_type: Type[Any], field_name: str
+) -> Callable[[], Any] | None:
+  """Returns the default_factory of <dataclass_type>.<field_name> if present."""
   for field in dataclasses.fields(dataclass_type):
-    if field.name == field_name:
-      return field.default_factory != dataclasses.MISSING
-  return False
+    if (
+        field.name == field_name
+        and field.default_factory != dataclasses.MISSING
+    ):
+      return cast(Callable[[], Any], field.default_factory)
+  return None
+
+
+def _is_resolvable(value: Any) -> bool:
+  return (
+      hasattr(value, '__module__')
+      and hasattr(value, '__qualname__')
+      and
+      # Rules out anonymous objects like <lambda>,  foo.<locals>.bar etc:
+      '<' not in value.__qualname__
+  )
 
 
 BuildableT = TypeVar('BuildableT', bound=Buildable)
