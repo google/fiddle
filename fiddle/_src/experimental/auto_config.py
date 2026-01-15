@@ -62,6 +62,25 @@ _GenericCallable = TypeVar('_GenericCallable', bound=Callable[..., Any])
 
 
 @dataclasses.dataclass(frozen=True)
+class AutoConfigClassMethod:
+  """A wrapper for auto_config'd class methods."""
+
+  func: Callable[..., Any]
+  always_inline: bool
+
+  def __get__(self, obj, objtype=None):
+    return AutoConfig(
+        func=types.MethodType(self.func, objtype),
+        buildable_func=types.MethodType(self.func, objtype),
+        always_inline=self.always_inline,
+    )
+
+  @property
+  def __wrapped__(self):
+    return self.func
+
+
+@dataclasses.dataclass(frozen=True)
 class AutoConfig:
   """A function wrapper for auto_config'd functions.
 

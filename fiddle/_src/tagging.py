@@ -107,9 +107,9 @@ class Tag(metaclass=TagType):
     return TaggedValue(tags=(cls,), default=default)
 
   if not typing.TYPE_CHECKING:
-    new = classmethod(
-        auto_config.AutoConfig(
-            func=new.__func__, buildable_func=new.__func__, always_inline=True))
+    new = auto_config.AutoConfigClassMethod(
+        func=new.__func__, always_inline=True
+    )
 
 
 T = TypeVar('T')
