@@ -583,6 +583,13 @@ class Serialization:
     module_name = module.__name__
     if isinstance(value, enum.Enum):
       symbol = value.__class__.__qualname__ + '.' + value.name
+    elif isinstance(value, types.MethodType) and hasattr(
+        value.__self__, '__qualname__'
+    ):
+      # Class methods needs special handling, since `value.__qualname__` returns
+      # the wrong class (the parent) when a class method that is defined in
+      # parent classes, is referenced from the child class.
+      symbol = value.__self__.__qualname__ + '.' + value.__name__
     else:
       symbol = value.__qualname__
     # Check to make sure we can import the symbol.
