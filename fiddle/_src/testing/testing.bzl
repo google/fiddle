@@ -21,6 +21,7 @@ def fiddle_autotest(
     py_test(
         name = name,
         srcs = [name + ".py"],
+        strict_deps = False,  # copybara:strip
         deps = [
             module,
             "//third_party/py/fiddle/testing:autotest",
