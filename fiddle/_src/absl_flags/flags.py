@@ -135,6 +135,14 @@ class FiddleFlag(flags.MultiFlag):
     # This will save all arguments that have passed, when unparse() is called
     # this will also be reset to empty.
     self._all_arguments = []
+
+    if default_module is None and not allow_imports:
+      raise ValueError(
+          "A Fiddle config flag must either specify a default_module to load "
+          "configs from, or set allow_imports=True to allow them to be loaded "
+          "from any module."
+      )
+
     super().__init__(*args, **kwargs)
 
   def _apply_fiddler(self, cfg: config.Buildable, expression: str):
@@ -239,7 +247,21 @@ class FiddleFlag(flags.MultiFlag):
           or command == "config_file"
           or command == "config_str"
       ):
-        self._parse_config(command, expression)
+        try:
+          self._parse_config(command, expression)
+        except ValueError as e:
+          if (
+              "Could not resolve reference to named function" in str(e)
+              and not self.allow_imports
+          ):
+            raise ValueError(
+                "If this is a new error in previously-functional code, pass "
+                "allow_imports=True to DEFINE_fiddle_config(). This allows "
+                "anyone with control of the fiddle command-line flags to "
+                "execute arbitrary code; only do this if such imports are "
+                "trusted."
+            ) from e
+          raise
 
       elif command == "set":
         utils.set_value(self._value, expression)
@@ -267,6 +289,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     pyref_policy: Optional[serialization.PyrefPolicy] = None,
     flag_values: flags.FlagValues = flags.FLAGS,
     required: bool = False,
+    allow_imports: bool = True,
 ) -> flags.FlagHolder[Any]:
   r"""Declare and define a fiddle command line flag object.
 
@@ -325,6 +348,10 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
       registered. This should almost never need to be overridden.
     required: bool, is this a required flag. This must be used as a keyword
       argument.
+    allow_imports: If true, then fully qualified dotted names may be used to
+      specify configs or fiddlers that should be automatically imported. This
+      grants arbitrary code execution to anyone who can specify the fiddle
+      command-line flags.
 
   Returns:
     A handle to defined flag.
@@ -338,6 +365,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
           parser=flags.ArgumentParser(),
           serializer=FiddleFlagSerializer(pyref_policy=pyref_policy),
           help_string=help_string,
+          allow_imports=allow_imports,
       ),
       flag_values=flag_values,
       required=required,
