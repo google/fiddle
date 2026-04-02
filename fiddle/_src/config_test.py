@@ -17,6 +17,7 @@
 
 import copy
 import dataclasses
+import functools
 import pickle
 import sys
 import threading
@@ -850,6 +851,18 @@ class ConfigTest(parameterized.TestCase):
     )
     with self.assertRaisesRegex(AttributeError, expected_msg):
       getattr(class_config, 'nonexistent_arg')
+
+  def test_partial_nonexistent_attribute_error(self):
+    # This test serves as a regression test that `functools.partial`
+    # wasn't well handled in error reporting code.
+    partial_fn = functools.partial(basic_fn, arg1=1)
+    cfg = fdl.Config(partial_fn)
+    # The expected error should indicate the missing parameter, not crash trying
+    # to access __qualname__ on the partial object.
+    with self.assertRaisesRegex(
+        AttributeError, r"No parameter 'nonexistent_arg' has been set"
+    ):
+      getattr(cfg, 'nonexistent_arg')
 
   def test_nonexistent_parameter_error(self):
     class_config = fdl.Config(SampleClass)

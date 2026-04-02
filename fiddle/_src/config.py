@@ -348,14 +348,14 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     ) and _field_uses_default_factory(self.__fn_or_cls__, name):
       raise ValueError(
           "Can't get default value for dataclass field "
-          + f'{self.__fn_or_cls__.__qualname__}.{name} '
+          + f'{self._fn_or_cls_name_repr()}.{name} '
           + 'since it uses a default_factory.'
       )
     if param is not None and param.default is not param.empty:
       return param.default
     msg = (
         f"No parameter '{name}' has been set on {self!r} "
-        f"(Buildable='{self.__fn_or_cls__.__qualname__}', missing "
+        f"(Buildable='{self._fn_or_cls_name_repr()}', missing "
         f"parameter='{name}')."
     )
     # TODO(b/219988937): Implement an edit distance function and display valid
@@ -363,7 +363,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
     if hasattr(self.__fn_or_cls__, name):
       msg += (
           f' Note: {self.__fn_or_cls__.__module__}.'
-          f'{self.__fn_or_cls__.__qualname__} has an attribute/method with '
+          f'{self._fn_or_cls_name_repr()} has an attribute/method with '
           'this name, so this could be caused by using a '
           f'fdl.{self.__class__.__qualname__} in '
           'place of the actual function or class being configured. Did you '
