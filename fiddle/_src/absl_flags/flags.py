@@ -118,7 +118,7 @@ class FiddleFlag(flags.MultiFlag):
       self,
       *args,
       default_module: Optional[types.ModuleType] = None,
-      allow_imports: bool = True,
+      allow_imports: bool = False,
       pyref_policy: Optional[serialization.PyrefPolicy] = None,
       **kwargs,
   ):
@@ -289,7 +289,7 @@ def DEFINE_fiddle_config(  # pylint: disable=invalid-name
     pyref_policy: Optional[serialization.PyrefPolicy] = None,
     flag_values: flags.FlagValues = flags.FLAGS,
     required: bool = False,
-    allow_imports: bool = True,
+    allow_imports: bool = False,
 ) -> flags.FlagHolder[Any]:
   r"""Declare and define a fiddle command line flag object.
 

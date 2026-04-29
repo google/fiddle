@@ -289,7 +289,7 @@ def resolve_function_reference(
 def init_config_from_expression(
     expression: str,
     module: Optional[types.ModuleType] = None,
-    allow_imports: bool = True,
+    allow_imports: bool = False,
 ) -> config.Buildable:
   """Initializes a `fdl.Buildable` from a function call expression.
 
