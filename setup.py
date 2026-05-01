@@ -21,8 +21,7 @@ See https://github.com/google/fiddle for documentation.
 # pyformat: disable
 
 import sys
-from setuptools import find_packages
-from setuptools import setup
+import setuptools
 
 
 _dct = {}
@@ -42,11 +41,11 @@ Python code.
 """
 
 # pylint: disable=g-long-ternary
-setup(
+setuptools.setup(
     name='fiddle',
     version=__version__,
     include_package_data=True,
-    packages=find_packages(exclude=['docs']),  # Required
+    packages=setuptools.find_packages(exclude=['docs']),  # Required
     package_data={'testdata': ['testdata/*.fiddle']},
     python_requires='>=3.8',
     install_requires=[
