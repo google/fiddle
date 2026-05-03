@@ -108,7 +108,17 @@ def _import_dotted_name(
               f'attribute {failing_name!r}; available names: {available_names}'
           ) from None
       return value
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as e:
+      # If the missing module isn't along the path we tried to import,
+      # it's an internal import error — surface the real error.
+      # e.name is None when the error has no associated module name
+      if e.name is None:
+        raise
+      # If e.name is a prefix of name_pieces, the path simply doesn't
+      # exist at this split point. Otherwise, the module
+      # exists but broke importing an unrelated dependency.
+      if (missing := e.name.split('.')) != name_pieces[: len(missing)]:
+        raise
       if i == 1:  # Final iteration through the loop.
         raise
 
