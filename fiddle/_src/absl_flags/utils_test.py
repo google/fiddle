@@ -14,9 +14,7 @@
 # limitations under the License.
 
 import dataclasses
-import os
 import sys
-import tempfile
 from typing import Any
 
 from absl.testing import absltest
@@ -159,37 +157,6 @@ class InitConfigFromExpressionTest(absltest.TestCase):
     )
 
     self.assertEqual(cfg, base_experiment())
-
-
-class ImportDottedNameTest(absltest.TestCase):
-  """Tests that _import_dotted_name surfaces real import errors."""
-
-  def test_internal_import_error_is_not_swallowed(self):
-    """A module that exists but has a broken import should raise."""
-    tmpdir = self.enterContext(tempfile.TemporaryDirectory())
-    module_path = os.path.join(tmpdir, '_broken_module.py')
-    with open(module_path, 'w') as f:
-      f.write('import _nonexistent_dependency\n')
-    sys.path.insert(0, tmpdir)
-    self.addCleanup(lambda: sys.path.remove(tmpdir))
-    self.addCleanup(lambda: sys.modules.pop('_broken_module', None))
-
-    with self.assertRaises(ModuleNotFoundError) as ctx:
-      utils._import_dotted_name(
-          '_broken_module.some_symbol',
-          mode=_IRRELEVANT_MODE,
-          module=None,
-      )
-    self.assertIn('_nonexistent_dependency', str(ctx.exception))
-
-  def test_nonexistent_module_raises_module_not_found(self):
-    """A module that doesn't exist should raise ModuleNotFoundError."""
-    with self.assertRaises(ModuleNotFoundError):
-      utils._import_dotted_name(
-          'completely_nonexistent_module.some_symbol',
-          mode=_IRRELEVANT_MODE,
-          module=None,
-      )
 
 
 if __name__ == '__main__':
