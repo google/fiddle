@@ -146,7 +146,7 @@ class DEFINE_fiddle_sweep:  # pylint: disable=invalid-name
       required: bool = False,
       help: str = "Multi-flag for a fiddle config sweep.",  # pylint: disable=redefined-builtin
       default_module: Optional[types.ModuleType] = None,
-      allow_imports: bool = True,
+      allow_imports: bool = False,
   ):
     self.name = name
     self._allow_imports = allow_imports
