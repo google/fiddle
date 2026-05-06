@@ -191,6 +191,30 @@ class ImportDottedNameTest(absltest.TestCase):
           module=None,
       )
 
+  def test_dotted_module_prefix_matching(self):
+    """Test that dot-separated module paths are split correctly for matching."""
+    import types  # pylint: disable=g-import-not-at-top
+
+    parent_a = types.ModuleType('a')
+    sub_b = types.ModuleType('a.b')
+
+    class C:
+      d = 42
+
+    sub_b.c = C
+
+    sys.modules['a'] = parent_a
+    sys.modules['a.b'] = sub_b
+    self.addCleanup(lambda: sys.modules.pop('a', None))
+    self.addCleanup(lambda: sys.modules.pop('a.b', None))
+
+    result = utils._import_dotted_name(
+        'c.d',
+        mode=_IRRELEVANT_MODE,
+        module=sub_b,
+    )
+    self.assertEqual(result, 42)
+
 
 if __name__ == '__main__':
   absltest.main()

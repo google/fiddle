@@ -117,7 +117,10 @@ def _import_dotted_name(
       # If e.name is a prefix of name_pieces, the path simply doesn't
       # exist at this split point. Otherwise, the module
       # exists but broke importing an unrelated dependency.
-      if (missing := e.name.split('.')) != name_pieces[: len(missing)]:
+      splitted_name_pieces = []
+      for pieces in name_pieces:
+        splitted_name_pieces += pieces.split('.')
+      if (missing := e.name.split('.')) != splitted_name_pieces[: len(missing)]:
         raise
       if i == 1:  # Final iteration through the loop.
         raise
