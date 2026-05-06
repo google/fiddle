@@ -87,7 +87,7 @@ def _import_dotted_name(
 
   name_pieces = name.split('.')
   if module is not None:
-    name_pieces = [module.__name__] + name_pieces
+    name_pieces = module.__name__.split('.') + name_pieces
 
   # We don't know where the module ends and the name begins; so we need to
   # try different split points.  Longer module names take precedence.

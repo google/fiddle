@@ -13,24 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Defines a config to check that we can resolve inside submodules."""
-
 import dataclasses
-
 import fiddle as fdl
-# This import is needed to test module-relative resolution of config functions.
-from fiddle._src.absl_flags import nested_submodule_for_test  # pylint: disable=unused-import
 
 
 @dataclasses.dataclass
-class Bar:
-  b: int
+class NestedBar:
+  c: int
 
 
-def increment_b(config: fdl.Config[Bar]) -> fdl.Config[Bar]:
-  config.b += 1
-  return config
-
-
-def config_bar() -> fdl.Config[Bar]:
-  return fdl.Config(Bar, b=1)
+def config_nested_bar() -> fdl.Config[NestedBar]:
+  return fdl.Config(NestedBar, c=42)
