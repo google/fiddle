@@ -68,6 +68,20 @@ class ResolveFunctionReferenceTest(absltest.TestCase):
         submodule_for_flags_test.config_bar,
     )
 
+  def test_import_dotted_name_falls_back_relative_mismatch_with_file(self):
+    from fiddle._src.absl_flags import nested_submodule_for_test  # pylint: disable=g-import-not-at-top
+
+    self.assertIs(
+        utils.resolve_function_reference(
+            function_name='nested_submodule_for_test.config_nested_bar',
+            mode=_IRRELEVANT_MODE,
+            module=submodule_for_flags_test,
+            allow_imports=True,
+            failure_msg_prefix='',
+        ),
+        nested_submodule_for_test.config_nested_bar,
+    )
+
   def test_module_relative_resolution_falls_back_to_absolute(self):
     self.assertIs(
         utils.resolve_function_reference(
