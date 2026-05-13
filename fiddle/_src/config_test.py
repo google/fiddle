@@ -124,6 +124,19 @@ class GenericClass(Generic[_T]):
   x: _T = 1
 
 
+class _Parent:
+  pass
+
+
+class _Child(_Parent):
+  pass
+
+
+def _expects_config_parent(cfg: fdl.Config[_Parent]):
+  """Helper function that accepts Config[_Parent] for covariance testing."""
+  del cfg
+
+
 class ConfigTest(parameterized.TestCase):
 
   def test_config_for_classes(self):
@@ -1082,6 +1095,19 @@ class ConfigTest(parameterized.TestCase):
   def test_fn_or_cls_argument_name(self):
     cfg = fdl.Config(dict, fn_or_cls=123)
     self.assertEqual(fdl.build(cfg), dict(fn_or_cls=123))
+
+  def test_config_covariance(self):
+    """Tests that Config is covariant in its type parameter."""
+    child_cfg = fdl.Config(_Child)
+    pytype_extensions.assert_type(child_cfg, fdl.Config[_Child])
+
+    # The following function call should type-check correctly because
+    # Config is covariant. If Config were invariant, this would be a type error.
+    _expects_config_parent(child_cfg)
+
+    # We can also assign Config[_Child] to Config[_Parent].
+    parent_cfg_var: fdl.Config[_Parent] = child_cfg
+    del parent_cfg_var
 
 
 class OrderedArgumentsTest(parameterized.TestCase):

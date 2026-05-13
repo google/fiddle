@@ -30,9 +30,9 @@ from fiddle._src import history
 from fiddle._src import signatures
 from fiddle._src import tag_type
 
-
 T = TypeVar('T')
-TypeOrCallableProducingT = Union[Callable[..., T], Type[T]]
+T_co = TypeVar('T_co', covariant=True)  # pytype: disable=not-supported-yet
+TypeOrCallableProducingT = Union[Callable[..., T_co], Type[T_co]]
 
 NoValue = signatures.NoValue
 # A sentinel object that represents no value is set for the argument.
@@ -211,7 +211,7 @@ class BuildableTraverserMetadata(NamedTuple):
     )
 
 
-class Buildable(Generic[T], metaclass=abc.ABCMeta):
+class Buildable(Generic[T_co], metaclass=abc.ABCMeta):
   """Base class for buildable types (``Config`` and ``Partial``).
 
   Buildable types implement a ``__build__`` method that is called during
@@ -227,7 +227,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   # "Dunder"-style names were chosen here to reduce the possibility of naming
   # conflicts while still making the fields accessible.
-  __fn_or_cls__: TypeOrCallableProducingT[T]
+  __fn_or_cls__: TypeOrCallableProducingT[T_co]
   __arguments__: Dict[Union[str, int], Any]
   __argument_history__: history.History
   __argument_tags__: Dict[Union[str, int], Set[tag_type.TagType]]
@@ -235,7 +235,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
 
   def __init__(
       self,
-      fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]],
+      fn_or_cls: Union['Buildable[T_co]', TypeOrCallableProducingT[T_co]],
       /,
       *args,
       **kwargs,
@@ -272,7 +272,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
 
   def __init_callable__(
-      self, fn_or_cls: Union['Buildable[T]', TypeOrCallableProducingT[T]]
+      self, fn_or_cls: Union['Buildable[T_co]', TypeOrCallableProducingT[T_co]]
   ) -> None:
     """Save information on `fn_or_cls` to the `Buildable`."""
     if isinstance(fn_or_cls, Buildable):
@@ -697,7 +697,7 @@ class Buildable(Generic[T], metaclass=abc.ABCMeta):
       )
 
 
-class Config(Generic[T], Buildable[T]):
+class Config(Generic[T_co], Buildable[T_co]):
   """A mutable representation of a function or class's parameters.
 
   This class represents the configuration for a given function or class,
@@ -785,7 +785,7 @@ class Config(Generic[T], Buildable[T]):
   """
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT[T]
+  __fn_or_cls__: TypeOrCallableProducingT[T_co]
   __signature_info__: signatures.SignatureInfo
 
   def __build__(self, /, *args, **kwargs):
@@ -828,7 +828,7 @@ def tagged_value_fn(
   return value
 
 
-class TaggedValueCls(Generic[T], Config[T]):
+class TaggedValueCls(Generic[T_co], Config[T_co]):
   """Placeholder class for TaggedValue instances.
 
   Instances of this class are generally transitory; when passed as an argument
@@ -838,14 +838,14 @@ class TaggedValueCls(Generic[T], Config[T]):
   """
 
   # NOTE(b/201159339): We currently need to repeat these annotations for pytype.
-  __fn_or_cls__: TypeOrCallableProducingT[T]
+  __fn_or_cls__: TypeOrCallableProducingT[T_co]
   __signature_info__: signatures.SignatureInfo
 
   @property
   def tags(self):
     return self.__argument_tags__['value']
 
-  def __build__(self, /, *args: Any, **kwargs: Any) -> T:
+  def __build__(self, /, *args: Any, **kwargs: Any) -> T_co:
     if self.__fn_or_cls__ is not tagged_value_fn:
       raise RuntimeError(
           'Unexpected __fn_or_cls__ in TaggedValueCls; found:'
@@ -865,7 +865,9 @@ def _field_uses_default_factory(dataclass_type: Type[Any], field_name: str):
 BuildableT = TypeVar('BuildableT', bound=Buildable)
 
 
-def get_callable(buildable: Buildable[T]) -> Union[Callable[..., T], Type[T]]:
+def get_callable(
+    buildable: Buildable[T_co],
+) -> Union[Callable[..., T_co], Type[T_co]]:
   """Returns the callable of a Buildable."""
   return buildable.__fn_or_cls__
 
