@@ -14,4 +14,4 @@
 # limitations under the License.
 
 """Current Fiddle version at head on GitHub."""
-__version__ = "0.3.0"
+__version__ = "0.3.1"
