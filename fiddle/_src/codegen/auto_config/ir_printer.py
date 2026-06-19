@@ -20,6 +20,7 @@ is only to be used for debugging purposes.
 """
 
 import inspect
+import types
 import typing
 from typing import Any, List
 
@@ -28,9 +29,27 @@ from fiddle import daglish
 from fiddle._src.codegen.auto_config import code_ir
 import libcst as cst
 
-# Values from the `typing` module. This probably pulls in too much stuff, but
-# we don't have to be 100% precise in this module, it's just for debug printing.
-typing_consts = [getattr(typing, name) for name in dir(typing)]
+
+def _is_typing_or_generic(value: Any) -> bool:
+  """Checks if a value is a typing construct or generic alias."""
+  union_type = getattr(types, "UnionType", None)
+  generic_alias = getattr(types, "GenericAlias", None)
+
+  types_to_check = []
+  if union_type is not None:
+    types_to_check.append(union_type)
+  if generic_alias is not None:
+    types_to_check.append(generic_alias)
+
+  if types_to_check and isinstance(value, tuple(types_to_check)):
+    return True
+
+  if hasattr(value, "__module__") and value.__module__ == "typing":
+    return True
+  t = type(value)
+  if hasattr(t, "__module__") and t.__module__ == "typing":
+    return True
+  return False
 
 
 def format_py_reference(value: Any) -> str:
@@ -121,7 +140,7 @@ def format_expr(expr: Any):
       return value.value
     elif isinstance(value, type) and value is not typing.Any:
       return value.__name__
-    elif value in typing_consts or type(value) in typing_consts:
+    elif _is_typing_or_generic(value):
       return str(value)
     else:
       return f"<<<custom:{repr(value)}>>>"

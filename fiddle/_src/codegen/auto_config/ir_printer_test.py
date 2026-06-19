@@ -45,7 +45,7 @@ class IrPrinterTest(absltest.TestCase):
     self.assertIn(
         ir_printer.format_expr(Optional[str]),
         # This differs based on the Python verison.
-        {"typing.Union[str, NoneType]", "typing.Optional[str]"},
+        {"typing.Union[str, NoneType]", "typing.Optional[str]", "str | None"},
     )
 
   def test_format_containers(self):
