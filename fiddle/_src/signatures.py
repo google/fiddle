@@ -198,14 +198,14 @@ class SignatureInfo:
       # Use the index as key for positional only arguments
       if param.kind == param.POSITIONAL_ONLY:
         value = arguments.pop(param.name)
-        arguments[index] = value
+        arguments[index] = value  # pyrefly: ignore[unsupported-operation]
       if param.kind == param.VAR_POSITIONAL:
         values = arguments.pop(param.name)
         for i, value in enumerate(values):
-          arguments[index + i] = value
+          arguments[index + i] = value  # pyrefly: ignore[unsupported-operation]
       if param.kind == param.VAR_KEYWORD:
         arguments.update(arguments.pop(param.name))
-    return arguments
+    return arguments  # pyrefly: ignore[bad-return]
 
   def get_default(self, argument: Union[int, str], missing: Any) -> Any:
     """Get default value for the argument, return missing if not found.
@@ -325,7 +325,7 @@ class SignatureInfo:
     if isinstance(key, slice):
       key = slice(replace_fn(key.start), replace_fn(key.stop), key.step)
     else:
-      key = replace_fn(key)
+      key = replace_fn(key)  # pyrefly: ignore[bad-assignment]
     assert isinstance(
         key, (int, slice)
     ), f'Key must be an int or slice, got {key}.'
@@ -351,7 +351,7 @@ class SignatureInfo:
 
   @property
   def valid_param_names(self) -> Tuple[str]:
-    return tuple(
+    return tuple(  # pyrefly: ignore[bad-return]
         name
         for name, param in self.signature.parameters.items()
         if param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)

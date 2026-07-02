@@ -61,7 +61,7 @@ class Index(PathElement):
 
   def __lt__(self, other: PathElement) -> bool:
     if type(self) is type(other):
-      return self.index < other.index
+      return self.index < other.index  # pyrefly: ignore[missing-attribute]
     else:
       return super().__lt__(other)
 
@@ -80,7 +80,7 @@ class Key(PathElement):
 
   def __lt__(self, other: PathElement) -> bool:
     if type(self) is type(other):
-      return self.key < other.key
+      return self.key < other.key  # pyrefly: ignore[missing-attribute]
     else:
       return super().__lt__(other)
 
@@ -99,7 +99,7 @@ class Attr(PathElement):
 
   def __lt__(self, other: PathElement) -> bool:
     if type(self) is type(other):
-      return self.name < other.name
+      return self.name < other.name  # pyrefly: ignore[missing-attribute]
     else:
       return super().__lt__(other)
 
@@ -273,7 +273,7 @@ register_node_traverser(
     dict,
     flatten_fn=lambda x: (tuple(x.values()), tuple(x.keys())),
     unflatten_fn=lambda values, keys: dict(zip(keys, values)),
-    path_elements_fn=lambda x: [Key(key) for key in x.keys()])
+    path_elements_fn=lambda x: [Key(key) for key in x.keys()])  # pyrefly: ignore[bad-argument-type]
 
 
 def flatten_defaultdict(node):

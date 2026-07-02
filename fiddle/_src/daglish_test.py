@@ -215,11 +215,11 @@ class PathElementTest(absltest.TestCase):
     self.assertIs(daglish.follow_path(root, path5), root[2])
 
     path6 = (daglish.Index(1), daglish.Key("a"))
-    self.assertIs(daglish.follow_path(root, path6), root[1]["a"])
+    self.assertIs(daglish.follow_path(root, path6), root[1]["a"])  # pyrefly: ignore[bad-index]
 
     path7 = (daglish.Index(2), daglish.Index(2), daglish.BuildableFnOrCls())
     self.assertIs(
-        daglish.follow_path(root, path7), fdl.get_callable(root[2][2]))
+        daglish.follow_path(root, path7), fdl.get_callable(root[2][2]))  # pyrefly: ignore[bad-argument-type, bad-index]
 
     bad_path_1 = (daglish.Key("a"), daglish.Key("b"))
     with self.assertRaisesRegex(
@@ -313,7 +313,7 @@ class TraverserRegistryTest(parameterized.TestCase):
           cast(Any, 42),
           flatten_fn=lambda x: (tuple(x), None),
           unflatten_fn=lambda x, _: list(x),
-          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
+          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))  # pyrefly: ignore[bad-argument-type]
 
   def test_register_node_traverser_existing_registration_error(self):
     with self.assertRaises(ValueError):
@@ -321,7 +321,7 @@ class TraverserRegistryTest(parameterized.TestCase):
           list,
           flatten_fn=lambda x: (tuple(x), None),
           unflatten_fn=lambda x, _: list(x),
-          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))
+          path_elements_fn=lambda x: (daglish.Index(i) for i in range(len(x))))  # pyrefly: ignore[bad-argument-type]
 
   def test_node_traverser_registry_with_fallback(self):
     registry = daglish.NodeTraverserRegistry(use_fallback=True)
@@ -674,7 +674,7 @@ class MemoizedTraversalTest(absltest.TestCase):
       return state.map_children(value)
 
     x = [1, 2, 3]
-    x.append(x)
+    x.append(x)  # pyrefly: ignore[bad-argument-type]
     with self.assertRaisesRegex(
         ValueError,
         "Fiddle detected a cycle while traversing a value: "

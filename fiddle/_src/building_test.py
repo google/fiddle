@@ -35,7 +35,7 @@ class Bar:
   x: int
 
 
-class NonBuildableLoggingTest(absltest.TestCase, unittest.TestCase):
+class NonBuildableLoggingTest(absltest.TestCase, unittest.TestCase):  # pyrefly: ignore[inconsistent-inheritance]
 
   def setUp(self):
     super().setUp()

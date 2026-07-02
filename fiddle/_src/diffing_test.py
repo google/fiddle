@@ -791,8 +791,8 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     diff_z = resolved_diff.changes[0]
     self.assertEqual(diff_z.target, parse_path('.z'))
     self.assertIsInstance(diff_z, diffing.SetValue)
-    self.assertIs(diff_z.new_value[0], resolved_diff.new_shared_values[0])
-    self.assertIs(diff_z.new_value[1], resolved_diff.new_shared_values[1])
+    self.assertIs(diff_z.new_value[0], resolved_diff.new_shared_values[0])  # pyrefly: ignore[bad-index]
+    self.assertIs(diff_z.new_value[1], resolved_diff.new_shared_values[1])  # pyrefly: ignore[bad-index]
     self.assertIs(resolved_diff.new_shared_values[1][0],
                   resolved_diff.new_shared_values[0])
 
@@ -826,12 +826,12 @@ class ResolveDiffReferencesTest(absltest.TestCase):
     diff_1_x = resolved_diff.changes[0]
     self.assertEqual(diff_1_x.target, parse_path("[1]['x']"))
     self.assertIsInstance(diff_1_x, diffing.ModifyValue)
-    self.assertIs(diff_1_x.new_value, old[1]['y'])
+    self.assertIs(diff_1_x.new_value, old[1]['y'])  # pyrefly: ignore[bad-index]
 
     diff_1_y = resolved_diff.changes[1]
     self.assertEqual(diff_1_y.target, parse_path("[1]['y']"))
     self.assertIsInstance(diff_1_y, diffing.ModifyValue)
-    self.assertIs(diff_1_y.new_value, old[1]['x'])
+    self.assertIs(diff_1_y.new_value, old[1]['x'])  # pyrefly: ignore[bad-index]
 
     diff_1_z = resolved_diff.changes[2]
     self.assertEqual(diff_1_z.target, parse_path("[1]['z']"))
@@ -965,10 +965,10 @@ class ApplyDiffTest(absltest.TestCase):
 
     # Manually apply the same changes described by the diff:
     new = copy.deepcopy(old)
-    new[1]['x'], new[1]['y'] = new[1]['y'], new[1]['x']
-    new[1]['z'] = new[2]
-    new[2].x = new[3]
-    new[2].z = [new[0], new[3]]
+    new[1]['x'], new[1]['y'] = new[1]['y'], new[1]['x']  # pyrefly: ignore[bad-index, unsupported-operation]
+    new[1]['z'] = new[2]  # pyrefly: ignore[unsupported-operation]
+    new[2].x = new[3]  # pyrefly: ignore[missing-attribute]
+    new[2].z = [new[0], new[3]]  # pyrefly: ignore[missing-attribute]
 
     diffing.apply_diff(cfg_diff, old)
     self.assertEqual(old, new)

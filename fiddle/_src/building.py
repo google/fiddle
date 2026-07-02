@@ -177,7 +177,7 @@ def build(buildable):
       metadata: config_lib.BuildableTraverserMetadata = sub_traversal.metadata
       arguments = metadata.arguments(sub_traversal.values)
       is_built = True
-      return call_buildable(value, arguments, current_path=state.current_path)
+      return call_buildable(value, arguments, current_path=state.current_path)  # pyrefly: ignore[bad-argument-type]
     else:
       return state.map_children(value)
 

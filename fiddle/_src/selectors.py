@@ -122,7 +122,7 @@ class NodeSelection(Selection):
             self.match_subclasses  #
             and isinstance(self.fn_or_cls, type)  #
             and isinstance(config_lib.get_callable(node), type)  #
-            and issubclass(config_lib.get_callable(node), self.fn_or_cls))
+            and issubclass(config_lib.get_callable(node), self.fn_or_cls))  # pyrefly: ignore[bad-argument-type]
         if not is_subclass:
           return False
 
@@ -208,7 +208,7 @@ class TagSelection(Selection):
       if isinstance(value, config_lib.Buildable):
         for name, tags in value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
-            yield getattr(value, name, tagging.NO_VALUE)
+            yield getattr(value, name, tagging.NO_VALUE)  # pyrefly: ignore[no-matching-overload]
 
   def replace(self, value: Any, deepcopy: bool = True) -> None:
 
@@ -217,7 +217,7 @@ class TagSelection(Selection):
         for name, tags in node_value.__argument_tags__.items():
           if any(issubclass(tag, self.tag) for tag in tags):
             to_set = value if not deepcopy else copy.deepcopy(value)
-            setattr(node_value, name, to_set)
+            setattr(node_value, name, to_set)  # pyrefly: ignore[bad-argument-type]
 
   def get(self, name: str) -> Iterator[Any]:
     raise NotImplementedError(

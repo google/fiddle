@@ -351,10 +351,10 @@ class _GraphvizRenderer:
     # Generate the arguments table.
     if config.__arguments__:
       label = self._render_dict(
-          config.__arguments__,
+          config.__arguments__,  # pyrefly: ignore[bad-argument-type]
           header=header,
           key_format_fn=str,
-          tags=config.__argument_tags__)
+          tags=config.__argument_tags__)  # pyrefly: ignore[bad-argument-type]
     else:
       table = self.tag('table')
       italics = self.tag('i')
@@ -412,7 +412,7 @@ class _GraphvizRenderer:
     elif isinstance(value, _ChangedValue):
       return self._render_changed_value(value)
     elif isinstance(value, _ChangedBuildable):
-      return self._render_changed_buildable(value, color)
+      return self._render_changed_buildable(value, color)  # pyrefly: ignore[bad-argument-type]
     elif isinstance(value, dict):
       return self._render_dict(
           value, header=self._header_row(type(value).__name__, bgcolor=color))
@@ -470,7 +470,7 @@ class _GraphvizRenderer:
     self._dot.edge(f'{self._current_id}:{port}:c', f'{node_id}:c', **edge_attrs)
 
     # Return a table with a single colored cell, using the port name from above.
-    style = self._config_header_style(value)
+    style = self._config_header_style(value)  # pyrefly: ignore[bad-argument-type]
     table = self.tag('table', style=style)
     tr = self.tag('tr')
     td = self.tag('td', port=port, bgcolor=self._color(value), style=style)
@@ -542,7 +542,7 @@ class _GraphvizRenderer:
         continue
       key_str = html.escape(key_format_fn(key))
       value_str = self._render_nested_value(value)
-      key_tags = tags.get(key, ())
+      key_tags = tags.get(key, ())  # pyrefly: ignore[no-matching-overload]
       if key_tags:
         key_str = self._render_tags(key_str, key_tags)
       rows.append(tr([key_td(key_str), value_td(value_str)]))

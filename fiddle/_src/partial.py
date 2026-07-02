@@ -135,7 +135,7 @@ def _build_partial(
 
   # If there are nested structures containing _BuiltArgFactory objects,
   # then promote them.
-  args = [_promote_arg_factory(arg) for arg in args]
+  args = [_promote_arg_factory(arg) for arg in args]  # pyrefly: ignore[bad-assignment]
   kwargs = {name: _promote_arg_factory(arg) for name, arg in kwargs.items()}
 
   # Split the keyword args into those that should be handled by functools vs.

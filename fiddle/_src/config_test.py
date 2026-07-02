@@ -121,7 +121,7 @@ _T = TypeVar('_T')
 
 @dataclasses.dataclass
 class GenericClass(Generic[_T]):
-  x: _T = 1
+  x: _T = 1  # pyrefly: ignore[bad-assignment]
 
 
 class ConfigTest(parameterized.TestCase):
@@ -921,7 +921,7 @@ class ConfigTest(parameterized.TestCase):
                      cfg.__argument_history__['arg1'][1].sequence_id)
 
   def test_custom_location_history_tracking(self):
-    with history.custom_location(lambda: 'abc:123'):
+    with history.custom_location(lambda: 'abc:123'):  # pyrefly: ignore[bad-argument-type]
       cfg = fdl.Config(SampleClass, 'arg1')
     cfg.arg2 = 'arg2'
     self.assertEqual(

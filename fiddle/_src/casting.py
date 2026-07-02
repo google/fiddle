@@ -58,7 +58,7 @@ def cast(
         src_type,
         new_type,
     )
-  return new_type.__unflatten__(*buildable.__flatten__())
+  return new_type.__unflatten__(*buildable.__flatten__())  # pyrefly: ignore[missing-attribute]
 
 
 def register_supported_cast(src_type, dst_type):

@@ -274,7 +274,7 @@ class SignatureInfoTest(parameterized.TestCase):
         self.signature_positional.replace_varargs_handle(slc), slice(3, -2)
     )
     self.assertEqual(
-        self.signature_positional.replace_varargs_handle(signatures.VARARGS), 3
+        self.signature_positional.replace_varargs_handle(signatures.VARARGS), 3  # pyrefly: ignore[bad-argument-type]
     )
 
   def test_index_to_key(self):

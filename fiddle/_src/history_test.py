@@ -71,7 +71,7 @@ class HistoryTest(absltest.TestCase):
 
   def test_updating_tags(self):
     tag_set = {SampleTag, AdditionalTag}
-    entry = history.update_tags("z", tag_set)
+    entry = history.update_tags("z", tag_set)  # pyrefly: ignore[bad-argument-type]
     self.assertEqual(entry.param_name, "z")
     self.assertEqual(entry.kind, history.ChangeKind.UPDATE_TAGS)
     self.assertIsNot(tag_set, entry.new_value)  # Must not be the same!

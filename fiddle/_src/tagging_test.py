@@ -503,7 +503,7 @@ class TaggingTest(parameterized.TestCase):
 
     for fn in (fdl.add_tag, fdl.set_tags, fdl.remove_tag):
       with self.assertRaisesRegex(IndexError, ".*is out of range"):
-        fn(cfg, 3, Tag1)
+        fn(cfg, 3, Tag1)  # pyrefly: ignore[bad-argument-type]
 
     for fn in (fdl.get_tags, fdl.clear_tags):
       with self.assertRaisesRegex(IndexError, ".*is out of range"):
@@ -514,7 +514,7 @@ class TaggingTest(parameterized.TestCase):
 
     for fn in (fdl.add_tag, fdl.set_tags, fdl.remove_tag):
       with self.assertRaisesRegex(IndexError, "Cannot use negative index"):
-        fn(cfg, -1, Tag1)
+        fn(cfg, -1, Tag1)  # pyrefly: ignore[bad-argument-type]
 
     for fn in (fdl.get_tags, fdl.clear_tags):
       with self.assertRaisesRegex(IndexError, "Cannot use negative index"):

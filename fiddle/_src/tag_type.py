@@ -74,7 +74,7 @@ class TagType(type):
   @property
   def description(cls) -> str:
     """A string describing the semantics and intended usecases for this tag."""
-    return cls.__doc__
+    return cls.__doc__  # pyrefly: ignore[bad-return]
 
   @property
   def name(cls) -> str:

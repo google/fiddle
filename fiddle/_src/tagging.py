@@ -104,7 +104,7 @@ class Tag(metaclass=TagType):
     Returns:
       A TaggedValue tagged with the tag `cls`.
     """
-    return TaggedValue(tags=(cls,), default=default)
+    return TaggedValue(tags=(cls,), default=default)  # pyrefly: ignore[bad-argument-type]
 
   if not typing.TYPE_CHECKING:
     new = auto_config.AutoConfigClassMethod(
@@ -141,7 +141,7 @@ def TaggedValue(  # pylint: disable=invalid-name
     result.value = default
   for tag in tags:
     add_tag(result, 'value', tag)
-  return result
+  return result  # pyrefly: ignore[bad-return]
 
 
 def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
@@ -157,7 +157,7 @@ def set_tagged(root: config.Buildable, *, tag: TagType, value: Any) -> None:
     if isinstance(node, config.Buildable):
       for key, tags in node.__argument_tags__.items():
         if any(issubclass(t, tag) for t in tags):
-          setattr(node, key, value)
+          setattr(node, key, value)  # pyrefly: ignore[bad-argument-type]
 
 
 def list_tags(
