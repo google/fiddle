@@ -73,13 +73,13 @@ def _is_super_ancestor(
   Returns:
     A bool value that indicates if `ancestor` is a super ancestor of all nodes.
   """
-  nodes = list(nodes)
+  nodes = list(nodes)  # pyrefly: ignore[bad-assignment]
   if len(nodes) == 0:  # pylint: disable=g-explicit-length-test
     return False
   if len(nodes) == 1:
     if ancestor in nodes:
       return True
-    all_parents = node_to_parents_by_id[nodes[0]]
+    all_parents = node_to_parents_by_id[nodes[0]]  # pyrefly: ignore[bad-index]
     if len(all_parents) == 1 and ancestor in all_parents:
       return True
     return _is_super_ancestor(ancestor, all_parents, node_to_parents_by_id)
@@ -98,11 +98,11 @@ def _find_least_common_ancestor(
 ) -> int:
   """Find the least common ancestor of all nodes."""
 
-  node_ids = list(node_ids)
+  node_ids = list(node_ids)  # pyrefly: ignore[bad-assignment]
   if len(node_ids) == 0:  # pylint: disable=g-explicit-length-test
     raise ValueError("Input nodes must not be empty.")
   if len(node_ids) == 1:
-    return node_ids[0]
+    return node_ids[0]  # pyrefly: ignore[bad-index]
   if len(node_ids) == 2:
     x, y = node_ids
     if _is_super_ancestor(x, {y}, node_to_parents_by_id):
@@ -114,8 +114,8 @@ def _find_least_common_ancestor(
     return _find_least_common_ancestor(
         x_parents.union(y_parents), node_to_parents_by_id
     )
-  first_two = set(node_ids[:2])
-  rest = set(node_ids[2:])
+  first_two = set(node_ids[:2])  # pyrefly: ignore[bad-index]
+  rest = set(node_ids[2:])  # pyrefly: ignore[bad-index]
   first_two_ancestor = _find_least_common_ancestor(
       first_two, node_to_parents_by_id
   )

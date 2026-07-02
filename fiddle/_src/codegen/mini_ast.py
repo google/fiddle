@@ -93,7 +93,7 @@ def block(sub_nodes_or_lines: List[Union[str, List[str], CodegenNode]],
   Returns:
     List of lines, taken from `sub_nodes_or_lines`.
   """
-  sub_nodes_or_lines = filter(None, sub_nodes_or_lines)  # Remove empty items.
+  sub_nodes_or_lines = filter(None, sub_nodes_or_lines)  # Remove empty items.  # pyrefly: ignore[bad-assignment]
 
   result = []
   for i, item in enumerate(sub_nodes_or_lines):
@@ -117,7 +117,7 @@ class ImmediateAttrsBlock(CodegenNode):
   nodes: List[CodegenNode]
 
   def lines(self) -> List[str]:
-    return block(self.nodes, [])
+    return block(self.nodes, [])  # pyrefly: ignore[bad-argument-type]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -127,7 +127,7 @@ class SharedThenResultAssignment(CodegenNode):
   tree_blocks: List[CodegenNode]
 
   def lines(self) -> List[str]:
-    return block(self.shared_instances + self.tree_blocks, [""])
+    return block(self.shared_instances + self.tree_blocks, [""])  # pyrefly: ignore[bad-argument-type]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -141,6 +141,6 @@ class ConfigBuilder(CodegenNode):
 
   def lines(self) -> List[str]:
     import_lines = cst.Module(body=self.imports).code.splitlines()
-    fn_body = ["  " + line for line in block(self.builder_body, [""])]
+    fn_body = ["  " + line for line in block(self.builder_body, [""])]  # pyrefly: ignore[bad-argument-type]
     return block([block([import_lines], []), ["def build_config():"] + fn_body],
                  ["", ""])

@@ -50,10 +50,10 @@ def parse_import(stmt: str) -> AnyImport:
 
 
 def _get_import_name_node(node: AnyImport) -> cst.ImportAlias:
-  if len(node.names) != 1:
+  if len(node.names) != 1:  # pyrefly: ignore[bad-argument-type]
     raise ValueError(
         f"CST nodes with more than 1 name are not supported; got {node}")
-  return node.names[0]
+  return node.names[0]  # pyrefly: ignore[bad-index]
 
 
 def get_import_name(node: AnyImport) -> str:
@@ -95,7 +95,7 @@ def get_full_module_name(node: AnyImport) -> str:
   name_str = _dummy_module_for_formatting.code_for_node(
       _get_import_name_node(node).name)
   if isinstance(node, cst.ImportFrom):
-    module_str = _dummy_module_for_formatting.code_for_node(node.module)
+    module_str = _dummy_module_for_formatting.code_for_node(node.module)  # pyrefly: ignore[bad-argument-type]
     return f"{module_str}.{name_str}"
   else:
     return name_str
@@ -230,7 +230,7 @@ class ImportManager:
     Returns:
       Relative-qualified name for the instance.
     """
-    module_name = inspect.getmodule(value).__name__
+    module_name = inspect.getmodule(value).__name__  # pyrefly: ignore[missing-attribute]
     if isinstance(value, enum.Enum):
       value_qualname = value.__class__.__qualname__ + "." + value.name
     else:

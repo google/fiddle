@@ -74,7 +74,7 @@ def get_config_errors(config: Any) -> List[str]:
   errors = []
 
   def history_str(state):
-    return ", " + _concise_history(_get_history_from_state(state))
+    return ", " + _concise_history(_get_history_from_state(state))  # pyrefly: ignore[bad-argument-type]
 
   def traverse(value, state: daglish.State):
     path_str = daglish.path_str(state.current_path)

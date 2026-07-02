@@ -74,7 +74,7 @@ def _get_pass_idx(
     cls: Type[experimental_top_level_api.CodegenPass],
 ) -> int:
   for i, codegen_pass in enumerate(codegen_config.passes):
-    if issubclass(fdl.get_callable(codegen_pass), cls):
+    if issubclass(fdl.get_callable(codegen_pass), cls):  # pyrefly: ignore[bad-argument-type]
       return i
   raise ValueError(f"Could not find codegen pass {cls}")
 

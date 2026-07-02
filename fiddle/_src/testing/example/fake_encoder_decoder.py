@@ -84,7 +84,7 @@ def fixture(kernel_init: str = "uniform()"):
   shared_token_embedder = TokenEmbedder(dtype)
   return FakeEncoderDecoder(
       encoder=FakeEncoder(
-          embedders={
+          embedders={  # pyrefly: ignore[bad-argument-type]
               "tokens": shared_token_embedder,
               "position": None
           },

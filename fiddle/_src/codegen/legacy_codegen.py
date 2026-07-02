@@ -164,7 +164,7 @@ class SharedBuildableManager:
         return state.map_children(child)
       else:
         return special_value_codegen.transform_py_value(child,
-                                                        self.import_manager)
+                                                        self.import_manager)  # pyrefly: ignore[bad-argument-type]
 
     lhs = assignment_path(lhs_var, lhs_path)
     assignment = mini_ast.Assignment(lhs, repr(traverse(attr_value)))
@@ -208,12 +208,12 @@ def _configure_shared_objects(
           mini_ast.Assignment(name, f"{buildable_subclass_str}({relname})")
       ]
       for key, value in child.__arguments__.items():
-        path = [daglish.BuildableAttr(key)]
-        nodes.append(shared_manager.assign(name, path, value))
+        path = [daglish.BuildableAttr(key)]  # pyrefly: ignore[bad-argument-type]
+        nodes.append(shared_manager.assign(name, path, value))  # pyrefly: ignore[bad-argument-type]
 
       # `shared_manager` indexes by ID, so be careful to use the original DAG
       # node `child`.
-      shared_manager.add(name, child, mini_ast.ImmediateAttrsBlock(nodes))
+      shared_manager.add(name, child, mini_ast.ImmediateAttrsBlock(nodes))  # pyrefly: ignore[bad-argument-type]
 
   traverser = daglish.MemoizedTraversal(
       traverse,
@@ -290,14 +290,14 @@ def codegen_dot_syntax(buildable: config_lib.Buildable) -> mini_ast.CodegenNode:
                       config_lib.Buildable) and value not in shared_manager:
         deferred.append((value, full_path))
       else:
-        nodes.append(shared_manager.assign("root", full_path, value))
+        nodes.append(shared_manager.assign("root", full_path, value))  # pyrefly: ignore[bad-argument-type]
 
       if state.is_traversable(value) and not isinstance(value,
                                                         config_lib.Buildable):
         state.flattened_map_children(value)
 
     daglish.BasicTraversal.run(handle_child_attr, child)
-    main_tree_blocks.append(mini_ast.ImmediateAttrsBlock(nodes))
+    main_tree_blocks.append(mini_ast.ImmediateAttrsBlock(nodes))  # pyrefly: ignore[bad-argument-type]
 
     # Recurses to configure sub-Buildable nodes.
     for sub_child, sub_path in deferred:

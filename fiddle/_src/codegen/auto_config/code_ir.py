@@ -259,7 +259,7 @@ class CallInstance:
     result = [self]
     while current.parent is not None:
       current = current.parent
-      result.append(current)
+      result.append(current)  # pyrefly: ignore[bad-argument-type]
     return list(reversed(result))
 
   @arg_factory.supply_defaults

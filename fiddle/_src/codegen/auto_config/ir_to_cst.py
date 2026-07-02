@@ -114,7 +114,7 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
               " please replace these objects in your input config, likely "
               "with fdl.Config nodes."
           )
-        elements.append(cst.Element(sub_value))
+        elements.append(cst.Element(sub_value))  # pyrefly: ignore[bad-argument-type]
       return cst_cls(elements)
     elif isinstance(value, dict):
       elements = []
@@ -130,9 +130,9 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
       return cst.Attribute(value=base, attr=cst.Name(value.attribute))
     elif isinstance(value, code_ir.ParameterizedTypeExpression):
       return cst.Subscript(
-          value=code_for_expr(value.base_expression),
+          value=code_for_expr(value.base_expression),  # pyrefly: ignore[bad-argument-type]
           slice=[
-              cst.SubscriptElement(cst.Index(code_for_expr(param)))
+              cst.SubscriptElement(cst.Index(code_for_expr(param)))  # pyrefly: ignore[bad-argument-type]
               for param in value.param_expressions
           ],
       )
@@ -151,7 +151,7 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
         )
         args.extend(
             _prepare_args_helper(
-                names, values, attr, history=value.history_comments
+                names, values, attr, history=value.history_comments  # pyrefly: ignore[bad-argument-type]
             )
         )
       if any_args_have_history:
@@ -223,20 +223,20 @@ def code_for_fn(
     name = variable_decl.name.value
     assign = cst.Assign(
         targets=[cst.AssignTarget(target=cst.Name(name))],
-        value=code_for_expr(variable_decl.expression),
+        value=code_for_expr(variable_decl.expression),  # pyrefly: ignore[bad-argument-type]
     )
     variable_lines.append(cst.SimpleStatementLine(body=[assign]))
   body = cst.IndentedBlock(
       body=[
           *variable_lines,
           cst.SimpleStatementLine(
-              body=[cst.Return(code_for_expr(fn.output_value))]
+              body=[cst.Return(code_for_expr(fn.output_value))]  # pyrefly: ignore[bad-argument-type]
           ),
       ]
   )
   if fn.return_type_annotation:
     returns = cst.Annotation(
-        annotation=code_for_expr(fn.return_type_annotation)
+        annotation=code_for_expr(fn.return_type_annotation)  # pyrefly: ignore[bad-argument-type]
     )
   else:
     returns = None

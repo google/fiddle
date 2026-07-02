@@ -68,8 +68,8 @@ def make_test_class_for_module(module: Module,
         _ = building.build(cfg)
 
     fn = functools.partialmethod(test_base_config, module, name)
-    fn.__name__ = f'test_{name}'
-    test_functions[fn.__name__] = fn
+    fn.__name__ = f'test_{name}'  # pyrefly: ignore[missing-attribute]
+    test_functions[fn.__name__] = fn  # pyrefly: ignore[missing-attribute]
 
   # Test all combination of fiddlers and base configurations by default.
   for base_name in module_reflection.find_base_config_like_things(module):
@@ -87,8 +87,8 @@ def make_test_class_for_module(module: Module,
 
       fn = functools.partialmethod(test_base_and_fiddler, module, base_name,
                                    fiddler_name)
-      fn.__name__ = f'test_{base_name}_and_{fiddler_name}'
-      test_functions[fn.__name__] = fn
+      fn.__name__ = f'test_{base_name}_and_{fiddler_name}'  # pyrefly: ignore[missing-attribute]
+      test_functions[fn.__name__] = fn  # pyrefly: ignore[missing-attribute]
 
   if (not module_reflection.find_base_config_like_things(module) and
       module_reflection.find_fiddler_like_things(module)):
@@ -141,7 +141,7 @@ def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite,
   """
   del tests  # Unused.
   del pattern  # Unused.
-  module = load_module_from_path(_FLAG_FIDDLE_CONFIG_MODULE.value)
+  module = load_module_from_path(_FLAG_FIDDLE_CONFIG_MODULE.value)  # pyrefly: ignore[bad-argument-type]
   suite = load_tests_from_module(
       loader, module, skip_building=_FLAG_SKIP_BUILDING.value)
   return suite

@@ -65,9 +65,9 @@ def enable():
   @py_val_to_cst_converter.register_py_val_to_cst_converter(is_tensor)
   def convert_tensor_to_cst(value, convert_child):
     return cst.Call(
-        func=cst.Attribute(value=convert_child(tf), attr=cst.Name("constant")),
+        func=cst.Attribute(value=convert_child(tf), attr=cst.Name("constant")),  # pyrefly: ignore[bad-argument-type]
         args=[
-            cst.Arg(convert_child(value.numpy().tolist())),
+            cst.Arg(convert_child(value.numpy().tolist())),  # pyrefly: ignore[bad-argument-type]
             py_val_to_cst_converter.kwarg_to_cst("dtype",
                                                  convert_child(value.dtype)),
             py_val_to_cst_converter.kwarg_to_cst(
@@ -76,12 +76,12 @@ def enable():
 
   @py_val_to_cst_converter.register_py_val_to_cst_converter(tf.DType)
   def convert_dtype_to_cst(value, convert_child):
-    return cst.Attribute(value=convert_child(tf), attr=cst.Name(value.name))
+    return cst.Attribute(value=convert_child(tf), attr=cst.Name(value.name))  # pyrefly: ignore[bad-argument-type]
 
   @py_val_to_cst_converter.register_py_val_to_cst_converter(tf.TensorShape)
   def convert_tensor_shape_to_cst(value, convert_child):
     shape_list = None if value.rank is None else value.as_list()
     return cst.Call(
         func=cst.Attribute(
-            value=convert_child(tf), attr=cst.Name("TensorShape")),
-        args=[cst.Arg(convert_child(shape_list))])
+            value=convert_child(tf), attr=cst.Name("TensorShape")),  # pyrefly: ignore[bad-argument-type]
+        args=[cst.Arg(convert_child(shape_list))])  # pyrefly: ignore[bad-argument-type]

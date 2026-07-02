@@ -214,7 +214,7 @@ def rewrite_fdl_args(args: Sequence[str]) -> List[str]:
         explicit_name = 'fdl_tags_set'
       _, arg = arg.split('.', maxsplit=1)  # Strip --fdl. or --fdl_tag. prefix.
       path, value = arg.split('=', maxsplit=1)
-      rewritten = f'--{explicit_name}={path}={value}'
+      rewritten = f'--{explicit_name}={path}={value}'  # pyrefly: ignore[unbound-name]
       logging.debug('Rewrote flag "%s" to "%s".', arg, rewritten)
       return rewritten
     else:

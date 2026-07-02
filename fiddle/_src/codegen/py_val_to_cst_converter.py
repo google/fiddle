@@ -152,10 +152,10 @@ def register_py_val_to_cst_converter(matchers: Union[ValueMatcher,
     A decorator function.
   """
   if not isinstance(matchers, list):
-    matchers = [matchers]
+    matchers = [matchers]  # pyrefly: ignore[bad-assignment]
 
   def decorator(converter: ValueConverterFunc) -> ValueConverterFunc:
-    for matcher in matchers:
+    for matcher in matchers:  # pyrefly: ignore[not-iterable]
       if priority is None:
         matcher_priority = 100 if isinstance(matcher, type) else 50
       else:
@@ -284,20 +284,20 @@ def _convert_complex(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
 @register_py_val_to_cst_converter(list)
 def _convert_list(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a list to CST."""
-  return cst.List([cst.Element(conversion_fn(v)) for v in value])
+  return cst.List([cst.Element(conversion_fn(v)) for v in value])  # pyrefly: ignore[bad-argument-type]
 
 
 @register_py_val_to_cst_converter(tuple)
 def _convert_tuple(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a tuple to CST."""
-  return cst.Tuple([cst.Element(conversion_fn(v)) for v in value])
+  return cst.Tuple([cst.Element(conversion_fn(v)) for v in value])  # pyrefly: ignore[bad-argument-type]
 
 
 @register_py_val_to_cst_converter(dict)
 def _convert_dict(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a dict to CST."""
   return cst.Dict([
-      cst.DictElement(conversion_fn(key), conversion_fn(val))
+      cst.DictElement(conversion_fn(key), conversion_fn(val))  # pyrefly: ignore[bad-argument-type]
       for (key, val) in value.items()
   ])
 
@@ -306,7 +306,7 @@ def _convert_dict(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
 def _convert_set(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a set to CST."""
   if value:
-    return cst.Set([cst.Element(conversion_fn(v)) for v in value])
+    return cst.Set([cst.Element(conversion_fn(v)) for v in value])  # pyrefly: ignore[bad-argument-type]
   else:
     return cst.Call(func=cst.Name('set'))
 
@@ -317,9 +317,9 @@ def _convert_slice(value: slice, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   return cst.Call(
       func=cst.Name('slice'),
       args=[
-          cst.Arg(conversion_fn(value.start)),
-          cst.Arg(conversion_fn(value.stop)),
-          cst.Arg(conversion_fn(value.step)),
+          cst.Arg(conversion_fn(value.start)),  # pyrefly: ignore[bad-argument-type]
+          cst.Arg(conversion_fn(value.stop)),  # pyrefly: ignore[bad-argument-type]
+          cst.Arg(conversion_fn(value.step)),  # pyrefly: ignore[bad-argument-type]
       ],
   )
 
@@ -329,7 +329,7 @@ def _convert_namedtuple(value: Any,
                         conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts an instance of a named tuple to CST."""
   return cst.Call(
-      func=conversion_fn(type(value)),
+      func=conversion_fn(type(value)),  # pyrefly: ignore[bad-argument-type]
       args=[
           kwarg_to_cst(arg_name, conversion_fn(arg_val))
           for (arg_name, arg_val) in value._asdict().items()
@@ -340,13 +340,13 @@ def _convert_namedtuple(value: Any,
 def _convert_buildable(value: Any,
                        conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a fdl.Config or fdl.Partial to CST."""
-  args = [cst.Arg(conversion_fn(config_lib.get_callable(value)))]
+  args = [cst.Arg(conversion_fn(config_lib.get_callable(value)))]  # pyrefly: ignore[bad-argument-type]
   for (arg_name, arg_val) in value.__arguments__.items():
     if arg_name in value.__argument_tags__:
       for tag in value.__argument_tags__[arg_name]:
         arg_val = tag.new(arg_val)
     args.append(kwarg_to_cst(arg_name, conversion_fn(arg_val)))
-  return cst.Call(func=conversion_fn(type(value)), args=args)
+  return cst.Call(func=conversion_fn(type(value)), args=args)  # pyrefly: ignore[bad-argument-type]
 
 
 @register_py_val_to_cst_converter(tagging.TaggedValueCls)
@@ -356,8 +356,8 @@ def _convert_tagged_value(value: Any,
   node = conversion_fn(value.value)
   for tag in sorted(value.tags, key=repr, reverse=True):
     node = cst.Call(
-        func=cst.Attribute(value=conversion_fn(tag), attr=cst.Name('new')),
-        args=[cst.Arg(node)])
+        func=cst.Attribute(value=conversion_fn(tag), attr=cst.Name('new')),  # pyrefly: ignore[bad-argument-type]
+        args=[cst.Arg(node)])  # pyrefly: ignore[bad-argument-type]
   return node
 
 
@@ -391,12 +391,12 @@ def _convert_importable(value: Any,
                         conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts an importable value to the CST for `<module_name>.<qualname>`."""
   module = inspect.getmodule(value)
-  if module.__name__ == '__main__' or module is builtins:
+  if module.__name__ == '__main__' or module is builtins:  # pyrefly: ignore[missing-attribute]
     return dotted_name_to_cst(value.__qualname__)
   else:
     result = conversion_fn(inspect.getmodule(value))
     for piece in value.__qualname__.split('.'):
-      result = cst.Attribute(value=result, attr=cst.Name(piece))
+      result = cst.Attribute(value=result, attr=cst.Name(piece))  # pyrefly: ignore[bad-argument-type]
     return result
 
 
@@ -405,9 +405,9 @@ def _convert_partial(value: functools.partial,
                      conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   """Converts a functools.partial to CST."""
   return cst.Call(
-      func=conversion_fn(functools.partial),
-      args=([cst.Arg(conversion_fn(value.func))] +
-            [cst.Arg(conversion_fn(arg)) for arg in value.args] + [
+      func=conversion_fn(functools.partial),  # pyrefly: ignore[bad-argument-type]
+      args=([cst.Arg(conversion_fn(value.func))] +  # pyrefly: ignore[bad-argument-type]
+            [cst.Arg(conversion_fn(arg)) for arg in value.args] + [  # pyrefly: ignore[bad-argument-type]
                 kwarg_to_cst(arg_name, conversion_fn(arg_val))
                 for (arg_name, arg_val) in value.keywords.items()
             ]))
@@ -416,5 +416,5 @@ def _convert_partial(value: functools.partial,
 @register_py_val_to_cst_converter(lambda value: isinstance(value, enum.Enum))
 def _convert_enum(value: Any, conversion_fn: PyValToCstFunc) -> cst.CSTNode:
   return cst.Attribute(
-      value=conversion_fn(type(value)), attr=cst.Name(value.name)
+      value=conversion_fn(type(value)), attr=cst.Name(value.name)  # pyrefly: ignore[bad-argument-type]
   )

@@ -129,7 +129,7 @@ dtype = tf\.float32 @ .*/tf_test.py:\d+:test_history_printing
   ])
   def test_py_val_to_cst_converter(self, value, expected):
     cst_expr = py_val_to_cst_converter.convert_py_val_to_cst(value)
-    cst_module = cst.Module([cst.SimpleStatementLine([cst.Expr(cst_expr)])])
+    cst_module = cst.Module([cst.SimpleStatementLine([cst.Expr(cst_expr)])])  # pyrefly: ignore[bad-argument-type]
     self.assertEqual(cst_module.code.strip(), expected)
 
   def test_serialization(self):

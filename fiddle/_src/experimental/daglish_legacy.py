@@ -258,7 +258,7 @@ def traverse_with_all_paths(fn: TraverseWithAllPathsFn, structure):
       parent = daglish.follow_path(structure, current_path[:-1])
       parent_paths = paths_memo[id(parent)]
       all_paths = daglish.add_path_element(parent_paths, current_path[-1])
-    return (yield from fn(all_paths, current_path, value))
+    return (yield from fn(all_paths, current_path, value))  # pyrefly: ignore[bad-argument-type]
 
   return traverse_with_path(wrap_with_paths, structure)
 

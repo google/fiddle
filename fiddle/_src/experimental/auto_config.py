@@ -345,7 +345,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
   def visit_Try(self, node: ast.Try):
     return self._handle_control_flow(node)
 
-  def visit_Raise(self, node: ast.Try):
+  def visit_Raise(self, node: ast.Try):  # pyrefly: ignore[bad-override]
     return self._handle_control_flow(node, activatable=True)
 
   def visit_With(self, node: ast.With):
@@ -477,13 +477,13 @@ def _wrap_ast_for_fn_with_closure_vars(
 
 def _find_function_code(code: types.CodeType, fn_name: str):
   """Finds the code object within `code` corresponding to `fn_name`."""
-  code = [
+  code = [  # pyrefly: ignore[bad-assignment]
       const
       for const in code.co_consts
       if inspect.iscode(const) and const.co_name == fn_name
   ]
-  assert len(code) == 1, f"Couldn't find function code for {fn_name!r}."
-  return code[0]
+  assert len(code) == 1, f"Couldn't find function code for {fn_name!r}."  # pyrefly: ignore[bad-argument-type]
+  return code[0]  # pyrefly: ignore[bad-index]
 
 
 def _unwrap_code_for_fn(code: types.CodeType, fn: types.FunctionType):
@@ -512,7 +512,7 @@ def _make_closure_cell(contents):
   else:
     # For earlier versions of Python, build a dummy function to get CellType.
     dummy_fn = lambda: contents
-    cell_type = type(dummy_fn.__closure__[0])
+    cell_type = type(dummy_fn.__closure__[0])  # pyrefly: ignore[unsupported-operation]
     return cell_type(contents)
 
 
@@ -615,7 +615,7 @@ def exempt(fn_or_cls: _GenericCallable) -> _GenericCallable:
     A wrapped version of the same callable that will not be transformed to
     config if called inside an auto_config function.
   """
-  return AutoConfig(
+  return AutoConfig(  # pyrefly: ignore[bad-return]
       func=fn_or_cls, buildable_func=fn_or_cls, always_inline=True
   )
 
@@ -902,7 +902,7 @@ def auto_config(
     line_number = fn.__code__.co_firstlineno
     node_transformer = _AutoConfigNodeTransformer(
         source=source,
-        filename=filename,
+        filename=filename,  # pyrefly: ignore[bad-argument-type]
         line_number=line_number,
         allow_control_flow=experimental_allow_control_flow,
     )
@@ -924,7 +924,7 @@ def auto_config(
     node = _wrap_ast_for_fn_with_closure_vars(node, fn)
     # Compile the modified AST, and then find the function code object within
     # the returned module-level code object.
-    code = compile(node, inspect.getsourcefile(fn), 'exec')
+    code = compile(node, inspect.getsourcefile(fn), 'exec')  # pyrefly: ignore[bad-argument-type]
     code = _unwrap_code_for_fn(code, fn)
 
     # Insert auto_config_attr_load_handler, auto_config_attr_save_handler,
@@ -988,7 +988,7 @@ def auto_config(
       fn = method_type(fn)
       as_buildable = method_type(as_buildable)
     return AutoConfig(
-        fn, as_buildable, always_inline=experimental_always_inline
+        fn, as_buildable, always_inline=experimental_always_inline  # pyrefly: ignore[bad-argument-type]
     )
 
   # Decorator with empty parenthesis.
@@ -1142,7 +1142,7 @@ def inline(buildable: config.Config):
     )
   # Evaluate the `as_buildable` interpretation.
   auto_config_fn = cast(AutoConfig, buildable.__fn_or_cls__)
-  tmp_config = auto_config_fn.as_buildable(**buildable.__arguments__)
+  tmp_config = auto_config_fn.as_buildable(**buildable.__arguments__)  # pyrefly: ignore[bad-unpacking]
   if not isinstance(tmp_config, config.Buildable):
     raise ValueError(
         'You cannot currently inline functions that do not return '
@@ -1187,7 +1187,7 @@ class _LambdaFinder(cst.CSTVisitor):
 
   def visit_Lambda(self, node) -> None:
     loc = self.get_metadata(cst.metadata.PositionProvider, node)
-    if loc.start.line == self.lineno:
+    if loc.start.line == self.lineno:  # pyrefly: ignore[missing-attribute]
       self.candidates.append(node)
 
 
@@ -1196,7 +1196,7 @@ def _getsource_for_lambda(fn: Callable[..., Any]) -> str:
   # Get the source for the module that defines `fn`.
   module = inspect.getmodule(fn)
   filename = inspect.getsourcefile(fn)
-  lines = linecache.getlines(filename, module.__dict__)
+  lines = linecache.getlines(filename, module.__dict__)  # pyrefly: ignore[bad-argument-type]
   source = ''.join(lines)
 
   # Parse the CST for the module, and search for the lambda.

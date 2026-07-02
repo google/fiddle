@@ -54,7 +54,7 @@ class RegistryTest(absltest.TestCase):
       def __init__(self, x):
         self.x = x
 
-    @ab.skeleton(Foo)
+    @ab.skeleton(Foo)  # pyrefly: ignore[bad-argument-type]
     def foo_skeleton(config: fdl.Config):  # pylint: disable=unused-variable
       # Note: Setting constants is generally not the purpose of skeletons; we're
       # just doing that here for testing purposes.
@@ -78,23 +78,23 @@ class RegistryTest(absltest.TestCase):
 
     # Still raises informative error even when table entry is present
     # (for a validator).
-    ab.validator(Foo)(lambda config: None)
+    ab.validator(Foo)(lambda config: None)  # pyrefly: ignore[bad-argument-type]
     with self.assertRaisesRegex(KeyError, r".*\bFoo\b"):
       ab.config(Foo)
 
   def test_skeleton_registers(self):
     registry = ab.Registry()
     fn = lambda config: None
-    registry.skeleton(FakeDense)(fn)
+    registry.skeleton(FakeDense)(fn)  # pyrefly: ignore[bad-argument-type]
     self.assertDictEqual(registry.table, {
-        FakeDense: ab.TableEntry(skeleton_fn=fn, validators=[]),
+        FakeDense: ab.TableEntry(skeleton_fn=fn, validators=[]),  # pyrefly: ignore[bad-argument-type]
     })
 
   def test_skeleton_duplicate_class_registration_error(self):
     registry = ab.Registry()
-    registry.skeleton(FakeDense)(lambda config: None)
+    registry.skeleton(FakeDense)(lambda config: None)  # pyrefly: ignore[bad-argument-type]
     with self.assertRaisesRegex(ab.DuplicateSkeletonError, r".*FakeDense.*"):
-      registry.skeleton(FakeDense)(lambda config: None)
+      registry.skeleton(FakeDense)(lambda config: None)  # pyrefly: ignore[bad-argument-type]
 
   def test_skeleton_duplicate_function_registration_error(self):
     # Because the fancy error message includes source lines, make sure that
@@ -103,18 +103,18 @@ class RegistryTest(absltest.TestCase):
       pass
 
     registry = ab.Registry()
-    registry.skeleton(fake_fn)(lambda config: None)
+    registry.skeleton(fake_fn)(lambda config: None)  # pyrefly: ignore[bad-argument-type]
     with self.assertRaisesRegex(ab.DuplicateSkeletonError, r".*fake_fn.*"):
-      registry.skeleton(fake_fn)(lambda config: None)
+      registry.skeleton(fake_fn)(lambda config: None)  # pyrefly: ignore[bad-argument-type]
 
   def test_recursive_skeleton(self):
 
-    @ab.skeleton(FakeDense)
+    @ab.skeleton(FakeDense)  # pyrefly: ignore[bad-argument-type]
     def dense_skeleton(config: fdl.Config) -> None:  # pylint: disable=unused-variable
       config.in_dim = 4
       config.out_dim = 4
 
-    @ab.skeleton(FakeMlp)
+    @ab.skeleton(FakeMlp)  # pyrefly: ignore[bad-argument-type]
     def mlp_skeleton(config: fdl.Config) -> None:  # pylint: disable=unused-variable
       config.first_dense = ab.config(FakeDense)
       config.first_dense.in_dim = 5
@@ -136,12 +136,12 @@ class RegistryTest(absltest.TestCase):
 
   def test_auto_skeleton_subclasses_and_existing_skeletons(self):
 
-    @ab.skeleton(FakeDense)
+    @ab.skeleton(FakeDense)  # pyrefly: ignore[bad-argument-type]
     def dense_skeleton(config: fdl.Config) -> None:  # pylint: disable=unused-variable
       config.in_dim = 4
       config.out_dim = 4
 
-    @ab.skeleton(FakeDenseSubclass)
+    @ab.skeleton(FakeDenseSubclass)  # pyrefly: ignore[bad-argument-type]
     def dense_subclass_skeleton(config: fdl.Config) -> None:  # pylint: disable=unused-variable
       config.in_dim = 7
       config.out_dim = 9
@@ -210,9 +210,9 @@ class RegistryTest(absltest.TestCase):
   def test_validator_registers(self):
     registry = ab.Registry()
     fn = lambda config: None
-    registry.validator(FakeDense)(fn)
+    registry.validator(FakeDense)(fn)  # pyrefly: ignore[bad-argument-type]
     self.assertDictEqual(registry.table, {
-        FakeDense: ab.TableEntry(skeleton_fn=None, validators=[fn]),
+        FakeDense: ab.TableEntry(skeleton_fn=None, validators=[fn]),  # pyrefly: ignore[bad-argument-type]
     })
 
 

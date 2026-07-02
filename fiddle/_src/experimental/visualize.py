@@ -146,7 +146,7 @@ def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
 
       should_copy = True
       for name, attr_value in list(value.__arguments__.items()):
-        param = value.__signature_info__.parameters.get(name, None)
+        param = value.__signature_info__.parameters.get(name, None)  # pyrefly: ignore[no-matching-overload]
         if param is None:
           continue
         param_default = (
@@ -158,12 +158,12 @@ def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
             # All paths must flow through both the parent config (`value`) and
             # the specific attribute which is being defaulted, in order for us
             # to safely remove it.
-            and can_remove_deep_default(attr_value, name, state)
+            and can_remove_deep_default(attr_value, name, state)  # pyrefly: ignore[bad-argument-type]
         ):
           if should_copy:
             value = copy.copy(value)
             should_copy = False
-          delattr(value, name)
+          delattr(value, name)  # pyrefly: ignore[bad-argument-type]
     return state.map_children(value)
 
   return daglish.MemoizedTraversal.run(traverse_fn, config)
@@ -236,7 +236,7 @@ def structure(config: _T) -> _T:
       result = state.map_children(value)
       for name, sub_value in config_lib.ordered_arguments(result).items():
         if sub_value is _any_value:
-          delattr(result, name)
+          delattr(result, name)  # pyrefly: ignore[bad-argument-type]
       return result
     else:
       result = state.flattened_map_children(value)
@@ -288,7 +288,7 @@ def trim_fields_to(
       to_keep = fields_by_id[id(value)]
       value = copy.copy(value)  # Shallow copy to avoid mutating original.
       for argument in set(config_lib.ordered_arguments(value)) - set(to_keep):
-        setattr(value, argument, Trimmed())
+        setattr(value, argument, Trimmed())  # pyrefly: ignore[bad-argument-type]
     return state.map_children(value)
 
   return daglish.MemoizedTraversal.run(traverse, config)
@@ -324,7 +324,7 @@ def trim_long_fields(
   def traverse(value, state: daglish.State):
     if isinstance(value, config_lib.Buildable):
       for argument in set(config_lib.ordered_arguments(value)):
-        field = getattr(value, argument)
+        field = getattr(value, argument)  # pyrefly: ignore[bad-argument-type]
         if not isinstance(field, (config_lib.Buildable, list, tuple, dict)):
           field_repr = repr(field)
           if len(field_repr) > threshold:
@@ -332,7 +332,7 @@ def trim_long_fields(
                 repr(field), width=threshold, placeholder='...'
             )
             prefix = _TruncatedRepr(s)
-            setattr(value, argument, prefix)
+            setattr(value, argument, prefix)  # pyrefly: ignore[bad-argument-type]
     return state.map_children(value)
 
   return daglish.MemoizedTraversal.run(traverse, config)

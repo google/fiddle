@@ -53,7 +53,7 @@ def _is_typing_or_generic(value: Any) -> bool:
 
 
 def format_py_reference(value: Any) -> str:
-  module_name = inspect.getmodule(value).__name__
+  module_name = inspect.getmodule(value).__name__  # pyrefly: ignore[missing-attribute]
   if module_name in ("fiddle._src.config", "fiddle._src.partial"):
     module_name = "fdl"
   cls_name = value.__qualname__

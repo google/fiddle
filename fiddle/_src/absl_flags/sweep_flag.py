@@ -162,7 +162,7 @@ class DEFINE_fiddle_sweep:  # pylint: disable=invalid-name
   @property
   def value(self) -> Sequence[SweepItem]:
     if self._value is None:
-      self._value = self._parse(self._multi_flag.value)
+      self._value = self._parse(self._multi_flag.value)  # pyrefly: ignore[bad-argument-type]
     return self._value
 
   def _parse_call_expression(

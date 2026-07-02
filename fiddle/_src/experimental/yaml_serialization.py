@@ -54,7 +54,7 @@ def _config_representer(dumper, data, type_name="fdl.Config"):
     )
 
   value["__fn_or_cls__"] = {
-      "module": inspect.getmodule(config_lib.get_callable(data)).__name__,
+      "module": inspect.getmodule(config_lib.get_callable(data)).__name__,  # pyrefly: ignore[missing-attribute]
       "name": config_lib.get_callable(data).__qualname__,
   }
   return dumper.represent_mapping(f"!{type_name}", value)

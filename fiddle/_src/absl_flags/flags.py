@@ -264,9 +264,9 @@ class FiddleFlag(flags.MultiFlag):
           raise
 
       elif command == "set":
-        utils.set_value(self._value, expression)
+        utils.set_value(self._value, expression)  # pyrefly: ignore[bad-argument-type]
       elif command == "fiddler":
-        self._value = self._apply_fiddler(self._value, expression)
+        self._value = self._apply_fiddler(self._value, expression)  # pyrefly: ignore[bad-argument-type]
       else:
         raise AssertionError("Internal error; should not be reached.")
     return self._value

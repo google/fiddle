@@ -220,7 +220,7 @@ def _cst_for_fiddler(func_name: str, param_name: str, body: List[cst.CSTNode],
       name=cst.Name(func_name),
       params=cst.Parameters(
           params=[cst.Param(name=cst.Name(param_name), star='')]),
-      body=cst.IndentedBlock(body),
+      body=cst.IndentedBlock(body),  # pyrefly: ignore[bad-argument-type]
       leading_lines=[cst.EmptyLine()] if add_leading_blank_line else [])
 
 
@@ -237,7 +237,7 @@ def _cst_for_new_shared_value_variables(
     statements.append(
         cst.Assign(
             targets=[cst.AssignTarget(target=cst.Name(name))],
-            value=pyval_to_cst(value)))
+            value=pyval_to_cst(value)))  # pyrefly: ignore[bad-argument-type]
   return [cst.SimpleStatementLine([stmt]) for stmt in statements]
 
 
@@ -368,24 +368,24 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         new_value_cst = pyval_to_cst(change.new_value)
         update_callable = cst.Expr(
             cst.Call(
-                func=pyval_to_cst(mutate_buildable.update_callable),
-                args=[cst.Arg(parent_cst), cst.Arg(new_value_cst)],
+                func=pyval_to_cst(mutate_buildable.update_callable),  # pyrefly: ignore[bad-argument-type]
+                args=[cst.Arg(parent_cst), cst.Arg(new_value_cst)],  # pyrefly: ignore[bad-argument-type]
             )
         )
 
       elif isinstance(change, diffing.DeleteValue):
-        deletes.append(cst.Del(target=child_cst))
+        deletes.append(cst.Del(target=child_cst))  # pyrefly: ignore[bad-argument-type]
 
       elif isinstance(change, diffing.RemoveTag):
-        arg_name = change.target[-1].name
+        arg_name = change.target[-1].name  # pyrefly: ignore[missing-attribute]
         deletes.append(
             cst.Expr(
                 cst.Call(
-                    func=pyval_to_cst(tagging.remove_tag),
+                    func=pyval_to_cst(tagging.remove_tag),  # pyrefly: ignore[bad-argument-type]
                     args=[
                         cst.Arg(parent_cst),
-                        cst.Arg(pyval_to_cst(arg_name)),
-                        cst.Arg(pyval_to_cst(change.tag)),
+                        cst.Arg(pyval_to_cst(arg_name)),  # pyrefly: ignore[bad-argument-type]
+                        cst.Arg(pyval_to_cst(change.tag)),  # pyrefly: ignore[bad-argument-type]
                     ],
                 )
             )
@@ -395,18 +395,18 @@ def _cst_for_changes(diff: diffing.Diff, param_name: str,
         new_value_cst = pyval_to_cst(change.new_value)
         assigns.append(
             cst.Assign(
-                targets=[cst.AssignTarget(child_cst)], value=new_value_cst))
+                targets=[cst.AssignTarget(child_cst)], value=new_value_cst))  # pyrefly: ignore[bad-argument-type]
 
       elif isinstance(change, diffing.AddTag):
-        arg_name = change.target[-1].name
+        arg_name = change.target[-1].name  # pyrefly: ignore[missing-attribute]
         assigns.append(
             cst.Expr(
                 value=cst.Call(
-                    func=pyval_to_cst(tagging.add_tag),
+                    func=pyval_to_cst(tagging.add_tag),  # pyrefly: ignore[bad-argument-type]
                     args=[
                         cst.Arg(parent_cst),
-                        cst.Arg(pyval_to_cst(arg_name)),
-                        cst.Arg(pyval_to_cst(change.tag)),
+                        cst.Arg(pyval_to_cst(arg_name)),  # pyrefly: ignore[bad-argument-type]
+                        cst.Arg(pyval_to_cst(change.tag)),  # pyrefly: ignore[bad-argument-type]
                     ],
                 )
             )
@@ -433,17 +433,17 @@ def _cst_for_child(parent_cst: cst.CSTNode, child_path_elt: daglish.PathElement,
     pyval_to_cst: A function used to convert Python values to CST.
   """
   if isinstance(child_path_elt, daglish.Attr):
-    return cst.Attribute(value=parent_cst, attr=cst.Name(child_path_elt.name))
+    return cst.Attribute(value=parent_cst, attr=cst.Name(child_path_elt.name))  # pyrefly: ignore[bad-argument-type]
   elif isinstance(child_path_elt, daglish.Index):
     index_cst = pyval_to_cst(child_path_elt.index)
     return cst.Subscript(
-        value=parent_cst,
-        slice=[cst.SubscriptElement(slice=cst.Index(index_cst))])
+        value=parent_cst,  # pyrefly: ignore[bad-argument-type]
+        slice=[cst.SubscriptElement(slice=cst.Index(index_cst))])  # pyrefly: ignore[bad-argument-type]
   elif isinstance(child_path_elt, daglish.Key):
     key_cst = pyval_to_cst(child_path_elt.key)
     return cst.Subscript(
-        value=parent_cst,
-        slice=[cst.SubscriptElement(slice=cst.Index(key_cst))])
+        value=parent_cst,  # pyrefly: ignore[bad-argument-type]
+        slice=[cst.SubscriptElement(slice=cst.Index(key_cst))])  # pyrefly: ignore[bad-argument-type]
   else:
     raise ValueError(f'Unsupported PathElement {type(child_path_elt)}')
 

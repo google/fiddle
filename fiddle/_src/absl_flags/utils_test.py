@@ -201,7 +201,7 @@ class ImportDottedNameTest(absltest.TestCase):
     class C:
       d = 42
 
-    sub_b.c = C
+    sub_b.c = C  # pyrefly: ignore[missing-attribute]
 
     sys.modules['a'] = parent_a
     sys.modules['a.b'] = sub_b

@@ -166,7 +166,7 @@ for set_type in (set, frozenset):
 register_node_traverser(
     bytes,
     flatten_fn=lambda x: ((x.decode('raw_unicode_escape'),), None),
-    unflatten_fn=lambda values, _: values[0].encode('raw_unicode_escape'),
+    unflatten_fn=lambda values, _: values[0].encode('raw_unicode_escape'),  # pyrefly: ignore[bad-index]
     path_elements_fn=lambda x: (IdentityElement(),),
 )
 
@@ -224,7 +224,7 @@ class PyrefPolicy(metaclass=abc.ABCMeta):
       symbol: The symbol to import from `module`.
     """
 
-  def allows_value(self, value: Any) -> bool:
+  def allows_value(self, value: Any) -> bool:  # pyrefly: ignore[bad-return]
     """Returns whether this policy allows an imported `value` to be used.
 
     This is called after `value` has already been imported, but before it is
@@ -647,7 +647,7 @@ class Serialization:
       # If we should add paths (all_paths is not None) and we have an entry for
       # value in self._paths_by_id, use that, since it may contain additional
       # paths not available via the parent.
-      all_paths = self._paths_by_id.get(id(value), all_paths)
+      all_paths = self._paths_by_id.get(id(value), all_paths)  # pyrefly: ignore[bad-assignment]
 
     traverser = find_node_traverser(type(value))
     if traverser is None:

@@ -57,7 +57,7 @@ def get_type_errors(config: config_lib.Buildable) -> List[str]:
             # generics raise a `TypeError`. For these, get their origin type and
             # check that the origin types match.
             type_hint_origin = get_origin(type_hints[arg_name])
-            if not isinstance(arg_value, type_hint_origin):
+            if not isinstance(arg_value, type_hint_origin):  # pyrefly: ignore[bad-argument-type]
               add_error = True
           if add_error:
             path_str = daglish.path_str(state.current_path)

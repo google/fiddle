@@ -206,7 +206,7 @@ def code_generator(
       ImportSymbols(),
       TransformSubFixtures(),
   ]
-  passes.extend([
+  passes.extend([  # pyrefly: ignore[bad-argument-type]
       LowerArgFactories(),
       MoveSharedNodesToVariables(),
   ])
@@ -214,17 +214,17 @@ def code_generator(
     is_complex = complex_to_variables.more_complex_than(
         max_expression_complexity
     )
-    passes.append(MoveComplexNodesToVariables(is_complex=is_complex))
+    passes.append(MoveComplexNodesToVariables(is_complex=is_complex))  # pyrefly: ignore[bad-argument-type]
   format_history = (
       get_history_comments.format_history_for_buildable
       if include_history
       else make_symbolic_references.noop_history_comments
   )
-  passes.extend([
+  passes.extend([  # pyrefly: ignore[bad-argument-type]
       MakeSymbolicReferences(format_history=format_history),
       IrToCst(),
   ])
-  return Codegen(passes=passes, debug_print=debug_print)
+  return Codegen(passes=passes, debug_print=debug_print)  # pyrefly: ignore[bad-argument-type]
 
 
 def auto_config_codegen(

@@ -105,10 +105,10 @@ def replace_callables_and_configs_with_symbols(
     for name, arg_value in arguments.items():
       if isinstance(arg_value, code_ir.ArgFactoryExpr):
         arg_factory_args[name] = state.call(
-            arg_value.expression, daglish.Attr(name)
+            arg_value.expression, daglish.Attr(name)  # pyrefly: ignore[bad-argument-type]
         )
       else:
-        regular_args[name] = state.call(arg_value, daglish.Attr(name))
+        regular_args[name] = state.call(arg_value, daglish.Attr(name))  # pyrefly: ignore[bad-argument-type]
 
     for dict_of_args in (arg_factory_args, regular_args):
       for arg in dict_of_args:
@@ -179,7 +179,7 @@ def replace_callables_and_configs_with_symbols(
         return code_ir.SymbolOrFixtureCall(
             symbol_expression=ir_for_symbol,
             positional_arg_expressions=[],
-            arg_expressions=config_lib.ordered_arguments(value),
+            arg_expressions=config_lib.ordered_arguments(value),  # pyrefly: ignore[bad-argument-type]
             history_comments=format_history(value),
         )
       elif isinstance(value, partial.Partial):

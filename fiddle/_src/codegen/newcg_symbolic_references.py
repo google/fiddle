@@ -99,7 +99,7 @@ def replace_callables_and_configs_with_symbols(
       return code_ir.SymbolOrFixtureCall(
           symbol_expression=ir_for_buildable_type,
           positional_arg_expressions=[ir_for_symbol],
-          arg_expressions=config_lib.ordered_arguments(value),
+          arg_expressions=config_lib.ordered_arguments(value),  # pyrefly: ignore[bad-argument-type]
           history_comments=format_history(value),
       )
     elif is_plain_symbol_or_enum_value(value):

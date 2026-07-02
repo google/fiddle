@@ -54,7 +54,7 @@ class DataclassTraverserRegistry(daglish.NodeTraverserRegistry):
   def find_node_traverser(
       self, node_type: Type[Any]
   ) -> Optional[daglish.NodeTraverser]:
-    traverser = self.fallback_registry.find_node_traverser(node_type)
+    traverser = self.fallback_registry.find_node_traverser(node_type)  # pyrefly: ignore[missing-attribute]
     if traverser is None and dataclasses.is_dataclass(node_type):
       traverser = dataclass_traverser
     return traverser

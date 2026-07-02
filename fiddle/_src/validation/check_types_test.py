@@ -69,7 +69,7 @@ class StackedEncoder:
   encoders: List[fake_encoder_decoder.FakeEncoder]
 
 
-class CheckTypesTest(absltest.TestCase, unittest.TestCase):
+class CheckTypesTest(absltest.TestCase, unittest.TestCase):  # pyrefly: ignore[inconsistent-inheritance]
 
   def test_type_validation(self):
     cfg = config.Config(Experiment, dataset=BadDataset())
