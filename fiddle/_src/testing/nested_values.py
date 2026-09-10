@@ -138,7 +138,7 @@ def generate_nested_value(
     return buildable
 
   def generate_alias():
-    for value in enumerate(share_objects):  # pyrefly: ignore[bad-argument-type]
+    for value in enumerate(share_objects):  # pyrefly: ignore[bad-argument-type, not-iterable]
       if calculate_nested_value_depth(value) < max_depth:
         return value
     return generate_value()

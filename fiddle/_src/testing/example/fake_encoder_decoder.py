@@ -86,7 +86,7 @@ def fixture(kernel_init: str = "uniform()"):
       encoder=FakeEncoder(
           embedders={  # pyrefly: ignore[bad-argument-type]
               "tokens": shared_token_embedder,
-              "position": None
+              "position": None,  # pyrefly: ignore[bad-assignment]
           },
           attention=Attention(dtype, kernel_init, bias_init),
           mlp=Mlp(dtype, False, ["embed", "num_heads", "head_dim"]),
@@ -94,7 +94,9 @@ def fixture(kernel_init: str = "uniform()"):
       decoder=FakeDecoder(
           embedders={"tokens": shared_token_embedder},
           self_attention=Attention(dtype, kernel_init, bias_init),
-          encoder_decoder_attention=CrossAttention(dtype, kernel_init,
-                                                   bias_init),
+          encoder_decoder_attention=CrossAttention(
+              dtype, kernel_init, bias_init
+          ),
           mlp=Mlp(dtype, False, ["num_heads", "head_dim", "embed"]),
-      ))
+      ),
+  )
