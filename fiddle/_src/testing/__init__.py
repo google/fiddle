@@ -14,7 +14,3 @@
 # limitations under the License.
 
 """Fiddle testing utilities."""
-
-from fiddle._src.testing.test_util import parse_path
-from fiddle._src.testing.test_util import parse_reference
-from fiddle._src.testing.test_util import TestCase
