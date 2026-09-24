@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
 import importlib
 import os
 import random
@@ -151,22 +150,26 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
           generated_config = module.config_fixture.as_buildable()
           self.assertDagEqual(config, generated_config)
 
-  def test_config_contains_tags_wo_default(self):
-    @dataclasses.dataclass
-    class Foo:
-      a: int = 1
+  @parameterized.named_parameters(
+      {"testcase_name": "config", "buildable_cls": fdl.Config},
+      {"testcase_name": "partial", "buildable_cls": fdl.Partial},
+  )
+  def test_config_contains_tags_wo_value(
+      self, buildable_cls: type[fdl.Buildable]
+  ):
+    config = buildable_cls(test_fixtures.bar, x=1)
+    fdl.add_tag(config, "y", test_fixtures.ATag)
 
-    config = fdl.Config(Foo)
-    fdl.set_tags(config, "a", [test_fixtures.ATag])
+    code = experimental_top_level_api.auto_config_codegen(config)
+    self.assertIn(
+        "auto_config.with_tags(fdl.NO_VALUE, test_fixtures.ATag)", code
+    )
 
-    with self.assertRaisesRegex(
-        ValueError,
-        (
-            "assigning a value to the field first or removing field tags from "
-            "your config"
-        ),
-    ):
-      experimental_top_level_api.auto_config_codegen(config)
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    self.assertDagEqual(config, generated_config)
+    self.assertEqual(fdl.get_tags(generated_config, "y"), {test_fixtures.ATag})
+    self.assertNotIn("y", generated_config.__arguments__)
 
   @parameterized.named_parameters(
       {"testcase_name": "basic", "api": "highlevel"},

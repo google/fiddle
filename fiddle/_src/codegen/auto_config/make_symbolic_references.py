@@ -86,6 +86,13 @@ def replace_callables_and_configs_with_symbols(
 
   fn_name = None
 
+  def _no_value_expr() -> code_ir.CodegenNode:
+    """Returns an expression for `fdl.NO_VALUE`, e.g. for tagged unset args."""
+    fiddle_module = task.import_manager.add_by_name("fiddle")
+    return code_ir.AttributeExpression(
+        code_ir.ModuleReference(code_ir.Name(fiddle_module)), "NO_VALUE"
+    )
+
   def _handle_partial(
       value: partial.Partial,
       state: daglish.State,
@@ -109,6 +116,10 @@ def replace_callables_and_configs_with_symbols(
         )
       else:
         regular_args[name] = state.call(arg_value, daglish.Attr(name))  # pyrefly: ignore[bad-argument-type]
+
+    for name, tags in all_tags.items():
+      if tags and name not in arguments:
+        regular_args[name] = _no_value_expr()
 
     for dict_of_args in (arg_factory_args, regular_args):
       for arg in dict_of_args:
@@ -163,18 +174,16 @@ def replace_callables_and_configs_with_symbols(
         all_tags = value.__argument_tags__
         value = state.map_children(value)
         for arg, arg_tags in all_tags.items():
+          if not arg_tags:
+            continue
           tag_expr = [task.import_manager.add(tag) for tag in arg_tags]
-          if arg not in value.__arguments__:
-            raise ValueError(
-                f"Tagged field '{arg}' of {value!r} is not found in its"
-                f" arguments: {value.__arguments__}. This is likely because the"
-                " tagged field doesn't yet have a value. Consider assigning a"
-                " value to the field first or removing field tags from your"
-                " config, for example using `fdl.clear_tags`."
-            )
           value.__arguments__[arg] = code_ir.WithTagsCall(
               tag_symbol_expressions=tag_expr,
-              item_to_tag=value.__arguments__[arg],
+              item_to_tag=(
+                  value.__arguments__[arg]
+                  if arg in value.__arguments__
+                  else _no_value_expr()
+              ),
           )
         return code_ir.SymbolOrFixtureCall(
             symbol_expression=ir_for_symbol,
