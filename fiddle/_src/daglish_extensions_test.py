@@ -15,7 +15,6 @@
 
 """Tests for daglish_extensions."""
 
-
 import dataclasses
 from typing import Any, NamedTuple
 
@@ -51,13 +50,24 @@ class DaglishExtensionsTest(parameterized.TestCase):
   def test_register_immutable(self):
     obj = object()
     self.assertFalse(daglish_extensions.is_immutable(obj))
+    self.assertFalse(daglish_extensions.is_unshareable(obj))
     daglish_extensions.register_immutable(obj)
     self.assertTrue(daglish_extensions.is_immutable(obj))
+    self.assertTrue(daglish_extensions.is_unshareable(obj))
+    del obj
+    new_obj = object()
+    self.assertFalse(daglish_extensions.is_immutable(new_obj))
+    self.assertFalse(daglish_extensions.is_unshareable(new_obj))
 
   def test_register_function_with_immutable_return_value(self):
-    def fn(x: int) -> int:
-      return x
 
+    def make_fn():
+      def fn(x):
+        return x
+
+      return fn
+
+    fn = make_fn()
     config = fdl.Config(fn, 3)
     self.assertFalse(daglish_extensions.is_immutable(config))
     self.assertFalse(daglish_extensions.is_unshareable(config))
@@ -68,6 +78,12 @@ class DaglishExtensionsTest(parameterized.TestCase):
     # value would not.
     self.assertFalse(daglish_extensions.is_immutable(config))
     self.assertTrue(daglish_extensions.is_unshareable(config))
+
+    fn2 = make_fn()
+    daglish_extensions.register_function_with_immutable_return_value(fn2)
+    del fn2
+    fn3 = make_fn()
+    self.assertFalse(daglish_extensions.is_unshareable(fdl.Config(fn3, 3)))
 
   @parameterized.parameters(
       {

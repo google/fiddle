@@ -26,23 +26,25 @@ from typing import Any, Callable, Type, Union
 from fiddle._src import config as config_lib
 from fiddle._src import daglish
 
-_IMMUTABLE_OBJECT_IDS = set()
+# Note: we include `value` in the dict to keep it alive, to ensure that
+# `id(value)` remains valid and is not reused after garbage collection.
+_IMMUTABLE_OBJECT_IDS = {}
 
 
 def register_immutable(value: Any) -> None:
   """Registers a certain type to be immutable."""
-  _IMMUTABLE_OBJECT_IDS.add(id(value))
+  _IMMUTABLE_OBJECT_IDS[id(value)] = value
 
 
-# Similar set of IDs of functions/types with immutable return values (for this
+# Similar dict of IDs of functions/types with immutable return values (for this
 # case, maybe it's OK to replace IDs with just the functions/types?).
-_FUNCTIONS_WITH_IMMUTABLE_RETURN_VALUES = set()
+_FUNCTIONS_WITH_IMMUTABLE_RETURN_VALUES = {}
 
 
 def register_function_with_immutable_return_value(
-    fn_or_cls: Union[Type[Any], Callable[..., Any]]
+    fn_or_cls: Union[Type[Any], Callable[..., Any]],
 ) -> None:
-  _FUNCTIONS_WITH_IMMUTABLE_RETURN_VALUES.add(id(fn_or_cls))
+  _FUNCTIONS_WITH_IMMUTABLE_RETURN_VALUES[id(fn_or_cls)] = fn_or_cls
 
 
 # TODO(b/285146396): Register the tensorflow dtypes as immutable.
@@ -116,6 +118,7 @@ def is_unshareable(value: Any) -> bool:
           in _FUNCTIONS_WITH_IMMUTABLE_RETURN_VALUES
       )
   )
+
 
 _PATH_PART = re.compile(
     "(?:{})".format(
