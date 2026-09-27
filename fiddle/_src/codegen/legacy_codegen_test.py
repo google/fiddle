@@ -20,6 +20,7 @@ from typing import List
 
 from absl.testing import absltest
 import fiddle as fdl
+from fiddle import tagging
 from fiddle._src.codegen import legacy_codegen
 from fiddle._src.codegen import test_util
 from fiddle._src.codegen.test_submodule import test_util as submodule_test_util
@@ -111,6 +112,17 @@ else:
 
 
 class CodegenTest(absltest.TestCase):
+
+  def test_tagging_function_round_trip(self):
+    config = fdl.Partial(tagging.list_tags)
+    code = "\n".join(legacy_codegen.codegen_dot_syntax(config).lines())
+    exec_globals = {}
+    exec(code, exec_globals)  # pylint: disable=exec-used
+    restored_config = exec_globals["build_config"]()
+    self.assertEqual(restored_config, config)
+    tagged_config = fdl.Config(test_util.Foo, a=1)
+    fdl.add_tag(tagged_config, "a", fdl.Tag)
+    self.assertEqual(fdl.build(restored_config)(tagged_config), {fdl.Tag})
 
   def test_codegen_dot_syntax_shared(self):
     cfg = shared_config()

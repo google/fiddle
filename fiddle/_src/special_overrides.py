@@ -32,6 +32,8 @@ class SpecialOverrides:
   migrated_symbol_destination_modules: Dict[str, str] = dataclasses.field(
       default_factory=dict
   )
+  # Import aliases for symbols that are not exported by the module-wide alias.
+  symbol_import_aliases: Dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 SPECIAL_OVERRIDES_MAP = {
@@ -89,6 +91,10 @@ SPECIAL_OVERRIDES_MAP = {
     "fiddle._src.tagging": SpecialOverrides(
         module_name="fiddle._src.tagging",
         module_import_alias="import fiddle as fdl",
+        symbol_import_aliases={
+            "list_tags": "from fiddle import tagging",
+            "materialize_tags": "from fiddle import tagging",
+        },
     ),
 }
 
