@@ -17,7 +17,7 @@
 
 import dataclasses
 import functools
-from typing import Callable
+from typing import Annotated, Callable
 
 import fiddle as fdl
 from fiddle import arg_factory
@@ -41,6 +41,18 @@ class ATag(fdl.Tag):
 
 class BTag(fdl.Tag):
   """Sample tag to test code generation of tags."""
+
+
+def annotated_bar(x, y: Annotated[int, ATag] = 3):
+  return (x, y)
+
+
+def multi_annotated_bar(x, y: Annotated[int, ATag, BTag] = 3):
+  return (x, y)
+
+
+def positional_only_annotated_bar(x: Annotated[int, ATag] = 3, /, y=4):
+  return (x, y)
 
 
 @dataclasses.dataclass

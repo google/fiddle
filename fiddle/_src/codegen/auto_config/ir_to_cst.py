@@ -171,13 +171,17 @@ def code_for_expr(expr: Any) -> cst.CSTNode:
     elif isinstance(value, code_ir.WithTagsCall):
       attr = daglish.Attr("item_to_tag")
       item_to_tag = state.call(value.item_to_tag, attr)
-      call_args = [cst.Arg(item_to_tag)]
-      sorted_tags = sorted([tag for tag in value.tag_symbol_expressions])
-      for tag in sorted_tags:
-        tag_name = cst.parse_expression(tag)
-        call_args.append(cst.Arg(tag_name))
+      tag_exprs = [
+          cst.parse_expression(tag)
+          for tag in sorted(value.tag_symbol_expressions)
+      ]
+      # `with_tags` accepts either a single tag or a collection of tags.
+      if len(tag_exprs) == 1:
+        tags_arg = tag_exprs[0]
+      else:
+        tags_arg = cst.List([cst.Element(tag) for tag in tag_exprs])
       with_tags = cst.parse_expression("auto_config.with_tags")
-      return cst.Call(with_tags, args=call_args)
+      return cst.Call(with_tags, args=[cst.Arg(item_to_tag), cst.Arg(tags_arg)])
     elif state.is_traversable(value):
       raise NotImplementedError(
           f"Expression generation is not implemented for {value!r}"

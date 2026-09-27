@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
 import importlib
 import os
 import random
@@ -151,22 +150,100 @@ class ExperimentalTopLevelApiTest(test_util.TestCase, parameterized.TestCase):
           generated_config = module.config_fixture.as_buildable()
           self.assertDagEqual(config, generated_config)
 
-  def test_config_contains_tags_wo_default(self):
-    @dataclasses.dataclass
-    class Foo:
-      a: int = 1
+  @parameterized.named_parameters(
+      {"testcase_name": "config", "buildable_cls": fdl.Config},
+      {"testcase_name": "partial", "buildable_cls": fdl.Partial},
+  )
+  def test_config_contains_tags_wo_value(
+      self, buildable_cls: type[fdl.Buildable]
+  ):
+    config = buildable_cls(test_fixtures.bar, x=1)
+    fdl.add_tag(config, "y", test_fixtures.ATag)
 
-    config = fdl.Config(Foo)
-    fdl.set_tags(config, "a", [test_fixtures.ATag])
+    code = experimental_top_level_api.auto_config_codegen(config)
+    self.assertIn(
+        "auto_config.with_tags(fdl.NO_VALUE, test_fixtures.ATag)", code
+    )
 
-    with self.assertRaisesRegex(
-        ValueError,
-        (
-            "assigning a value to the field first or removing field tags from "
-            "your config"
-        ),
-    ):
-      experimental_top_level_api.auto_config_codegen(config)
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    self.assertDagEqual(config, generated_config)
+    self.assertEqual(fdl.get_tags(generated_config, "y"), {test_fixtures.ATag})
+    self.assertNotIn("y", generated_config.__arguments__)
+
+  @parameterized.named_parameters(
+      {
+          "testcase_name": "multiple_annotated_tags",
+          "config": fdl.Partial(test_fixtures.multi_annotated_bar, x=1),
+      },
+      {
+          "testcase_name": "positional_only_unset",
+          "config": fdl.Partial(
+              test_fixtures.positional_only_annotated_bar, y=2
+          ),
+      },
+      {
+          "testcase_name": "positional_only_set",
+          "config": fdl.Partial(
+              test_fixtures.positional_only_annotated_bar, 5, y=2
+          ),
+      },
+  )
+  def test_partial_with_annotated_tags_round_trips(self, config: fdl.Partial):
+    code = experimental_top_level_api.auto_config_codegen(config)
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    self.assertDagEqual(config, generated_config)
+
+  def test_partial_with_annotated_tag_unset_arg_unchanged(self):
+    config = fdl.Partial(test_fixtures.annotated_bar, x=1)
+    code = experimental_top_level_api.auto_config_codegen(config)
+    self.assertNotIn("NO_VALUE", code)
+    module = self._load_code_as_module(code)
+    self.assertDagEqual(config, module.config_fixture.as_buildable())
+    # Called as plain Python, the fixture should use `y`'s default.
+    self.assertEqual(module.config_fixture()(), (1, 3))
+
+  @parameterized.product(
+      buildable_cls=(fdl.Config, fdl.Partial),
+      kwargs=({"x": 1}, {"x": 1, "y": 2}),
+  )
+  def test_user_tag_on_annotated_arg_round_trips(
+      self, buildable_cls: type[fdl.Buildable], kwargs: dict[str, int]
+  ):
+    config = buildable_cls(test_fixtures.annotated_bar, **kwargs)
+    fdl.add_tag(config, "y", test_fixtures.BTag)
+    code = experimental_top_level_api.auto_config_codegen(config)
+    module = self._load_code_as_module(code)
+    self.assertDagEqual(config, module.config_fixture.as_buildable())
+
+  @parameterized.product(
+      buildable_cls=(fdl.Config, fdl.Partial),
+      kwargs=({"x": 1}, {"x": 1, "y": 2}),
+      clear_all_field_tags=(False, True),
+  )
+  def test_removed_annotated_tag_is_reapplied(
+      self,
+      buildable_cls: type[fdl.Buildable],
+      kwargs: dict[str, int],
+      clear_all_field_tags: bool,
+  ):
+    config = buildable_cls(test_fixtures.annotated_bar, **kwargs)
+    if clear_all_field_tags:
+      config = tagging.materialize_tags(config, clear_field_tags=True)
+    else:
+      fdl.remove_tag(config, "y", test_fixtures.ATag)
+    self.assertEqual(fdl.get_tags(config, "y"), set())
+
+    code = experimental_top_level_api.auto_config_codegen(config)
+    module = self._load_code_as_module(code)
+    generated_config = module.config_fixture.as_buildable()
+    # Constructing the Buildable re-applies the annotation tag, which is the
+    # closest equivalent auto_config code can express.
+    self.assertDagEqual(
+        buildable_cls(test_fixtures.annotated_bar, **kwargs), generated_config
+    )
+    self.assertEqual(fdl.get_tags(generated_config, "y"), {test_fixtures.ATag})
 
   @parameterized.named_parameters(
       {"testcase_name": "basic", "api": "highlevel"},

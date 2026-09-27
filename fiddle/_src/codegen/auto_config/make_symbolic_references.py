@@ -24,6 +24,7 @@ from fiddle import arg_factory
 from fiddle import daglish
 from fiddle._src import config as config_lib
 from fiddle._src import partial
+from fiddle._src import tag_type
 from fiddle._src.codegen.auto_config import code_ir
 from fiddle._src.codegen.auto_config import import_manager_wrapper
 
@@ -86,6 +87,31 @@ def replace_callables_and_configs_with_symbols(
 
   fn_name = None
 
+  def _no_value_expr() -> code_ir.CodegenNode:
+    """Returns an expression for `fdl.NO_VALUE`, e.g. for tagged unset args."""
+    fiddle_module = task.import_manager.add_by_name("fiddle")
+    return code_ir.AttributeExpression(
+        code_ir.ModuleReference(code_ir.Name(fiddle_module)), "NO_VALUE"
+    )
+
+  def _unset_tagged_args_needing_no_value(
+      buildable: config_lib.Buildable,
+  ) -> list[str | int]:
+    """Returns names of unset tagged args that must be emitted as `NO_VALUE`."""
+    annotated_tags: dict[str | int, set[tag_type.TagType]] = {
+        name: set(tags)
+        for name, tags in tag_type.find_tags_from_annotations(
+            config_lib.get_callable(buildable)
+        ).items()
+    }
+    return [
+        name
+        for name, tags in buildable.__argument_tags__.items()
+        if tags
+        and name not in buildable.__arguments__
+        and not tags <= annotated_tags.get(name, set())
+    ]
+
   def _handle_partial(
       value: partial.Partial,
       state: daglish.State,
@@ -109,6 +135,9 @@ def replace_callables_and_configs_with_symbols(
         )
       else:
         regular_args[name] = state.call(arg_value, daglish.Attr(name))  # pyrefly: ignore[bad-argument-type]
+
+    for name in _unset_tagged_args_needing_no_value(value):
+      regular_args[name] = _no_value_expr()
 
     for dict_of_args in (arg_factory_args, regular_args):
       for arg in dict_of_args:
@@ -161,17 +190,14 @@ def replace_callables_and_configs_with_symbols(
       )
       if isinstance(value, config_lib.Config):
         all_tags = value.__argument_tags__
+        no_value_args = _unset_tagged_args_needing_no_value(value)
         value = state.map_children(value)
+        for arg in no_value_args:
+          value.__arguments__[arg] = _no_value_expr()
         for arg, arg_tags in all_tags.items():
+          if not arg_tags or arg not in value.__arguments__:
+            continue
           tag_expr = [task.import_manager.add(tag) for tag in arg_tags]
-          if arg not in value.__arguments__:
-            raise ValueError(
-                f"Tagged field '{arg}' of {value!r} is not found in its"
-                f" arguments: {value.__arguments__}. This is likely because the"
-                " tagged field doesn't yet have a value. Consider assigning a"
-                " value to the field first or removing field tags from your"
-                " config, for example using `fdl.clear_tags`."
-            )
           value.__arguments__[arg] = code_ir.WithTagsCall(
               tag_symbol_expressions=tag_expr,
               item_to_tag=value.__arguments__[arg],
