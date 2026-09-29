@@ -50,7 +50,7 @@ def _raise_error():
   )
 
 
-class Trimmed(config_lib.Config[type(None)], CustomGraphvizBuildable):
+class Trimmed(config_lib.Config[type(None)], CustomGraphvizBuildable):  # pyrefly: ignore[invalid-annotation]
   """Represents a configuration that has been trimmed."""
 
   def __init__(self):
