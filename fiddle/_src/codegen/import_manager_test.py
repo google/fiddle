@@ -16,9 +16,13 @@
 """Tests for import_manager."""
 
 import textwrap
+from unittest import mock
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import fiddle as fdl
+from fiddle import tagging
+from fiddle._src import special_overrides
 from fiddle._src.codegen import import_manager
 from fiddle._src.codegen import namespace
 import libcst as cst
@@ -87,6 +91,43 @@ class ImportManagerTest(parameterized.TestCase):
     self.assertEqual(manager.add_by_name("fiddle.config"), "fdl_2")
     module = cst.Module(body=manager.sorted_import_lines())
     self.assertEqual(module.code.strip(), "import fiddle as fdl_2")
+
+  @parameterized.parameters((), ("fdl", "tagging"))
+  def test_tagging_imports_resolve_to_original_symbols(self, *reserved_names):
+    manager = import_manager.ImportManager(
+        namespace.Namespace(set(reserved_names))
+    )
+    values = [
+        tagging.list_tags,
+        tagging.materialize_tags,
+        fdl.add_tag,
+        fdl.clear_tags,
+        fdl.get_tags,
+        fdl.remove_tag,
+        fdl.set_tagged,
+        fdl.set_tags,
+        fdl.Tag,
+        fdl.TaggedValue,
+    ]
+    names = [manager.add(value) for value in values]
+    module = cst.Module(body=manager.sorted_import_lines())
+    imported_symbols = {}
+    exec(module.code, imported_symbols)  # pylint: disable=exec-used
+    for name, value in zip(names, values):
+      with self.subTest(name=name):
+        self.assertIs(eval(name, imported_symbols), value)  # pylint: disable=eval-used
+    self.assertLen(manager.sorted_import_nodes(), 2)
+
+  def test_registered_tagging_alias_replaces_default_overrides(self):
+    with mock.patch.dict(special_overrides.SPECIAL_OVERRIDES_MAP):
+      import_manager.register_import_alias(
+          "fiddle._src.tagging", "from fiddle import tagging as tags"
+      )
+      manager = import_manager.ImportManager(namespace.Namespace())
+      self.assertEqual(manager.add(tagging.list_tags), "tags.list_tags")
+      self.assertEqual(manager.add(fdl.Tag), "tags.Tag")
+      module = cst.Module(body=manager.sorted_import_lines())
+      self.assertEqual(module.code.strip(), "from fiddle import tagging as tags")
 
   def test_dotted_special_import_okay(self):
     """Tests cases where dotted imports are used."""
