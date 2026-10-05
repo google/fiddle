@@ -19,7 +19,7 @@ import dataclasses
 import enum
 import functools
 import inspect
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 from absl import logging
 from fiddle._src import special_overrides
@@ -177,7 +177,9 @@ class ImportManager:
         return get_full_module_name(node).split(".")[0] == base_module_name
     return None  # pyrefly: ignore[bad-return]
 
-  def add_by_name(self, full_module_name: str) -> str:
+  def add_by_name(
+      self, full_module_name: str, *, symbol_name: Optional[str] = None
+  ) -> str:
     """Adds an import given a module name.
 
     This is a slightly lower-level API than `add`; you should only use it if
@@ -185,6 +187,8 @@ class ImportManager:
 
     Args:
       full_module_name: String module name to try to import.
+      symbol_name: Qualified symbol name, if known, to select a symbol-specific
+        import alias instead of the module-wide alias.
 
     Returns:
       Name for the imported module. This is usually the last name, possibly
@@ -196,7 +200,10 @@ class ImportManager:
     if result is None:
       result = _make_import(full_module_name)
     else:
-      result = parse_import(result.module_import_alias)
+      import_alias = result.module_import_alias
+      if symbol_name is not None:
+        import_alias = result.symbol_import_aliases.get(symbol_name, import_alias)
+      result = parse_import(import_alias)
 
     # Since multiple things could be aliased to the same import, rewrite
     # the module name to the alias' module name.
@@ -242,7 +249,7 @@ class ImportManager:
       )
       return value_qualname
 
-    imported_name = self.add_by_name(module_name)
+    imported_name = self.add_by_name(module_name, symbol_name=value_qualname)
     return f"{imported_name}.{value_qualname}"
 
   def sorted_import_nodes(self):
