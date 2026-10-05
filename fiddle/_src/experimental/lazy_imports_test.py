@@ -58,16 +58,14 @@ class LazyImportsInspectTest(absltest.TestCase, unittest.TestCase):  # pyrefly: 
     # TODO(b/291129675): Add tests for `kw_only=False`` after supporting args.
     with lazy_imports.lazy_imports(kw_only=True):
       # pylint: disable=g-import-not-at-top,g-multiple-import
-      # pytype: disable=import-error
-      import a0
-      import a1.b.c
-      import a2.b.c as c00
-      import a2.b.c as c01  # Importing object twice is the same instance
-      from a2.b import c as c02
+      import a0  # pyrefly: ignore[missing-import]
+      import a1.b.c  # pyrefly: ignore[missing-import]
+      import a2.b.c as c00  # pyrefly: ignore[missing-import]
+      import a2.b.c as c01  # Importing object twice is the same instance  # pyrefly: ignore[missing-import]
+      from a2.b import c as c02  # pyrefly: ignore[missing-import]
 
-      from a3 import c2, c3
-      from a3.b.c import c4
-      # pytype: enable=import-error
+      from a3 import c2, c3  # pyrefly: ignore[missing-import]
+      from a3.b.c import c4  # pyrefly: ignore[missing-import]
       # pylint: enable=g-import-not-at-top,g-multiple-import
 
     with self.subTest('qualname'):
@@ -137,7 +135,7 @@ class BuildLazyImportsTest(absltest.TestCase, unittest.TestCase):  # pyrefly: ig
 
   def test_wrong_imports_raise_errors(self):
     with lazy_imports.lazy_imports(kw_only=True):
-      from fiddle._src.experimental import not_exist_file  # pylint: disable=g-import-not-at-top # pytype: disable=import-error
+      from fiddle._src.experimental import not_exist_file  # pylint: disable=g-import-not-at-top  # pyrefly: ignore[missing-module-attribute]
 
     cfg = config_lib.Config(not_exist_file.DummyClass, x=2, y=3)
     with self.assertRaises(ModuleNotFoundError):
@@ -181,7 +179,7 @@ class BuildLazyImportsTest(absltest.TestCase, unittest.TestCase):  # pyrefly: ig
     obj = building.build(cfg)
     # Note that the lazy imported module is not loaded at build time but delayed
     # until call time when working with fdl.Partial.
-    self.assertIsInstance(obj.func, lazy_imports.ProxyObject)  # pytype: disable=attribute-error
+    self.assertIsInstance(obj.func, lazy_imports.ProxyObject)
     self.assertEqual(obj(x=5), 128)
 
   def test_positional_args(self):
@@ -196,7 +194,7 @@ class BuildLazyImportsTest(absltest.TestCase, unittest.TestCase):  # pyrefly: ig
       from fiddle._src.experimental import lazy_imports_test_example  # pylint: disable=g-import-not-at-top
     cfg = partial.Partial(lazy_imports_test_example.my_function, 5)
     obj = building.build(cfg)
-    self.assertIsInstance(obj.func, lazy_imports.ProxyObject)  # pytype: disable=attribute-error
+    self.assertIsInstance(obj.func, lazy_imports.ProxyObject)
     self.assertEqual(obj(2), 130)
 
   def test_kw_only_check(self):

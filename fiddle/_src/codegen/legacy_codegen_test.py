@@ -52,11 +52,14 @@ def identity(x):
 
 
 def simple_tree() -> fdl.Config[Foo]:
-  return fdl.Config(  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
-      Foo, a=1, leaves=[
+  return fdl.Config(
+      Foo,
+      a=1,
+      leaves=[
           fdl.Config(Foo, a=2),
           fdl.Config(Foo, a=3),
-      ])
+      ],
+  )
 
 
 def shared_config() -> fdl.Config[Baz]:
@@ -172,8 +175,9 @@ def build_config():
     self.assertSequenceEqual(tokens(code), tokens(expected), code)
 
   def test_codegen_import_and_exec(self):
-    cfg = fdl.Config(  # pytype: disable=wrong-arg-types  # use-fiddle-overlay
-        test_util.Foo, a=1, leaves=[fdl.Config(test_util.Foo, a=2)])
+    cfg = fdl.Config(
+        test_util.Foo, a=1, leaves=[fdl.Config(test_util.Foo, a=2)]
+    )
     result = legacy_codegen.codegen_dot_syntax(cfg)
     expected = """
 import fiddle as fdl

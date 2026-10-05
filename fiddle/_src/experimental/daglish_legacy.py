@@ -139,7 +139,7 @@ def traverse_with_path(fn: TraverseWithPathFn, structure: Any) -> Any:
         new_structure = structure
       generator.send(new_structure)
     except StopIteration as e:
-      return e.value  # pytype: disable=attribute-error
+      return e.value
     else:
       raise RuntimeError("Does the traversal function have two yields?")
 

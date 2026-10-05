@@ -206,7 +206,7 @@ class TypeHintsCacheTest(absltest.TestCase):
   def test_invalid_types(self):
     class ClassWithInvalidAnnotations:
 
-      def __init__(self, oops: 'Any'):  # pytype: disable=name-error
+      def __init__(self, oops: 'Any'):  # pyrefly: ignore[unknown-name]
         pass
 
     hints = signatures.get_type_hints(ClassWithInvalidAnnotations)

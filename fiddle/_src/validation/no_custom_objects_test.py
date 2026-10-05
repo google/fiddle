@@ -69,7 +69,7 @@ class NoCustomObjectsTest(absltest.TestCase):
 
   def test_get_history_from_state(self):
     config = fdl.Config(foo, {"a": {"b": 1}})
-    traversal = daglish.MemoizedTraversal(NotImplemented, config)  # pytype: disable=wrong-arg-types
+    traversal = daglish.MemoizedTraversal(NotImplemented, config)
     state = traversal.initial_state()
     state = daglish.State(
         state.traversal,

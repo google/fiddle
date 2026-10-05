@@ -182,7 +182,7 @@ class NodeTraverserRegistry:
     if isinstance(use_fallback, NodeTraverserRegistry):
       fallback_registry = use_fallback
     elif use_fallback:
-      fallback_registry = _default_traverser_registry  # pytype: disable=name-error
+      fallback_registry = _default_traverser_registry
     else:
       fallback_registry = None
     self.fallback_registry = fallback_registry
@@ -469,7 +469,7 @@ class Traversal(metaclass=abc.ABCMeta):
     Returns:
       The initial state (from `initial_state`) of a new traversal instance.
     """
-    return cls(traversal_fn=fn, root_obj=root_obj).initial_state()  # pytype: disable=not-instantiable
+    return cls(traversal_fn=fn, root_obj=root_obj).initial_state()
 
   @classmethod
   def run(cls, fn: Callable[..., Any], root_obj: Any) -> Any:

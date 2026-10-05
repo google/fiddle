@@ -123,9 +123,9 @@ def myrange_flatten_with_paths_fn(myrange: MyRange):
 
 daglish.register_node_traverser(
     MyRange,
-    flatten_fn=NotImplemented,  # pytype: disable=wrong-arg-types
-    unflatten_fn=NotImplemented,  # pytype: disable=wrong-arg-types
-    path_elements_fn=NotImplemented,  # pytype: disable=wrong-arg-types
+    flatten_fn=NotImplemented,
+    unflatten_fn=NotImplemented,
+    path_elements_fn=NotImplemented,
     flatten_with_paths_fn=myrange_flatten_with_paths_fn,
 )
 
@@ -653,7 +653,7 @@ class MemoizedTraversalTest(absltest.TestCase):
         result = 0
         for i in value:
           to_visit = fdl.Config(Foo, bar=i + 1, baz=2 * i + 1)
-          result += state.call(to_visit, daglish.Key(i))  # pytype: disable=unsupported-operands
+          result += state.call(to_visit, daglish.Key(i))
         return result
       else:
         raise AssertionError("Should not be reached, got " + str(value))
@@ -684,7 +684,7 @@ class MemoizedTraversalTest(absltest.TestCase):
 
   def test_cycle_detection_in_fdl_build(self):
     cfg = fdl.Config(Foo, bar=fdl.Config(Foo))
-    cfg.bar.bar = cfg  # pytype: disable=not-writable  # use-fiddle-overlay
+    cfg.bar.bar = cfg
     with self.assertRaisesRegex(
         ValueError,
         "Fiddle detected a cycle while traversing a value: "

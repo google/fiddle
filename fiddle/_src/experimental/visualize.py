@@ -82,7 +82,7 @@ def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
     key = (type(buildable), id(fn_or_cls))
     if key in cached_deep_defaults:
       return cached_deep_defaults[key]
-    result = type(buildable)(fn_or_cls)  # pytype: disable=not-instantiable
+    result = type(buildable)(fn_or_cls)
     cached_deep_defaults[key] = result
     return result
 
@@ -128,7 +128,7 @@ def with_defaults_trimmed(config: _T, remove_deep_defaults: bool = False) -> _T:
         traversal_fn=_helper,
         root_obj=parent_state.traversal.root_obj,
         registry=parent_state.traversal.registry,
-        paths_cache=parent_state.traversal.paths_cache,  # pytype: disable=attribute-error
+        paths_cache=parent_state.traversal.paths_cache,  # pyrefly: ignore[missing-attribute]
     )
     state = daglish.State(
         sub_traversal,

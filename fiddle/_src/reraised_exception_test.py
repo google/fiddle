@@ -44,7 +44,7 @@ class ReraisedExceptionTest(absltest.TestCase):
       bar()
     except ValueError as e:
       # pylint: disable=g-assert-in-except
-      self.assertEqual(e.proxy_message, " - test context")  # pytype: disable=attribute-error
+      self.assertEqual(e.proxy_message, " - test context")  # pyrefly: ignore[missing-attribute]
       self.assertEqual(str(e), "test exception - test context")
       # pylint: enable=g-assert-in-except
 

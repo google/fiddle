@@ -385,8 +385,8 @@ class DefaultFactoryTest(parameterized.TestCase):
     self.assertEqual(append.__doc__, 'Docstring.')
     self.assertEqual(append.__name__, 'append')
     self.assertTrue(hasattr(append, '__wrapped__'))
-    self.assertEqual(append.__qualname__, append.__wrapped__.__qualname__)  # pytype: disable=attribute-error
-    self.assertEqual(append.__module__, append.__wrapped__.__module__)  # pytype: disable=attribute-error
+    self.assertEqual(append.__qualname__, append.__wrapped__.__qualname__)
+    self.assertEqual(append.__module__, append.__wrapped__.__module__)
 
   def test_default_for_keyword_only_param(self):
 

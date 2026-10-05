@@ -136,10 +136,10 @@ class AssignTest(absltest.TestCase):
     cfg.fn_or_cls = 200
     self.assertEqual(building.build(cfg), 300)
 
-    mutate_buildable.assign(cfg, buildable=10)  # pytype: disable=duplicate-keyword-argument
+    mutate_buildable.assign(cfg, buildable=10)
     self.assertEqual(building.build(cfg), 310)
 
-    cfg2 = config_lib.Config(f, self=5, fn_or_cls=1)  # pytype: disable=duplicate-keyword-argument
+    cfg2 = config_lib.Config(f, self=5, fn_or_cls=1)
     self.assertEqual(building.build(cfg2), 6)
 
 

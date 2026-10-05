@@ -122,13 +122,11 @@ class AutoConfig:
     return self.buildable_func(*args, **kwargs)
 
   def __get__(self, obj, objtype=None):
-    # pytype: disable=attribute-error
     return AutoConfig(
         func=self.func.__get__(obj, objtype),
         buildable_func=self.buildable_func.__get__(obj, objtype),
         always_inline=self.always_inline,
     )
-    # pytype: enable=attribute-error
 
   @property
   def __wrapped__(self):
@@ -175,9 +173,9 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
     self._temp_var_count = 0
 
   def _location_for(self, node: ast.AST):
-    line_number = self._line_number + node.lineno - 1  # pytype: disable=attribute-error
-    line = self._lines[node.lineno - 1]  # pytype: disable=attribute-error
-    return (self._filename, line_number, node.col_offset, line)  # pytype: disable=attribute-error
+    line_number = self._line_number + node.lineno - 1  # pyrefly: ignore[missing-attribute]
+    line = self._lines[node.lineno - 1]  # pyrefly: ignore[missing-attribute]
+    return (self._filename, line_number, node.col_offset, line)  # pyrefly: ignore[missing-attribute]
 
   def _handle_control_flow(self, node: ast.AST, activatable: bool = False):
     if self._allow_control_flow and activatable:
@@ -253,7 +251,7 @@ class _AutoConfigNodeTransformer(ast.NodeTransformer):
       return ast.Expr(
           ast.Call(
               func=ast.Name(id=_ATTR_SAVE_HANDLER_ID, ctx=ast.Load()),
-              args=[obj, ast.Constant(value=attr), value],  # pytype: disable=missing-parameter
+              args=[obj, ast.Constant(value=attr), value],
               keywords=[],
           )
       )
@@ -459,7 +457,7 @@ def _wrap_ast_for_fn_with_closure_vars(
 
   wrapper_module = ast.Module(
       body=[
-          ast.FunctionDef(  # pytype: disable=missing-parameter
+          ast.FunctionDef(
               name=_CLOSURE_WRAPPER_ID,
               args=_EMPTY_ARGUMENTS,
               body=[
@@ -508,7 +506,7 @@ def _make_closure_cell(contents):
   """Returns `types.CellType(contents)`."""
   if hasattr(types, 'CellType'):
     # `types.CellType` added in Python 3.8.
-    return types.CellType(contents)  # pytype: disable=wrong-arg-count
+    return types.CellType(contents)
   else:
     # For earlier versions of Python, build a dummy function to get CellType.
     dummy_fn = lambda: contents
@@ -1061,13 +1059,13 @@ def auto_unconfig(
   def make_unconfig(fn) -> AutoConfig:
     @functools.wraps(fn)
     def python_implementation(*args, **kwargs):
-      previous = building._state.in_build  # pytype: disable=module-attr # pylint: disable=protected-access
-      building._state.in_build = False  # pytype: disable=module-attr # pylint: disable=protected-access
+      previous = building._state.in_build  # pylint: disable=protected-access
+      building._state.in_build = False  # pylint: disable=protected-access
       try:
         cfg = fn(*args, **kwargs)
         return building.build(cfg)
       finally:
-        building._state.in_build = previous  # pytype: disable=module-attr # pylint: disable=protected-access
+        building._state.in_build = previous  # pylint: disable=protected-access
 
     return AutoConfig(
         func=python_implementation,

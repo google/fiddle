@@ -281,4 +281,4 @@ def import_module(qualname_str: str) -> Any:
   obj = importlib.import_module(import_str)
   for attr in attributes.split('.'):
     obj = getattr(obj, attr)
-  return obj  # pytype: disable=bad-return-type
+  return obj

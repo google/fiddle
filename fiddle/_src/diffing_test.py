@@ -468,8 +468,8 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
   def test_modify_sequence_element(self):
     old = fdl.Config(SimpleClass, [1, 2, [3]])
     new = copy.deepcopy(old)
-    new.x[0] = 11  # pytype: disable=unsupported-operands  # use-fiddle-overlay
-    new.x[2][0] = 33  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    new.x[0] = 11
+    new.x[2][0] = 33
     expected_changes = (diffing.ModifyValue(parse_path('.x[0]'), 11),
                         diffing.ModifyValue(parse_path('.x[2][0]'), 33))
     self.check_diff(old, new, expected_changes)
@@ -477,8 +477,8 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
   def test_modify_dict_item(self):
     old = fdl.Config(SimpleClass, {'a': 2, 'b': 4, 'c': {'d': 7}})
     new = copy.deepcopy(old)
-    new.x['a'] = 11  # pytype: disable=unsupported-operands  # use-fiddle-overlay
-    new.x['c']['d'] = 33  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    new.x['a'] = 11
+    new.x['c']['d'] = 33
     expected_changes = (diffing.ModifyValue(parse_path(".x['a']"), 11),
                         diffing.ModifyValue(parse_path(".x['c']['d']"), 33))
     self.check_diff(old, new, expected_changes)
@@ -501,8 +501,8 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
   def test_set_dict_item(self):
     old = fdl.Config(SimpleClass, {'a': 2, 'b': 4, 'c': {'d': 7}})
     new = copy.deepcopy(old)
-    new.x['foo'] = 11  # pytype: disable=unsupported-operands  # use-fiddle-overlay
-    new.x['c']['bar'] = 33  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    new.x['foo'] = 11
+    new.x['c']['bar'] = 33
     expected_changes = (diffing.SetValue(parse_path(".x['foo']"), 11),
                         diffing.SetValue(parse_path(".x['c']['bar']"), 33))
     self.check_diff(old, new, expected_changes)
@@ -528,9 +528,9 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
   def test_delete_dict_item(self):
     old = fdl.Config(SimpleClass, {'a': 2, 'b': {}, 'c': {'d': 7}})
     new = copy.deepcopy(old)
-    del new.x['a']  # pytype: disable=unsupported-operands  # use-fiddle-overlay
-    del new.x['b']  # pytype: disable=unsupported-operands  # use-fiddle-overlay
-    del new.x['c']['d']  # pytype: disable=unsupported-operands  # use-fiddle-overlay
+    del new.x['a']
+    del new.x['b']
+    del new.x['c']['d']
     expected_changes = (diffing.DeleteValue(parse_path(".x['a']")),
                         diffing.DeleteValue(parse_path(".x['b']")),
                         diffing.DeleteValue(parse_path(".x['c']['d']")))
@@ -546,7 +546,7 @@ class DiffFromAlignmentBuilderTest(absltest.TestCase):
     new.x = [1, 2, [3, 4], new.y.z]
     new.y.x = new.x
     new.y.y = [99]
-    new.z.y = fdl.Config(SimpleClass, new.x[2], new.y.y)  # pytype: disable=not-writable  # use-fiddle-overlay
+    new.z.y = fdl.Config(SimpleClass, new.x[2], new.y.y)
     expected_new_shared_values = (
         [3, 4],
         [
@@ -1059,35 +1059,38 @@ class SkeletonFromDiffTest(testing.TestCase, parameterized.TestCase):
       # Test each PathElement type.
       [  # Index
           diffing.Diff(changes=(diffing.DeleteValue(parse_path('[1]')),)),
-          diffing.ListPrefix([diffing.AnyValue(),
-                              diffing.AnyValue()])
+          diffing.ListPrefix([diffing.AnyValue(), diffing.AnyValue()]),
       ],
       [  # Key
           diffing.Diff(changes=(diffing.DeleteValue(parse_path('["a"]')),)),
-          dict(a=diffing.AnyValue())
+          dict(a=diffing.AnyValue()),
       ],
       [  # Attr
           diffing.Diff(changes=(diffing.DeleteValue(parse_path('.x')),)),
-          fdl.Config(diffing.AnyCallable(), x=diffing.AnyValue())  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+          fdl.Config(diffing.AnyCallable(), x=diffing.AnyValue()),
       ],
       [  # BuildableFnOrCls
           diffing.Diff(
-              changes=(diffing.ModifyValue(
-                  parse_path('.__fn_or_cls__'), basic_fn),)),
-          fdl.Config(diffing.AnyCallable())  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+              changes=(
+                  diffing.ModifyValue(parse_path('.__fn_or_cls__'), basic_fn),
+              )
+          ),
+          fdl.Config(diffing.AnyCallable()),
       ],
       # Test each DiffOperation type.
       [  # DeleteValue
           diffing.Diff(changes=(diffing.DeleteValue(parse_path('["a"]')),)),
-          dict(a=diffing.AnyValue())
+          dict(a=diffing.AnyValue()),
       ],
       [  # SetValue
-          diffing.Diff(changes=(diffing.SetValue(parse_path('["a"]'), 1),)), {}
+          diffing.Diff(changes=(diffing.SetValue(parse_path('["a"]'), 1),)),
+          {},
       ],
       [  # SetValue
           diffing.Diff(
-              changes=(diffing.SetValue(parse_path('["a"]["b"]'), 1),)),
-          dict(a={})
+              changes=(diffing.SetValue(parse_path('["a"]["b"]'), 1),)
+          ),
+          dict(a={}),
       ],
       [  # ModifyValue
           diffing.Diff(changes=(diffing.ModifyValue(parse_path('[2]'), 1),)),
@@ -1095,66 +1098,76 @@ class SkeletonFromDiffTest(testing.TestCase, parameterized.TestCase):
               diffing.AnyValue(),
               diffing.AnyValue(),
               diffing.AnyValue(),
-          ])
+          ]),
       ],
       [  # ModifyValue
           diffing.Diff(changes=(diffing.ModifyValue(parse_path('["a"]'), 1),)),
-          dict(a=diffing.AnyValue())
+          dict(a=diffing.AnyValue()),
       ],
       [  # AddTag
           diffing.Diff(changes=(diffing.AddTag(parse_path('.x'), GreenTag),)),
-          fdl.Config(diffing.AnyCallable(), x=diffing.AnyValue())  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+          fdl.Config(diffing.AnyCallable(), x=diffing.AnyValue()),
       ],
       [  # RemoveTag
           diffing.Diff(
-              changes=(diffing.RemoveTag(parse_path('.x'), GreenTag),)),
+              changes=(diffing.RemoveTag(parse_path('.x'), GreenTag),)
+          ),
           config_with_tags(
-              fdl.Config(diffing.AnyCallable(), x=diffing.AnyValue()),  # pytype: disable=invalid-annotation  # use-fiddle-overlay
-              {'x': {GreenTag}})
+              fdl.Config(diffing.AnyCallable(), x=diffing.AnyValue()),
+              {'x': {GreenTag}},
+          ),
       ],
       # Paths with >1 PathElement
       [
           diffing.Diff(changes=(diffing.DeleteValue(parse_path('.x["a"]')),)),
-          fdl.Config(diffing.AnyCallable(), x={'a': diffing.AnyValue()})  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+          fdl.Config(diffing.AnyCallable(), x={'a': diffing.AnyValue()}),
       ],
       [
           diffing.Diff(changes=(diffing.DeleteValue(parse_path('.x.y')),)),
-          fdl.Config(  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+          fdl.Config(
               diffing.AnyCallable(),
-              x=fdl.Config(diffing.AnyCallable(), y=diffing.AnyValue()))  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+              x=fdl.Config(diffing.AnyCallable(), y=diffing.AnyValue()),
+          ),
       ],
       [
           diffing.Diff(changes=(diffing.ModifyValue(parse_path('.x[2]'), 5),)),
-          fdl.Config(  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+          fdl.Config(
               diffing.AnyCallable(),
               x=diffing.ListPrefix(
-                  [diffing.AnyValue(),
-                   diffing.AnyValue(),
-                   diffing.AnyValue()]))
+                  [diffing.AnyValue(), diffing.AnyValue(), diffing.AnyValue()]
+              ),
+          ),
       ],
       [
           diffing.Diff(
-              changes=(diffing.ModifyValue(
-                  parse_path('.x.__fn_or_cls__'), basic_fn),)),
-          fdl.Config(  # pytype: disable=invalid-annotation  # use-fiddle-overlay
-              diffing.AnyCallable(), x=fdl.Config(diffing.AnyCallable()))  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+              changes=(
+                  diffing.ModifyValue(parse_path('.x.__fn_or_cls__'), basic_fn),
+              )
+          ),
+          fdl.Config(
+              diffing.AnyCallable(), x=fdl.Config(diffing.AnyCallable())
+          ),
       ],
       # Diff with multiple paths.
       [
           diffing.Diff(
-              changes=(diffing.DeleteValue(parse_path('.x.y')),
-                       diffing.SetValue(parse_path('.y[1].q'), 3),
-                       diffing.DeleteValue(parse_path('.z["foo"]')),
-                       diffing.ModifyValue(parse_path('.y[2]'), 5))),
-          fdl.Config(  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+              changes=(
+                  diffing.DeleteValue(parse_path('.x.y')),
+                  diffing.SetValue(parse_path('.y[1].q'), 3),
+                  diffing.DeleteValue(parse_path('.z["foo"]')),
+                  diffing.ModifyValue(parse_path('.y[2]'), 5),
+              )
+          ),
+          fdl.Config(
               diffing.AnyCallable(),
-              x=fdl.Config(diffing.AnyCallable(), y=diffing.AnyValue()),  # pytype: disable=invalid-annotation  # use-fiddle-overlay
+              x=fdl.Config(diffing.AnyCallable(), y=diffing.AnyValue()),
               y=diffing.ListPrefix([
                   diffing.AnyValue(),
-                  fdl.Config(diffing.AnyCallable()),  # pytype: disable=invalid-annotation  # use-fiddle-overlay
-                  diffing.AnyValue()
+                  fdl.Config(diffing.AnyCallable()),
+                  diffing.AnyValue(),
               ]),
-              z={'foo': diffing.AnyValue()}),
+              z={'foo': diffing.AnyValue()},
+          ),
       ],
   ])
   def test_skeleton_from_diff(self, cfg_diff, expected):

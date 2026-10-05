@@ -82,7 +82,7 @@ class DictConfigTest(absltest.TestCase):
       self.assertNotEqual(cfg1, cfg2)
 
   def test_key_named_self(self):
-    cfg = dict_config.DictConfig(self=2)  # pytype: disable=duplicate-keyword-argument
+    cfg = dict_config.DictConfig(self=2)
     self.assertEqual(fdl.build(cfg), {'self': 2})
 
 
