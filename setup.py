@@ -20,9 +20,7 @@ See https://github.com/google/fiddle for documentation.
 
 # pyformat: disable
 
-import sys
-from setuptools import find_packages
-from setuptools import setup
+import setuptools
 
 
 _dct = {}
@@ -41,14 +39,15 @@ Python code.
 **Authors**: Dan Holtmann-Rice, Brennan Saeta, Sergio Guadarrama
 """
 
-# pylint: disable=g-long-ternary
-setup(
+setuptools.setup(
     name='fiddle',
     version=__version__,
-    include_package_data=True,
-    packages=find_packages(exclude=['docs']),  # Required
-    package_data={'testdata': ['testdata/*.fiddle']},
-    python_requires='>=3.8',
+    packages=setuptools.find_namespace_packages(
+        include=['fiddle', 'fiddle.*'],
+        exclude=['*.testdata'],
+    ),  # Required
+    package_data={'': ['testdata/*']},
+    python_requires='>=3.11',
     install_requires=[
         'absl-py',
         'graphviz',
@@ -66,13 +65,16 @@ setup(
             'flax',
             'graphviz',
             'pytest',
-            'pytype',
-        ] + [
-            'seqio',
+            # seqio depends on tensorflow-text, which is not available for
+            # Python 3.13+ (or macOS) in our CI configuration.
+            'seqio; python_version < "3.13" and sys_platform != "darwin"',
             # Temporarily pin the TFDS version to avoid pip backtracking during
             # unit tests.
-            'tfds_nightly>=4.9.2.dev202308090034',
-        ] if sys.platform != 'darwin' else []
+            (
+                'tfds_nightly>=4.9.2.dev202308090034; '
+                'python_version < "3.13" and sys_platform != "darwin"'
+            ),
+        ],
     },
     description='Fiddle: A Python-first configuration library',
     long_description=long_description,
@@ -94,6 +96,10 @@ setup(
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
 
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',

@@ -26,7 +26,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 import fiddle as fdl
 from fiddle import arg_factory
-import pytype_extensions
+import typing_extensions
 
 
 class Tag1(fdl.Tag):
@@ -93,11 +93,11 @@ class PartialTest(parameterized.TestCase):
 
   def test_partial_for_classes(self):
     class_partial = fdl.Partial(SampleClass, 'arg1', 'arg2')
-    pytype_extensions.assert_type(class_partial, fdl.Partial[SampleClass])
+    typing_extensions.assert_type(class_partial, fdl.Partial[SampleClass])
     partial = fdl.build(class_partial)
-    pytype_extensions.assert_type(partial, Callable[..., SampleClass])
+    typing_extensions.assert_type(partial, Callable[..., SampleClass])
     instance = partial()
-    pytype_extensions.assert_type(instance, SampleClass)
+    typing_extensions.assert_type(instance, SampleClass)
     self.assertIsInstance(partial, functools.partial)
     self.assertIsInstance(instance, SampleClass)
     self.assertEqual(instance.arg1, 'arg1')
@@ -111,7 +111,7 @@ class PartialTest(parameterized.TestCase):
 
   def test_partial_for_functions(self):
     fn_partial = fdl.Partial(basic_fn, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(
+    typing_extensions.assert_type(
         fn_partial, fdl.Partial[Dict[str, Any]]
     )  # use-fiddle-overlay
     self.assertEqual(fn_partial.arg1, 1)
@@ -122,11 +122,11 @@ class PartialTest(parameterized.TestCase):
     fn_partial.kwarg1 = 'kwarg1'
 
     partial = fdl.build(fn_partial)
-    pytype_extensions.assert_type(
+    typing_extensions.assert_type(
         partial, Callable[..., Dict[str, Any]]
     )  # use-fiddle-overlay
     value = partial()
-    pytype_extensions.assert_type(value, Dict[str, Any])  # use-fiddle-overlay
+    typing_extensions.assert_type(value, Dict[str, Any])  # use-fiddle-overlay
     self.assertEqual(
         value,
         {
@@ -139,18 +139,19 @@ class PartialTest(parameterized.TestCase):
 
   def test_typed_partial(self):
     class_partial = make_typed_partial()
-    pytype_extensions.assert_type(class_partial, fdl.Partial[SampleClass])
+    typing_extensions.assert_type(class_partial, fdl.Partial[SampleClass])
     partial = fdl.build(class_partial)
-    pytype_extensions.assert_type(partial, Callable[..., SampleClass])
+    typing_extensions.assert_type(partial, Callable[..., SampleClass])
     instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 4)
 
   def test_untyped_partial(self):
     class_partial = make_untyped_partial(SampleClass, arg1=2)
-    pytype_extensions.assert_type(class_partial, fdl.Partial)
+    typing_extensions.assert_type(class_partial, fdl.Partial)
     partial = fdl.build(class_partial)
-    pytype_extensions.assert_type(partial, Callable[..., Any])
+    # Building an unparameterized `fdl.Partial` is statically typed as `Any`.
+    typing_extensions.assert_type(partial, Any)
     instance = partial(arg2=4)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 4)

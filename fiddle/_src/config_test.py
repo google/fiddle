@@ -30,7 +30,7 @@ from fiddle import history
 from fiddle._src import config as config_lib
 from fiddle._src.experimental import daglish_legacy
 from fiddle._src.testing.example import demo_configs
-import pytype_extensions
+import typing_extensions
 
 
 class Tag1(fdl.Tag):
@@ -128,7 +128,7 @@ class ConfigTest(parameterized.TestCase):
 
   def test_config_for_classes(self):
     class_config = fdl.Config(SampleClass, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(class_config, fdl.Config[SampleClass])
+    typing_extensions.assert_type(class_config, fdl.Config[SampleClass])
     self.assertEqual(class_config.arg1, 1)
     self.assertEqual(class_config.kwarg2, 'kwarg2')
     class_config.arg1 = 'arg1'
@@ -137,7 +137,7 @@ class ConfigTest(parameterized.TestCase):
     class_config.kwarg1 = 'kwarg1'
 
     instance = fdl.build(class_config)
-    pytype_extensions.assert_type(instance, SampleClass)
+    typing_extensions.assert_type(instance, SampleClass)
     self.assertEqual(instance.arg1, 'arg1')
     self.assertEqual(instance.arg2, 'arg2')
     self.assertEqual(instance.kwarg1, 'kwarg1')
@@ -145,7 +145,7 @@ class ConfigTest(parameterized.TestCase):
 
   def test_config_for_functions(self):
     fn_config = fdl.Config(basic_fn, 1, kwarg2='kwarg2')
-    pytype_extensions.assert_type(
+    typing_extensions.assert_type(
         fn_config, fdl.Config[Dict[str, Any]]
     )  # use-fiddle-overlay
     self.assertEqual(fn_config.arg1, 1)
@@ -156,7 +156,7 @@ class ConfigTest(parameterized.TestCase):
     fn_config.kwarg1 = 'kwarg1'
 
     result = fdl.build(fn_config)
-    pytype_extensions.assert_type(result, Dict[str, Any])  # use-fiddle-overlay
+    typing_extensions.assert_type(result, Dict[str, Any])  # use-fiddle-overlay
     self.assertEqual(result, {
         'arg1': 'arg1',
         'arg2': 'arg2',
@@ -166,7 +166,7 @@ class ConfigTest(parameterized.TestCase):
 
   def test_config_for_functions_with_var_args(self):
     fn_config = fdl.Config(fn_with_var_args, 'arg1', kwarg1='kwarg1')
-    pytype_extensions.assert_type(fn_config, fdl.Config)
+    typing_extensions.assert_type(fn_config, fdl.Config)
     fn_args = fdl.build(fn_config)
     self.assertEqual(fn_args['arg1'], 'arg1')
     self.assertEqual(fn_args['kwarg1'], 'kwarg1')
@@ -174,7 +174,7 @@ class ConfigTest(parameterized.TestCase):
     fn_config.arg1 = 'new_arg1'
     fn_config.kwarg1 = 'new_kwarg1'
     fn_args = fdl.build(fn_config)
-    pytype_extensions.assert_type(fn_args, Any)
+    typing_extensions.assert_type(fn_args, Any)
     self.assertEqual(fn_args['arg1'], 'new_arg1')
     self.assertEqual(fn_args['kwarg1'], 'new_kwarg1')
 
@@ -788,17 +788,17 @@ class ConfigTest(parameterized.TestCase):
 
   def test_typed_config(self):
     class_config = make_typed_config()
-    pytype_extensions.assert_type(class_config, fdl.Config[SampleClass])
+    typing_extensions.assert_type(class_config, fdl.Config[SampleClass])
     instance = fdl.build(class_config)
-    pytype_extensions.assert_type(instance, SampleClass)
+    typing_extensions.assert_type(instance, SampleClass)
     self.assertEqual(instance.arg1, 1)
     self.assertEqual(instance.arg2, 2)
 
   def test_untyped_config(self):
     class_config = make_untyped_config(SampleClass, arg1=2, arg2=3)
-    pytype_extensions.assert_type(class_config, fdl.Config)
+    typing_extensions.assert_type(class_config, fdl.Config)
     instance = fdl.build(class_config)
-    pytype_extensions.assert_type(instance, Any)
+    typing_extensions.assert_type(instance, Any)
     self.assertEqual(instance.arg1, 2)
     self.assertEqual(instance.arg2, 3)
 

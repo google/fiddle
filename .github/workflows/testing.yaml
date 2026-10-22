@@ -12,13 +12,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # tensorflow-text (and hence seqio) is not available for python 3.13
-        python-version: ["3.11", "3.12"]
+        # NOTE: The job names (`build (<version>)`) must stay in sync with
+        # `github_check_runs` in copy.bara.sky.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies and package
@@ -27,4 +28,24 @@ jobs:
           pip install -e .[testing]
       - name: Test with pytest
         run: |
-          pytest --ignore=fiddle/_src/extensions/seqio_test.py fiddle
+          PYTEST_ARGS="--ignore=fiddle/_src/extensions/seqio_test.py"
+          # seqio (and hence tensorflow) is not installed for Python 3.13+
+          # because tensorflow-text is unavailable; see setup.py.
+          if python -c 'import sys; sys.exit(sys.version_info < (3, 13))'; then
+            PYTEST_ARGS="${PYTEST_ARGS} --ignore=fiddle/_src/extensions/tf_test.py"
+          fi
+          pytest ${PYTEST_ARGS} fiddle
+      - name: Build wheel and test the installed package
+        if: matrix.python-version == '3.14'
+        run: |
+          python -m pip install build twine
+          python -m build
+          python -m twine check dist/*
+          python -m venv /tmp/wheel-venv
+          WHEEL="$(ls dist/*.whl)"
+          /tmp/wheel-venv/bin/pip install "${WHEEL}[testing]"
+          SITE="$(/tmp/wheel-venv/bin/python -c 'import site; print(site.getsitepackages()[0])')"
+          cd "${SITE}" && /tmp/wheel-venv/bin/python -m pytest \
+            --ignore=fiddle/_src/extensions/seqio_test.py \
+            --ignore=fiddle/_src/extensions/tf_test.py \
+            fiddle

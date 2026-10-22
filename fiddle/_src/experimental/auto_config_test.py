@@ -31,7 +31,7 @@ from fiddle._src.experimental import auto_config
 from fiddle._src.experimental import auto_config_policy
 from fiddle._src.experimental import autobuilders as ab
 from fiddle._src.testing import test_util
-import pytype_extensions
+import typing_extensions
 
 
 def basic_fn(arg, kwarg='test'):
@@ -834,7 +834,7 @@ class AutoConfigTest(parameterized.TestCase, test_util.TestCase):
   def test_exemption_type_inference(self):
     exempted_func = auto_config.exempt(pass_through)
     value = exempted_func(42)
-    pytype_extensions.assert_type(value, int)
+    typing_extensions.assert_type(value, int)
 
   def test_lambda_supported_in_decorator(self):
     @auto_config.auto_config(experimental_exemption_policy=lambda x: False)
