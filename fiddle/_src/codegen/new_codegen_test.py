@@ -24,6 +24,8 @@ import uuid
 
 from absl import flags
 from absl.testing import absltest
+import fiddle as fdl
+from fiddle import tagging
 from fiddle._src.codegen import new_codegen
 from fiddle._src.testing.example import fake_encoder_decoder
 
@@ -57,6 +59,21 @@ class NewCodegenTest(absltest.TestCase):
     self.assertNotIn(code, "auto_config")
     fixture = self._load_code_as_module(code).config_fixture
     self.assertEqual(fixture(), config)
+
+  def test_tagging_functions_round_trip(self):
+    config = fdl.Config(
+        dict,
+        list_tags=tagging.list_tags,
+        materialize_tags=tagging.materialize_tags,
+        add_tag=fdl.add_tag,
+    )
+    code = new_codegen.new_codegen(config)
+    fixture = self._load_code_as_module(code).config_fixture
+    self.assertEqual(fixture(), config)
+    functions = fdl.build(fixture())
+    self.assertIs(functions["list_tags"], tagging.list_tags)
+    self.assertIs(functions["materialize_tags"], tagging.materialize_tags)
+    self.assertIs(functions["add_tag"], fdl.add_tag)
 
   def test_sub_fixtures(self):
     config = fake_encoder_decoder.fixture.as_buildable()
