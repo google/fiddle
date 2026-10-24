@@ -165,7 +165,8 @@ for set_type in (set, frozenset):
 
 register_node_traverser(
     bytes,
-    flatten_fn=lambda x: ((x.decode('raw_unicode_escape'),), None),
+    # Map bytes directly to characters without interpreting backslash escapes.
+    flatten_fn=lambda x: ((x.decode('latin-1'),), None),
     unflatten_fn=lambda values, _: values[0].encode('raw_unicode_escape'),  # pyrefly: ignore[bad-index]
     path_elements_fn=lambda x: (IdentityElement(),),
 )
